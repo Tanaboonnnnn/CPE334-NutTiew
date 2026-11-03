@@ -519,4 +519,194 @@ The matrices below link requirements to their proposed delivery owner and valida
 
 ---
 
-**End of Sprint 1 requirements-only baseline.** This document is intentionally comprehensive on **what must be true** for Sprint 1 and deliberately does **not** pretend that the architecture, feature contracts or running software have already been produced.
++## 13. Feature-level acceptance criteria (requirements stage; not executed)
+
+The AC-S1 identifiers below provide a **reviewable behavioral acceptance proposal** for each Sprint 1 feature. They do **not** replace Part E Feature SDS/STS; endpoint schemas, detailed fixture setup and actual test reports belong there. All outcomes are to be enforced by the backend, not only through presentation.
+
+### F-S1-01 — Login, identity and authorization
+
+| AC | Given | When | Then (observable pass condition) | Validation |
+|---|---|---|---|---|
+| **AC-S1-01** | Existing valid Customer credentials | Customer logs in | Authenticated principal is Customer; user sees correct own identity/role | VC-01/03 |
+| **AC-S1-02** | Existing valid Tutor credentials | Tutor logs in | Authenticated principal is Tutor; own-schedule operations are available | VC-01/03 |
+| **AC-S1-03** | Invalid password or unknown credentials | Login attempted | Access denied; no protected identity/session returned | VC-02 |
+| **AC-S1-04** | Authenticated user | Logout then reuse old access | Protected action rejected according to documented session lifecycle | VC-04 |
+| **AC-S1-05** | Unauthenticated browser or caller | Request create Slot, Booking or private record | No operation granted and no private payload disclosed | VC-05 |
+| **AC-S1-06** | Authenticated Customer | Forge Tutor Slot request | Backend denies request; Tutor schedule unchanged | VC-06 |
+| **AC-S1-07** | Tutor A and B have different schedules | Tutor A guesses B schedule identifier | No protected records or writes under B's identity | VC-07/31 |
+
+### F-S1-02 — Tutor Slot publishing
+
+| AC | Given | When | Then (observable pass condition) | Validation |
+|---|---|---|---|---|
+| **AC-S1-08** | Own authorized Tutor schedule; valid future Bangkok start | Create one Slot | Exactly one 60-minute offered Slot is persisted and available on schedule refresh | VC-08/14 |
+| **AC-S1-09** | Same Tutor offers 13:00–14:00 | Create 13:30–14:30 | New Slot rejected, existing Slot unchanged | VC-09 |
+| **AC-S1-10** | Same Tutor offers 13:00–14:00 | Create 14:00–15:00 | Adjacent Slot allowed by non-overlap rule, subject to independent validity | VC-10 |
+| **AC-S1-11** | Tutor A offers 13:00–14:00 | Tutor B offers 13:00–14:00 | Different Tutor offer permitted | VC-11 |
+| **AC-S1-12** | Invalid or past date/start | Attempt Slot creation | No invalid Slot persisted, no collateral mutation | VC-12 |
+| **AC-S1-13** | Same Tutor proposes two overlapping Slot writes concurrently | Both requests contend | Database never contains two overlapping currently offered Slots for that Tutor | VC-37 |
+| **AC-S1-14** | Browser timezone is not Bangkok | Tutor/Customer open same Slot | Same intended Bangkok appointment date and hour displayed | VC-13 |
+
+Slot creation is not subject to the Customer new-Booking cutoff Q05 unless explicitly approved later. Allowed weekdays, hours, maximum look-ahead and start-minute grid remain TBD, not invented validation.
+
+### F-S1-03 — Availability browsing
+
+| AC | Given | When | Then (observable pass condition) | Validation |
+|---|---|---|---|---|
+| **AC-S1-15** | Customer logged in; eligible offered Slot exists | Open availability | Selectable Tutor and Bangkok appointment times shown without private other-Customer details | VC-15 |
+| **AC-S1-16** | Offered Slot occupied or inside Q05 cutoff | Open availability | Slot is not falsely represented as bookable; hiding vs unavailable marking is a UI-contract choice | VC-15/22 |
+| **AC-S1-17** | Displayed offer becomes ineligible before submission | Request stale Booking | Backend rechecks and rejects; UI does not report a successful Booking | VC-22 |
+| **AC-S1-18** | Device locale is another timezone | Browse Tutor offers | Bangkok time meaning does not drift with device timezone | VC-13/15 |
+
+### F-S1-04 — Exclusive Booking and conflict safety
+
+| AC | Given | When | Then (observable pass condition) | Validation |
+|---|---|---|---|---|
+| **AC-S1-19** | Eligible unoccupied Slot, Customer logged in without overlapping Booking | Submit Booking | One Booked record is committed with correct Customer, Tutor and Slot identifiers | VC-16 |
+| **AC-S1-20** | Slot begins 15:00; server eligibility time is exactly 14:00:00 | Submit Booking | Exact 60-minute cutoff accepted if all other checks pass | VC-17 |
+| **AC-S1-21** | Slot begins 15:00; server eligibility time is 14:00:01 | Submit Booking | Less-than-60-minute cutoff rejected, no Booking or occupation | VC-18 |
+| **AC-S1-22** | Customer A owns active Booking on Slot X | Customer B attempts same Slot X | Second request rejected, first Booking preserved | VC-19 |
+| **AC-S1-23** | Customer holds Tutor A 13:00–14:00 | Book Tutor B 13:30–14:30 | Reject overlapping appointment even across Tutors | VC-20 |
+| **AC-S1-24** | Customer holds an interval ending 14:00 | Request other Tutor 14:00–15:00 | Adjacency itself not blocked; other checks still apply | VC-21 |
+| **AC-S1-25** | Two Customers simultaneously request one eligible Slot | Concurrent transaction outcomes | At most one committed Active Booking; no false second success | VC-25 |
+| **AC-S1-26** | Same Customer concurrently requests distinct overlapping Tutor Slots | Concurrent transaction outcomes | No two overlapping Active Bookings committed for Customer | VC-26 |
+| **AC-S1-27** | Previously eligible Slot becomes invalid/occupied or persistence fails | Customer submits | No phantom success, partial Booking or inconsistent occupied state | VC-22/27/33 |
+| **AC-S1-28** | Customer alters request body to impersonate other identity/Tutor | Submit Booking | Owner derived from trusted session; Tutor from actual Slot, not supplied roles | VC-24 |
+| **AC-S1-29** | Customer repeats request while first outcome might be unknown | Retry/double-click | Exclusivity and Customer-overlap invariants hold; exact retry response remains contract TBD | VC-38 |
+
+AC-S1-29 does **not** invent an Idempotency-Key format, retention window or guaranteed replay response. The future Feature SDS must define safe retries and verify any chosen strategy using real transactions.
+
+### F-S1-05 — Private Booking and authorized Tutor schedule reads
+
+| AC | Given | When | Then (observable pass condition) | Validation |
+|---|---|---|---|---|
+| **AC-S1-30** | Customer already has a committed Booking | Reopen own list/detail after refresh | Correct Booking identity, Tutor, Bangkok interval and Booked status | VC-28 |
+| **AC-S1-31** | Customer A has Booking; Customer B knows its ID | B requests Booking detail | No protected Booking information disclosed | VC-29 |
+| **AC-S1-32** | Tutor owns current Booking schedule | Tutor opens schedule Bookings | Authorized Booking visible on own schedule only | VC-30 |
+| **AC-S1-33** | Tutor B knows Tutor A schedule ID | B attempts protected read | No protected foreign Tutor Booking disclosed | VC-31 |
+| **AC-S1-34** | Booked 13:00–14:00 appointment now ended | Open Booking after 14:00 | Booking still Booked; may show Past; no Completed/attendance assertion | VC-32 |
+
+### Additional verification cases discovered during review
+
+| Validation ID | Given → When | Required outcome | Owner |
+|---|---|---|---|
+| **VC-S1-37 / TEST-S1-37** | Two requests concurrently create overlapping future offered Slots for same Tutor | At most one overlapping offer commits; no partial side effects | F-S1-02; Q06 |
+| **VC-S1-38 / TEST-S1-38** | Customer duplicates Booking submission while first outcome is in flight or unknown | At most one Active Booking for a Slot; Customer overlap invariant preserved, response semantics defined later | F-S1-04; Q01/Q28 |
+
+**Coverage by feature:** F-S1-01 AC-01..07; F-S1-02 AC-08..14; F-S1-03 AC-15..18; F-S1-04 AC-19..29; F-S1-05 AC-30..34. Every AC has a planned VC, but **none has a test pass** in this requirements-only PR. The implementation's STS must define fixtures, API/UI steps, DB assertions, controlled time, race synchronization and result recording.
+
+## 14. Logical data requirements, privacy and consistency
+
+This section identifies mandatory **information and invariants** but does not select database tables, migrations, ORM or transport contract.
+
+| Business concept | Information the feature must preserve | Why it matters |
+|---|---|---|
+| **Authenticated principal** | Stable User ID and effective Customer/Tutor role | Trusted identity and server authorization |
+| **Tutor schedule** | Identity of owning Tutor and currently offered Slots | Own-schedule authorization and Q06 |
+| **Availability Slot** | Unique Slot identity, Tutor owner, start/end in Bangkok business time, current offer/occupancy meaning | 60-minute duration, overlap, eligibility and reuse in Booking |
+| **Booking** | Unique Booking identity, actual Customer owner, selected Slot and Tutor, Booked state, associated appointment interval | Customer and Tutor retrieval, exclusivity, privacy and Q28 |
+| **Availability result** | Tutor and Slot identity, start/end, time of evaluation/eligibility indication | Selection without leaking other Customers' details |
+| **Action result** | Non-sensitive success or rejection; committed Booking identity only on successful write | Prevent misleading responses and private-data leakage |
+
+**Data minimization:** no price, payment, lesson location, video link, attendance, student phone number, subject category or special registration workflow is made mandatory by Q01–Q32 for Sprint 1. Any identity/account fields required by the chosen authentication architecture must be justified in the System SDS rather than attributed to the stakeholder.
+
+**Logical guarantees:**
+
+1. Slot ownership belongs to one Tutor and cannot be reassigned by a Customer-supplied ID.
+2. Every successful Booking belongs to its authenticated Customer and the selected Tutor's actual Slot.
+3. A current offered Slot of Tutor A may not overlap another current offered Slot of Tutor A. Tutor B's identical time remains legitimate.
+4. A Slot has at most one Active Booking; a Customer has no overlapping Active Bookings. Both remain true under concurrent writes.
+5. Successful Booking and occupied state agree after commit. Failed writes do not leave partial changes.
+6. Reopening a list/detail reads committed persistent data; display state is not authoritative history by itself.
+7. Booked does not become Completed simply because the appointed interval ended; no S1 cancellation or withdrawal changes status.
+8. Tutor's schedule read authority does not grant global Customer-data search authority; an owner-only Customer endpoint does not leak a foreign record by ID.
+9. A future Cancelled Booking and withdrawn Slot must be representable without inventing their Sprint 1 actions.
+10. Technical decisions for exact API errors, stale-UI treatment, retry success reconciliation and isolation mechanisms are **open engineering contracts**; do not claim a specific HTTP code or DB locking scheme here.
+
+## 15. Decision-to-Sprint 1 applicability audit (Q01–Q32)
+
+This table is a guard against both missing a stakeholder policy and accidentally implementing later-sprint functionality in Sprint 1. The condensed decision is sourced from the confirmed discovery choices, not inferred from the Campus Store example.
+
+| Decision | Confirmed policy (condensed) | Sprint 1 applicability |
+|---|---|---|
+| Q01 | 1:1 Customer–Tutor exclusive session | **Required**: FR-08/10, BR-01/08 |
+| Q02 | Tutor is Staff; owns only their authorized schedule | **Required**: FR-04/05/07/15, BR-04/15/16 |
+| Q03 | Fixed 60-minute Slot | **Required**: BR-02, FR-05 |
+| Q04 | Manual individual Slot offers, no recurrence | **Required**: BR-03, FR-05 |
+| Q05 | New Booking at least 60 minutes before start, boundary included | **Required**: BR-07, FR-11 |
+| Q06 | Same-Tutor current offered Slot overlap prohibited, adjacency allowed | **Required**: BR-05/06, FR-06 |
+| Q07 | Customer cancellation allowed at least 30 minutes ahead | Later sprint; no Cancel action |
+| Q08 | Customer cancellation reopens original Slot | Later sprint; no reopen action |
+| Q09 | Only owning Customer may initiate rescheduling | Later sprint; no reschedule action |
+| Q10 | Original appointment reschedule cutoff at least 60 minutes | Later sprint |
+| Q11 | Reschedule destination at least 60 minutes ahead | Later sprint |
+| Q12 | Reschedule may change Tutors | Later sprint; preserve future model flexibility |
+| Q13 | Reschedule all-or-nothing | Later sprint; separate from S1 Booking atomicity |
+| Q14 | Successful reschedule reopens old Slot | Later sprint |
+| Q15 | Reschedule preserves Booking ID/history | Later sprint |
+| Q16 | At most one successful reschedule | Later sprint |
+| Q17 | Current authorized Tutor may cancel own Booking | Later sprint |
+| Q18 | Tutor cancellation cutoff at least 60 minutes | Later sprint |
+| Q19 | Tutor cancellation withdraws old Slot and retains history | Later sprint |
+| Q20 | Tutor cancellation reason nonblank mandatory | Later sprint |
+| Q21 | Successful Tutor cancellation creates private In-App notice | Later sprint |
+| Q22 | Tutor cancellation reason visible to owning Customer only | Later sprint |
+| Q23 | Reason appears in notice and cancelled Booking detail | Later sprint |
+| Q24 | Read In-App notice remains revisitable | Later sprint |
+| Q25 | In-App notice has no time-based automatic expiry | Later sprint; other deletion policy open |
+| Q26 | Tutor cannot directly edit/delete Slot with Active Booking | Later workflow; no S1 edit/delete UI |
+| Q27 | Unoccupied future Slot: withdraw then create new distinct Slot | Later workflow; no S1 withdrawal |
+| Q28 | Customer cannot hold overlapping Active Bookings across Tutors | **Required**: BR-09/10/19, FR-13 |
+| Q29 | Single Asia/Bangkok business time zone | **Required**: BR-12 across S1 times |
+| Q30 | Booked/Cancelled status; Past is derived and not Completed | **Required**: Booked/Past behavior; Cancelled workflow later |
+| Q31 | Tutor-only Appointment Summary (counts and lists) | Later sprint; S1 schedule view is not that report |
+| Q32 | Withdrawn Slot history excluded from current-offer overlap | Later workflow; no S1 withdrawal/reactivation action |
+
+**Source priority:** instructor minimum (login, permissions, valid Slots, persistent Booking, competing same-Slot claim); stakeholder Q01–Q32 where relevant; separate approved engineering decisions for transport/storage/design. Neither the example repo nor a convenient implementation preference can overwrite the stakeholder rules.
+
+## 16. Peer reviewer checklist and stop/go gates
+
+| Reviewer check | Evidence in this file | What must block approval |
+|---|---|---|
+| Tutor can create owned 60-minute Slot | §§1,4–6,8,13 | Role escalation, uncontrolled Slot lengths |
+| No same-Tutor offered overlap | §§3,6,9,13 | Adjacent falsely blocked; concurrent overlapping writes both committed |
+| Customer sees valid bookable offers | §§2,5,9,13 | Past/occupied/too-soon Slots shown as guaranteed bookable |
+| One Slot cannot be claimed twice | §§5–6,8–9,13 | Race only tested at UI level, invariant unprotected |
+| One Customer cannot book overlapping Tutors | §§5–6,8–9,13 | No cross-Tutor overlap enforcement on commit |
+| Cutoff exactly 60 minutes | §§3,6,9,13 | Boundary rejected or less-than-60 accepted |
+| Customer/Tutor private reads | §§4–6,9,13–14 | Other Customer's or Tutor's restricted data exposed |
+| Past is not Completed | §§3,5–6,9,13,15 | Status silently updated by clock |
+| No invented policies | §§2.3,7,12,14–15 | Working hours, horizon, minute grid, response schema assumed without approval |
+| No Sprint 2/3 functionality smuggled into S1 | §§2,12,15 | Cancellation, rescheduling, notification or summary required to ship now |
+
+### 16.1 Documentation Issue / PR Definition of Done
+
+- [ ] The file is versioned **only on a documentation branch** with PR base **sprint1**, not committed directly into main/sprint1.
+- [ ] Scope is **Sprint 1 requirements only**; the whole-product deliverables and future-sprint work are separately and accurately identified.
+- [ ] FR-S1-01..19, BR-S1-01..22, NFR-S1-01..12 and AC-S1-01..34 are present with owners/traceability.
+- [ ] Each agreed direct decision Q01–Q06/Q28–Q30 maps to required behavior; Q07–Q27/Q31–Q32 remain explicit future-scope constraints.
+- [ ] Negative, boundary, privacy and both booking concurrency cases are separately inspectable.
+- [ ] **Two different race types** are covered: competing Customers for the same Slot; one Customer for distinct overlapping Tutors' Slots.
+- [ ] Q05 exact 60-minute boundary, Q29 Bangkok time, Q30 Past ≠ Completed and Q02 ownership remain internally consistent.
+- [ ] All TBDs and merely proposed NFR targets remain visibly unapproved until resolved.
+- [ ] Reviewer checks actual instructor master/Theme 1 assignment or records a blocker; no false source-verification claim.
+- [ ] Teammate **@Chxtamos** submits substantive PR review, noting findings and approval/change request reasons.
+- [ ] Issue and PR link to one another; Kanban shows Sprint 1 / PR Review until approval.
+- [ ] No application code, feature SDS, test implementation, release commit or fabricated pass results are included.
+
+### 16.2 Review-stage gates (no unearned completion)
+
+| Gate | Condition | Current status |
+|---|---|---|
+| Requirements coverage | Comprehensive Sprint 1 document + traceable Q/FR/BR/NFR/AC/VC | Draft; pending peer review |
+| Instructor source | Verify final Master Specification and Theme 1 assignment | Open |
+| Material TBDs | Resolve/approve Sprint 1 working-hours/horizon/minute-grid and proposed NFR targets before corresponding contracts | Open |
+| Part E contracts | Feature SDS, data/API/UI specs, test steps/STS and DoD authored and reviewed **before code** | Not done here |
+| Sprint 1 implementation | Real tested UI/API/DB, safety, concurrent-booking and role cases | Not done here |
+| Release | Reviewed integration, passed tests and valid evidence on main | Not done here |
+
+**Never merge merely because Markdown is long or structurally valid.** The reviewer must verify business semantics, non-invented policies, scope and traceability, and respond to any blocking changes before merging.
+
+---
+
+**End of Sprint 1 requirements-only baseline.** Software contracts, code and real test results are separate gates.
