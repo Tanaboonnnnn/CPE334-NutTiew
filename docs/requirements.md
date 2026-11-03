@@ -724,7 +724,7 @@ This table is a guard against both missing a stakeholder policy and accidentally
 
 - [ ] The file is versioned **only on a documentation branch** with PR base **sprint1**, not committed directly into main/sprint1.
 - [ ] Scope is **Sprint 1 requirements only**; the whole-product deliverables and future-sprint work are separately and accurately identified.
-- [ ] FR-S1-01..19, BR-S1-01..22, NFR-S1-01..12 and AC-S1-01..34 are present with owners/traceability.
+- [ ] FR-S1-01..19, BR-S1-01..22, NFR-S1-01..12 and AC-S1-01..35 are present with owners/traceability.
 - [ ] Each agreed direct decision Q01–Q06/Q28–Q30 maps to required behavior; Q07–Q27/Q31–Q32 remain explicit future-scope constraints.
 - [ ] Negative, boundary, privacy and both booking concurrency cases are separately inspectable.
 - [ ] **Two different race types** are covered: competing Customers for the same Slot; one Customer for distinct overlapping Tutors' Slots.
