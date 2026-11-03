@@ -4,18 +4,18 @@ Draft for teammate review. [SRS](srs.md) is authoritative. Sprint 2/3 allocation
 
 | Stable ID | Feature and required outcome | Actor | Sprint | Dependency | Linked FR/BR/NFR | Planned verification |
 |---|---|---|---|---|---|---|
-| F-S1-01 | Auth/identity/authorization | Customer/Tutor | S1 | none | FR-001, FR-002, FR-003, FR-004, BR-002, BR-033, NFR-001, NFR-002 | VAL-001/002 (planned) |
-| F-S1-02 | Tutor Slot creation/schedule | Tutor | S1 | F-S1-01 | FR-005, FR-006, FR-007, BR-003, BR-004, BR-006, BR-035 | VAL-003/004/005 (planned) |
-| F-S1-03 | Availability browsing | Customer | S1 | F-S1-02 | FR-008, FR-009 | VAL-006 (planned) |
-| F-S1-04 | Exclusive Booking/concurrency | Customer | S1 | F-S1-01/02/03 | FR-010, FR-011, FR-012, FR-013, BR-001, BR-005, BR-028 | VAL-007..011/014 (planned) |
-| F-S1-05 | Protected Booking reads | Customer/Tutor | S1 | F-S1-01/04 | FR-014, FR-015, FR-016, FR-017, BR-030 | VAL-012/013 (planned) |
-| F-S2-01 | Customer cancellation/reopen | Customer | S2 proposed | F-S1-04 | FR-020, FR-021, BR-007, BR-008 | VAL-015/016 (planned) |
-| F-S2-02 | Atomic cross-Tutor reschedule | Customer | S2 proposed | F-S1-04/05 | FR-022, FR-023, FR-024, FR-025, FR-026, FR-027, BR-009, BR-010, BR-011, BR-012, BR-013, BR-014, BR-015, BR-016, NFR-008 | VAL-017..020 (planned) |
-| F-S2-03 | Tutor cancellation/reason/withdraw | Tutor | S2 proposed | F-S1-02/04 | FR-028, FR-029, FR-030, BR-017, BR-018, BR-019, BR-020 | VAL-021/022 (planned) |
-| F-S2-04 | Private durable notification | Customer | S2 proposed | F-S2-03 | FR-031, FR-032, BR-021, BR-022, BR-023, BR-024, BR-025, NFR-014 | VAL-023/024 (planned) |
-| F-S2-05 | Unoccupied Slot withdrawal | Tutor | S2 proposed | F-S1-02 | FR-033, FR-034, BR-026, BR-027, BR-032 | VAL-025..027 (planned) |
-| F-S3-01 | Tutor-only summary | Tutor | S3 proposed | F-S1-05 | FR-035, FR-036, BR-031, NFR-016 | VAL-028/029 (planned) |
-| SYS-01 | Cross-cutting integrity/security/evidence/deployment | System | S1-S3/Lab5+ | all | FR-018, FR-019, BR-029, BR-034, NFR-003, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, NFR-010, NFR-011, NFR-012, NFR-013, NFR-015 | VAL-005/006/010/011/012/014/020/022/023/029/030..036 (planned across S1/S2/S3) |
+| F-S1-01 | Customer/Tutor can log in, retrieve trusted identity, and log out; backend rejects unauthorized roles and records | Customer/Tutor | S1 | none | FR-001, FR-002, FR-003, FR-004, BR-002, BR-033, NFR-001, NFR-002 | VAL-001/002 (planned) |
+| F-S1-02 | Tutor creates and retrieves own 60-minute Slots; concurrent overlap is rejected and adjacent offers allowed | Tutor | S1 | F-S1-01 | FR-005, FR-006, FR-007, BR-003, BR-004, BR-006, BR-035 | VAL-003/004/005 (planned) |
+| F-S1-03 | Customer discovers eligible Tutor/time offers without third-party Booking data | Customer | S1 | F-S1-02 | FR-008, FR-009 | VAL-006 (planned) |
+| F-S1-04 | Customer books one eligible Slot persistently; concurrent same-Slot claims and overlapping Customer bookings are rejected | Customer | S1 | F-S1-01/02/03 | FR-010, FR-011, FR-012, FR-013, BR-001, BR-005, BR-028, NFR-008 (S1 Booking retry safety) | VAL-007..011/014/030 (planned) |
+| F-S1-05 | Customer reads only own persisted Bookings and Tutor reads only own schedule after refresh; Past is not Completed | Customer/Tutor | S1 | F-S1-01/04 | FR-014, FR-015, FR-016, FR-017, BR-030 | VAL-012/013 (planned) |
+| F-S2-01 | Customer cancels own eligible Booking and atomically reopens original Slot (proposed) | Customer | S2 proposed | F-S1-04 | FR-020, FR-021, BR-007, BR-008 | VAL-015/016 (planned) |
+| F-S2-02 | Customer reschedules at most once, even across Tutors, retaining ID and atomic history (proposed) | Customer | S2 proposed | F-S1-04/05 | FR-022, FR-023, FR-024, FR-025, FR-026, FR-027, BR-009, BR-010, BR-011, BR-012, BR-013, BR-014, BR-015, BR-016, NFR-008 | VAL-017..020 (planned) |
+| F-S2-03 | Authorized Tutor cancels with a reason and atomically withdraws the Slot (proposed) | Tutor | S2 proposed | F-S1-02/04 | FR-028, FR-029, FR-030, BR-017, BR-018, BR-019, BR-020 | VAL-021/022 (planned) |
+| F-S2-04 | Owning Customer privately reads and rereads durable cancellation notice (proposed) | Customer | S2 proposed | F-S2-03 | FR-031, FR-032, BR-021, BR-022, BR-023, BR-024, BR-025, NFR-014 | VAL-023/024 (planned) |
+| F-S2-05 | Tutor withdraws unoccupied future Slot, preserving history and allowing distinct replacement (proposed) | Tutor | S2 proposed | F-S1-02 | FR-033, FR-034, BR-026, BR-027, BR-032 | VAL-025..027 (planned) |
+| F-S3-01 | Tutor views authorized counts and matching lists for Upcoming, Past and Cancelled (proposed) | Tutor | S3 proposed | F-S1-05 | FR-035, FR-036, BR-031, NFR-016 | VAL-028/029 (planned) |
+| SYS-01 | System preserves atomic/durable changes, authorization, reproducible evidence and a proposed deployment design | System | S1-S3/Lab5+ | all | FR-018, FR-019, BR-029, BR-034, NFR-003, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, NFR-010, NFR-011, NFR-012, NFR-013, NFR-015 | VAL-005/006/010/011/012/014/020/022/023/029/030..036 (planned across S1/S2/S3) |
 
 ## Baseline and invariants
 
