@@ -21,3 +21,26 @@ Use native `<label>` elements for email/password, `autocomplete=email` and `curr
 ## Future UI evidence (Part F only)
 
 Record real browser/API/DB verification of Customer and Tutor login, wrong password, trusted role on refresh, logout and replay denial, keyboard navigation and forged access attempts. Screenshots of a hidden Tutor button are **not** a backend permission test. Actual screenshots, Playwright results and integration evidence are **NOT RUN** at this Part E phase.
+
+## Auth-only visual direction — proposed, pending human design approval
+
+The proposed visual direction is a **calm tutoring/scheduling utility**, not a landing or marketing page. @Chxtamos proposes this for **F-S1-01 only**; @Tanaboonnnnn must review/accept the direction before Part F UI implementation. These visual decisions are team proposals, not new instructor business rules.
+
+| Element | Desktop | Mobile and acceptance |
+|---|---|---|
+| Anatomy | Small text-only NutTiew wordmark, concise sign-in heading, subdued helper, left-aligned visible email/password labels and inputs, one prominent primary action, quiet real help text only | Keep same order; no role picker, imaginary schedules, testimonials, hero or extra CTAs |
+| Layout | Warm neutral page, readable **400–440px maximum** form column with content left-aligned, centered within available canvas; **no nested cards** | At 320/375px use 16px horizontal gutters and full remaining width; at 768/1280px preserve readable column, no horizontal overflow |
+| Spacing and corners | 4/8/12/16/24/32px spacing scale; 8px label gap, 16px field gap, 24–32px section separation, 8px radius | Input/button internal padding 12–16px; target size **at least 44 by 44 CSS px**; avoid clipping or overlapping text |
+| Typography | Thai/English legible stack: Noto Sans Thai, Sarabun, system-ui, sans-serif; heading 24px/1.3 weight 600; body 16px/1.5; labels 14–16px/1.5 | Input font >=16px; keep bilingual text readable without truncation and clear focus/navigation order |
+| Semantic colors | **--auth-bg #F6F4EF** warm neutral, **--auth-surface #FFFFFF**, **--auth-text #262B28** graphite, **--auth-muted #4F5853**, **--auth-accent #285C4B** single muted pine green, **--auth-border #B7C1BB**, **--auth-focus #285C4B**, **--auth-error #9C2B2B** (error status only) | Verify actual text/background pairs **>=4.5:1 normal text**, visible >=2px focus indicator; use white text on accent for primary button; never rely on color alone for errors |
+
+**Anti-template gate:** do not use generic purple/blue gradients, glassmorphism, glow/blur floating blobs, gratuitous 3D stock mascots, decorative emoji, card-in-card layouts, fictional schedules/testimonials, or generic landing hero/CTA sections. Ordinary accessible icons and focus states are allowed when functional. Do not redesign Booking/Tutor pages in Issue #13.
+
+## Auth form accessibility and failure recovery — concrete acceptance rules
+
+- Inputs must be **type=email and type=password**, with visible associated labels and **autocomplete=email/current-password**; permit paste and password-manager autofill. A show/hide-password control is a type=button control with accessible name reflecting current action, aria-pressed state, retained input value and focus; it must never accidentally submit.
+- Field-specific errors must appear adjacent to fields, linked with **aria-describedby** and **aria-invalid**. For failed client validation, move focus to the first invalid input. For failed server submit, focus the short role=alert summary and announce it to a screen reader. Generic login copy must **not** distinguish unknown vs inactive account vs wrong password (e.g. “อีเมลหรือรหัสผ่านไม่ถูกต้อง”).
+- All visible interactive controls, including submit, show/hide and logout, must have **>=44 x 44px** usable targets. Confirm visible **focus-visible**, keyboard Tab/Enter navigation, touch usability and no role picker. UI navigation never substitutes backend ownership checks.
+- Loading and duplicate submit: show a visible pending state and disable repeat submit only during active request; after failure/timeout, return to an actionable retry state. Do not leave an indefinite spinner. Do not show an authenticated screen from a client-selected role.
+- Reload, expiry and stale responses: on refresh hide protected content until a fresh /auth/me 200; on 401, clear in-memory identity and CSRF and render signed-out. Use request generation IDs or abort/ignore-stale logic so a late successful login/me response cannot restore identity after logout, 401 or a newer auth transition.
+- Uncertain logout: when network/503 fails, do not claim revocation; stop protected interactions and display a short retry/check-session message. Only confirmed logout 204 or fresh /auth/me 401 can finalize the signed-out state. Discard late old-identity responses. No password/session token in console, URL or browser storage.
