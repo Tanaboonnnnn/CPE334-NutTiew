@@ -54,7 +54,7 @@ describe('additional real PostgreSQL acceptance evidence',()=>{
   const user=await pool.query('SELECT "id" FROM "User" WHERE "email"=$1',[email]);
   const latest=await pool.query('SELECT "id" FROM "Session" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT 1',[user.rows[0].id]);
   const sessionId=latest.rows[0].id;
-  // Each check uses the database clock; no unstable near-second threshold assertions.
+  // DB-time probes around the elapsed-age labels. A 30-second margin avoids nondeterministic response latency; this does NOT prove exact 28,800-second boundary behavior.
   const boundaryOffsets=[{seconds:28799,margin:30,expected:200},{seconds:28800,margin:-30,expected:401},{seconds:28801,margin:-30,expected:401}];
   for(const edge of boundaryOffsets){
     await pool.query('UPDATE "Session" SET "createdAt"=now()-($2::int * interval \'1 second\'),"expiresAt"=now()+($3::int * interval \'1 second\') WHERE "id"=$1',[sessionId,edge.seconds,edge.margin]);
