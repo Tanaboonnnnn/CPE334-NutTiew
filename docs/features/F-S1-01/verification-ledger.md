@@ -4,10 +4,10 @@ Source contract: `tests.md` AUTH-01..23. This ledger does **not** replace the ST
 
 | STS | Status | Evidence / remaining gap |
 |---|---|---|
-| AUTH-01 | PARTIAL | Customer browser login; Tutor API login; distinct roles not yet both browser-verified with exact fixtures |
+| AUTH-01 | PARTIAL | Four-account C1/C2/T1/T2 browser identity/role/login/reload/logout matrix ran 1/1 PASS on author Windows; manual/visual acceptance pending |
 | AUTH-02 | PARTIAL | Unknown/wrong/inactive 401 and no cookie; timing/nonenumeration review pending |
 | AUTH-03 | PARTIAL | Forged query/header role ignored by `/me`; reusable trusted DB Role Guard + owner-filtered predicate fixture tested; Slot/Booking integrations pending |
-| AUTH-04 | PARTIAL | Logout 204, DB replay 401, logout UPDATE fault injection tested; concurrent logout test added at later HEAD, NOT RUN yet |
+| AUTH-04 | PARTIAL | Logout 204, DB replay 401, injected UPDATE fault and concurrent logout race verified via 25/25 DB test suite; full crash recovery pending |
 | AUTH-05 | PASS (auth-only) | Independent A/B sessions; A logout leaves B active |
 | AUTH-06 | PARTIAL | Inactive, revoked, expired 401; restart persistence not independently verified |
 | AUTH-07 | BLOCKED | Domain Slot/Booking routes not implemented in this PR; `/me` anonymous 401 |
@@ -17,22 +17,22 @@ Source contract: `tests.md` AUTH-01..23. This ledger does **not** replace the ST
 | AUTH-11 | PARTIAL | Argon2id + SHA-256 token digest implemented; log/secret audit pending |
 | AUTH-12 | PARTIAL | Injected Session INSERT and Logout UPDATE faults: sanitized 503, no false cookie clearing; full DB outage injection still pending |
 | AUTH-13 | PARTIAL | Cross-origin/CSRF rejection for auth; unsafe domain routes absent |
-| AUTH-14 | PARTIAL | Expiry-at-now and replay checked; concurrent logout test added but NOT RUN at current HEAD; exact clock boundary still pending |
-| AUTH-15 | PARTIAL | 7/7 Edge tests: viewports, paste/autocomplete, focus/ARIA/error, pending 10s timeout; WCAG 2.2 and human sign-off pending |
+| AUTH-14 | PARTIAL | Expiry-at-now and replay, concurrent logout race verified on author Windows PostgreSQL 17.2; exact clock boundary pending |
+| AUTH-15 | PARTIAL | 9/9 Edge browser tests: four viewport sizes, C1/C2/T1/T2 matrix, errors, focus/ARIA, pending 10s timeout; WCAG 2.2 and human sign-off pending |
 | AUTH-16 | PARTIAL | Reusable requireSession/requireRole/requireOwnedResource exercised on owner-scoped DB fixture; domain Slot/Booking integration BLOCKED by Issues #14–17 |
-| AUTH-17 | PARTIAL | 10 repeated CSRF GETs and cross-site rejection verified at c00f63e; concurrent GET/restart/no-session-row-mutation test added at later HEAD, NOT RUN |
+| AUTH-17 | PARTIAL | Concurrent CSRF GET across reinitialized app and unchanged Session row verified in author DB test 25/25; explicit process restart and all table snapshot pending |
 | AUTH-18 | PARTIAL | Origin/Referer and CSRF rejection; two-tab unsafe race pending |
-| AUTH-19 | PARTIAL | 8h absolute DB expiry and no sliding verified at c00f63e; added latency-tolerant DB-clock expiry probes, NOT RUN and not exact 28,800-second proof |
-| AUTH-20 | PARTIAL | 3 successes + 5 failures + 429 and IPv4 quota verified; equivalent IPv6 representations share one HMAC bucket across 20 HTTP attempts, 21st denied 429, PostgreSQL bucket attempts=20 (reviewer verified c00f63e on PostgreSQL 18.3). Additional Unicode byte/length tests added after c00f63e but NOT RUN; full input/proxy matrix pending |
+| AUTH-19 | PARTIAL | 8h absolute DB expiry and no sliding plus latency-tolerant expiry probes passed author DB tests 25/25; exact 28,800-second controlled-clock proof pending |
+| AUTH-20 | PARTIAL | Success/failure quota, IPv4 and equivalent IPv6 HTTP→DB 20+1 shared HMAC bucket, Unicode byte/length negative cases verified on author Windows PostgreSQL 17.2 (25/25); full exact boundaries/proxy matrix pending |
 | AUTH-21 | PARTIAL | v1→v2 CSRF rotation, prior-key overlap, old session logout and missing prior-key 503 tested; production rollout still pending |
 | AUTH-22 | PARTIAL | Two real API processes, 40 HTTP all-wrong/all-correct stress; 5 expired leases reconciled during new admit; late settlement no Session; deterministic barrier, mixed, crash and DB outage pending |
-| AUTH-23 | PARTIAL | Browser current server-derived account reference, refresh/logout; C1/C2/T1/T2 switch/stale-response pending |
+| AUTH-23 | PARTIAL | Real Edge 4-account C1/C2/T1/T2 switching/reload/logout DB-derived short IDs and roles passed; delayed 401 after logout passed; overlapping old 200 vs newer 401 race still pending |
 
 ### Commands and evidence
 
 - **Reviewer only, HEAD `c00f63e`, isolated PostgreSQL 18.3:** `npm ci`, `npm run db:generate`, `npm run db:migrate`, `npm run typecheck`, `npm run build` PASS; `npm test` 11/11; `npm run test:db` 21/21; `npm run test:e2e` 7/7; `npm run test:stress` 2 API processes × 40 HTTP attempts per all-wrong/all-correct scenario PASS. See PR #26 review #5768247196.
 - **Author earlier, HEAD `99b634f`, Windows PostgreSQL 17.2:** unit 8/8; DB 20/20; Edge 7/7; two-process stress PASS. No Docker.
-- **Current HEAD after round-3 updates:** new tests added but **NOT RUN**; previous results must not be presented as passing for these changes. No GitHub Actions CI result.
+- **Author run on synced base HEAD `a2d4910`, Windows PostgreSQL 17.2:** `npm run typecheck`, `npm run build`, `npm test` 11/11, `npm run test:db` 25/25, `npm run test:e2e` 7/7, `npm run test:stress` two processes × 40 wrong and 40 correct login attempts: PASS. A new auth-only C1/C2/T1/T2 Edge matrix + delayed unauthorized `/me` test ran **9/9** Edge PASS on the local uncommitted working tree (as of 2026-11-04); record resulting committed SHA separately. No GitHub Actions CI proof.
 - Browser images: `evidence/login-320.png`, `login-375.png`, `login-768.png`, `login-1280.png`, `customer-session.png` (all synthetic test data).
 - Automated assertions are narrower than the full contract; a Ready-for-Review PR can be opened for reviewer feedback, but the unresolved rows still block full Issue #13 DoD acceptance and merge.
 
@@ -67,3 +67,7 @@ Reviewer round 2 [#5767788384](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pu
 - GitHub branch changes after reviewer-verified `c00f63e` include three additional DB tests in `apps/api/test/auth.extended.db.test.ts`: concurrent CSRF reads with fresh `createApp` instance and unchanged Session row, concurrent logout with replay rejection, and latency-tolerant expiry probes. A further input test checks UTF-8 byte bounds (multi-byte characters), email length rejection and no cookie on invalid input.
 - **Current execution state: NOT RUN.** The connected Windows terminal could not be reached. No pass counts are claimed for the added tests, and any failed check requires correction before a new approval request.
 - **Still missing:** deterministic Argon2 barrier/mixed load, actual process crash/DB outage, exact time-boundary test with controlled clock, four-account browser C1/C2/T1/T2 switching/stale identity, human WCAG review. Cross-feature routes remain blocked on Issues #14–17. All unresolved STS items stay PARTIAL/BLOCKED rather than PASS.
+
+### Latest author-run evidence, 2026-11-04
+
+On native Windows PostgreSQL 17.2, synced base commit 2d4910b49f2aea4742ef10d172c05dac2eef1c3: typecheck/build PASS, unit 11/11 PASS, PostgreSQL DB tests 25/25 PASS, Edge 7/7 PASS, two-process stress PASS (wrong 5×401+35×429; correct 5×200+35×429). After adding test-only e2e/auth.matrix.spec.ts, Microsoft Edge **9/9 PASS**: four synthetic accounts C1/C2/T1/T2 with distinct UUID references and roles, repeated login/reload/logout and delayed unauthorized /me after logout. The delayed-401 test does **not** prove an old 200 arriving after a newer 401; that race remains PARTIAL. More work needed for exact-clock timing, mixed/barrier/crash tests and WCAG human sign-off. Test results refer to the working tree of this patch before commit; no CI claim.
