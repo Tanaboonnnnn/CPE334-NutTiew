@@ -1,7 +1,7 @@
 import { afterAll,beforeAll,beforeEach,describe,expect,it } from 'vitest';
 import request from 'supertest';
 import argon2 from 'argon2';
-import { randomBytes,randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import type { Express } from 'express';
 import { createPool,readKey } from '../src/config.js';
 import { createApp } from '../src/app.js';
@@ -47,15 +47,17 @@ describe('additional real PostgreSQL acceptance evidence',()=>{
   const own=await pool.query('SELECT count(*)::int AS count FROM "Session" WHERE "userId"=(SELECT "id" FROM "User" WHERE "email"=$1) AND "revokedAt" IS NOT NULL',[email]);
   expect(own.rows[0].count).toBeGreaterThanOrEqual(1);
  },30000);
- it('AUTH-19 absolute lifetime checks at 28799, 28800 and 28801 seconds',async()=>{
+ it('AUTH-19 absolute lifetime checks with 28799/28800/28801-second elapsed time',async()=>{
   const login=await auth();expect(login.status).toBe(200);
-  const cookie=login.headers['set-cookie'];const match=/nuttiew_session_dev=([^;]+)/.exec(cookie[0]);expect(match).toBeTruthy();
-  const session=await pool.query('SELECT "id" FROM "Session" WHERE "tokenDigest"=$1',[Buffer.from((await import('../src/security.js')).digest(match![1]))]);
-  const id=session.rows[0].id;
-  for(const offset of [28799,28800,28801]){
-    await pool.query('UPDATE "Session" SET "createdAt"=now()-($2::int * interval \'1 second\'),"expiresAt"=now()+interval \'2 seconds\'-$2::int * interval \'1 second\' WHERE "id"=$1',[id,offset-28799]);
+  const cookie=login.headers['set-cookie'];
+  const user=await pool.query('SELECT "id" FROM "User" WHERE "email"=$1',[email]);
+  const latest=await pool.query('SELECT "id" FROM "Session" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT 1',[user.rows[0].id]);
+  const sessionId=latest.rows[0].id;
+  // Each case uses the DB's clock and an absolute 8h expiry, not a fake application clock.
+  for(const age of [28799,28800,28801]){
+    await pool.query('UPDATE "Session" SET "createdAt"=now()-($2::int * interval \'1 second\'),"expiresAt"=now()+(28800-$2::int) * interval \'1 second\' WHERE "id"=$1',[sessionId,age]);
     const result=await request(app).get('/api/v1/auth/me').set('Cookie',cookie);
-    expect(result.status).toBe(offset===28799?200:401);
+    expect(result.status).toBe(age===28799?200:401);
   }
  },30000);
 });
