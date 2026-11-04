@@ -94,3 +94,18 @@ test('AUTH-18 two browser tabs race unsafe logout on one session, then replay is
  expect(settled.rows[0].revokedAt).not.toBeNull();
  await second.close();
 });
+
+test('AUTH-15 uncertain logout 503 preserves visible identity and announces retry',async({page})=>{
+ await page.goto('/');
+ await page.getByLabel('อีเมล').fill(email);
+ await page.getByLabel('รหัสผ่าน').fill(password);
+ await page.getByRole('button',{name:'เข้าสู่ระบบ'}).click();
+ await expect(page.getByText('เข้าสู่ระบบแล้ว')).toBeVisible();
+ const me=await page.request.get('/api/v1/auth/me');expect(me.status()).toBe(200);
+ const ref=(await me.json()).user.id.replaceAll('-','').slice(-8);
+ await page.route('**/api/v1/auth/logout',async route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:{code:'SERVICE_UNAVAILABLE',message:'Service temporarily unavailable'},requestId:'forced-outage'})}));
+ await page.getByRole('button',{name:'ออกจากระบบ'}).click();
+ await expect(page.getByRole('alert')).toContainText('ไม่สามารถยืนยันการออกจากระบบได้');
+ await expect(page.getByText(ref,{exact:true})).toBeVisible();
+ expect((await page.request.get('/api/v1/auth/me')).status()).toBe(200);
+});
