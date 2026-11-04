@@ -7,7 +7,7 @@ import argon2 from 'argon2';
 import type { Pool } from 'pg';
 import { admit, csrf, digest, hmac, QuotaError, randomToken, safeTokenMatch, settle, verifyPassword } from './security.js';
 
-type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[] };
+type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword };
 const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',RATE_LIMITED:'Too many login attempts',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
 const code=(res:Response,status:number,error:string)=>res.status(status).json({error:{code:error,message:messages[error]??'Request failed'},requestId:res.locals.requestId??randomUUID()});
 const cookieName=(c:Config)=>c.production?'nuttiew_session':'nuttiew_session_dev';
@@ -26,7 +26,7 @@ export async function createApp(pool:Pool, config:Config) {
   guard,async(req:Request,res:Response)=>{const principal=getPrincipal(req);if(!principal)return void code(res,401,'UNAUTHENTICATED');try{await handler(req,res,{id:principal.sessionId,...principal});}catch{code(res,503,'SERVICE_UNAVAILABLE');}}
  ]; app.post('/api/v1/auth/login',async(req,res)=>{if(!allowedOrigin(req,config))return void code(res,403,'ORIGIN_DENIED');const body=req.body;const valid=body && typeof body==='object' && !Array.isArray(body) && Object.keys(body).sort().join(',')==='email,password' && typeof body.email==='string' && typeof body.password==='string';if(!valid)return void code(res,400,'INVALID_INPUT');const email=body.email.trim().toLowerCase(),password=body.password;const bytes=Buffer.byteLength(password,'utf8');if([...email].length<3||[...email].length>254||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||bytes<1||bytes>128)return void code(res,400,'INVALID_INPUT');
  let reservation;try{reservation=await admit(pool,hmac(config.rateKey,'account',email),hmac(config.rateKey,'ip',clientIp(req,config.trustedProxies)));}catch(e){return void code(res,e instanceof QuotaError?429:503,e instanceof QuotaError?'RATE_LIMITED':'SERVICE_UNAVAILABLE');}
- try{const q=await pool.query('SELECT "id","role","passwordHash","isActive" FROM "User" WHERE "email"=$1',[email]);const user=q.rows[0];let matched=false;try{matched=await verifyPassword(password,user?.passwordHash??dummy);}catch{matched=false;}
+ try{const q=await pool.query('SELECT "id","role","passwordHash","isActive" FROM "User" WHERE "email"=$1',[email]);const user=q.rows[0];let matched=false;try{matched=await (config.credentialVerifier??verifyPassword)(password,user?.passwordHash??dummy);}catch{matched=false;}
  const good=matched && user?.isActive===true;const token=good?randomToken():null;const nonce=good?randomBytes(32):null;
  const accepted=await settle(pool,reservation,good?'success':'failed',good?async c=>{await c.query('INSERT INTO "Session"("userId","tokenDigest","csrfNonce","csrfKeyVersion","expiresAt") VALUES($1,$2,$3,$4,now()+interval \'8 hours\')',[user.id,digest(token!),nonce,config.csrfKeyVersion??'v1']);}:undefined);
  if(!good||!accepted)return void code(res,good?503:401,good?'SERVICE_UNAVAILABLE':'LOGIN_FAILED');

@@ -17,16 +17,16 @@ Source contract: `tests.md` AUTH-01..23. This ledger does **not** replace the ST
 | AUTH-11 | PARTIAL | Argon2id + SHA-256 token digest implemented; log/secret audit pending |
 | AUTH-12 | PARTIAL | Injected Session INSERT and Logout UPDATE faults: sanitized 503, no false cookie clearing; full DB outage injection still pending |
 | AUTH-13 | PARTIAL | Cross-origin/CSRF rejection for auth; unsafe domain routes absent |
-| AUTH-14 | PARTIAL | Expiry-at-now and replay, concurrent logout race verified on author Windows PostgreSQL 17.2; exact clock boundary pending |
+| AUTH-14 | PARTIAL | Expiry/replay and concurrent logout verified; exact PostgreSQL 28,799/28,800/28,801s predicate proven in new DB test. Live HTTP latency-boundary measurement remains separate. |
 | AUTH-15 | PARTIAL | 9/9 Edge browser tests: four viewport sizes, C1/C2/T1/T2 matrix, errors, focus/ARIA, pending 10s timeout; WCAG 2.2 and human sign-off pending |
 | AUTH-16 | PARTIAL | Reusable requireSession/requireRole/requireOwnedResource exercised on owner-scoped DB fixture; domain Slot/Booking integration BLOCKED by Issues #14–17 |
 | AUTH-17 | PARTIAL | Concurrent CSRF GET across reinitialized app and unchanged Session row verified in author DB test 25/25; explicit process restart and all table snapshot pending |
 | AUTH-18 | PARTIAL | Origin/Referer and CSRF rejection; two-tab unsafe race pending |
-| AUTH-19 | PARTIAL | 8h absolute DB expiry and no sliding plus latency-tolerant expiry probes passed author DB tests 25/25; exact 28,800-second controlled-clock proof pending |
+| AUTH-19 | PARTIAL | Session absolute 8h and no sliding; new DB predicate asserts PostgreSQL microsecond-precision 28,799/28,800/28,801s boundaries via expiresAt > createdAt + interval. No end-to-end HTTP clock injection; remains PARTIAL. |
 | AUTH-20 | PARTIAL | Success/failure quota, IPv4 and equivalent IPv6 HTTP→DB 20+1 shared HMAC bucket, Unicode byte/length negative cases verified on author Windows PostgreSQL 17.2 (25/25); full exact boundaries/proxy matrix pending |
 | AUTH-21 | PARTIAL | v1→v2 CSRF rotation, prior-key overlap, old session logout and missing prior-key 503 tested; production rollout still pending |
-| AUTH-22 | PARTIAL | Two real API processes, 40 HTTP all-wrong/all-correct stress; 5 expired leases reconciled during new admit; late settlement no Session; deterministic barrier, mixed, crash and DB outage pending |
-| AUTH-23 | PARTIAL | Real Edge 4-account C1/C2/T1/T2 switching/reload/logout DB-derived short IDs and roles passed; delayed 401 after logout passed; overlapping old 200 vs newer 401 race still pending |
+| AUTH-22 | PARTIAL | Two real API processes: 40 HTTP all-wrong/all-correct/mixed each passed; DB 5 live Argon2-check barrier, sixth correct 429 and retry 200 with account/IP bucket snapshots; genuine child-process exit with five persisted pending reservations, forced lease expiry, immediate recovery and late settlement denial passed. Complete HTTP crash/DB outage and every edge scenario remain outstanding. |
+| AUTH-23 | PARTIAL | Real Edge 4-account C1/C2/T1/T2 switching/reload/logout DB-derived short IDs and roles; delayed 401; controlled old 200 response held across browser navigation followed by newer 401 and no stale visible identity. A same-React-instance competing success/revocation race is not proven by a navigation-only test. |
 
 ### Commands and evidence
 
@@ -70,4 +70,28 @@ Reviewer round 2 [#5767788384](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pu
 
 ### Latest author-run evidence, 2026-11-04
 
-On native Windows PostgreSQL 17.2, synced base commit 2d4910b49f2aea4742ef10d172c05dac2eef1c3: typecheck/build PASS, unit 11/11 PASS, PostgreSQL DB tests 25/25 PASS, Edge 7/7 PASS, two-process stress PASS (wrong 5×401+35×429; correct 5×200+35×429). After adding test-only e2e/auth.matrix.spec.ts, Microsoft Edge **9/9 PASS**: four synthetic accounts C1/C2/T1/T2 with distinct UUID references and roles, repeated login/reload/logout and delayed unauthorized /me after logout. The delayed-401 test does **not** prove an old 200 arriving after a newer 401; that race remains PARTIAL. More work needed for exact-clock timing, mixed/barrier/crash tests and WCAG human sign-off. Test results refer to the working tree of this patch before commit; no CI claim.
+On native Windows PostgreSQL 17.2, synced base commit a2d4910b49f2aea4742ef10d172c05dac2eef1c3: typecheck/build PASS, unit 11/11 PASS, PostgreSQL DB tests 25/25 PASS, Edge 7/7 PASS, two-process stress PASS (wrong 5×401+35×429; correct 5×200+35×429). After adding test-only e2e/auth.matrix.spec.ts, Microsoft Edge **9/9 PASS**: four synthetic accounts C1/C2/T1/T2 with distinct UUID references and roles, repeated login/reload/logout and delayed unauthorized /me after logout. The delayed-401 test does **not** prove an old 200 arriving after a newer 401; that race remains PARTIAL. More work needed for exact-clock timing, mixed/barrier/crash tests and WCAG human sign-off. Test results refer to the working tree of this patch before commit; no CI claim.
+
+### Review #5769210920 ? author-side acceptance expansion (2026-11-04)
+
+**Scope remains Issue #13 Authentication ONLY.** Changes include `e2e/auth.stale.spec.ts`, `apps/api/test/auth.boundary.db.test.ts`, `apps/api/test/auth.barrier.db.test.ts`, `apps/api/test/auth.crash.db.test.ts`, small test-only `credentialVerifier` injection in `createApp`, `scripts/stress.mjs` mixed scenario, and a randomized IPv6 identity in `auth.db.test.ts` to prevent cross-run bucket collisions. No Slot or Booking endpoints.
+
+**Actual author-run on Windows 11, Node 24.14.0, npm 11.9.0, native PostgreSQL 17.2, without Docker:**
+
+| Command | Result | Notes |
+|---|---|---|
+| `npm run typecheck` | PASS | API and Web |
+| `npm run build` | PASS | API TypeScript and Vite production bundle |
+| `npm test` | **11/11 PASS** | Unit/auth/IP canonicalization |
+| `npm run test:db` | **29/29 PASS** | Five tests files plus crash test, real PostgreSQL. Full rerun after initial test-harness fixes. |
+| `npm run test:e2e` | **10/10 PASS** | Microsoft Edge browser; C1/C2/T1/T2 matrix, error/timeout and held old `/me` 200 across newer 401 navigation. |
+| `npm run test:stress` | **PASS** | 2 live independent API processes ? 40 each all-wrong/all-correct/mixed. Observed wrong 5?401 + 35?429; correct 5?200 + 35?429; mixed 2?200 + 3?401 + 35?429 on final run. Account `inFlight=0` at completion; `failed` matches 401 count; Session count matches 200. |
+
+**Additional test-level evidence:**
+
+- `AUTH-19`: PostgreSQL authoritative microsecond precision compares `expiresAt > createdAt + {28799,28800,28801} seconds`, result `true,false,false`; no fake 30-second margin. Earlier JavaScript Date rounding produced a red test; replaced by exact DB expression. This is precise DB-predicate proof, **not a fake HTTP clock**.
+- `AUTH-22`: deterministic in-process *Argon2 verification hold/release* via test-only injected `credentialVerifier`, with **two separate Express app instances sharing PostgreSQL**. During barrier: account `failed=0,inFlight=5`, IP admissions=5. Sixth correct HTTP login=429 with no cookie and no 6th IP permit. On release five HTTP requests=200, counters `failed=0,inFlight=0`; manual retry sixth=200 and IP admissions=6. This is an actual Argon2 verification barrier, **not two separately running OS HTTP servers for that specific scenario**; two live OS processes were used in the independent 40-request stress script.
+- `AUTH-22`: launched a **child Node OS process** which persisted five `pending` reservations, exited with status 77 without calling `settle`; parent read PostgreSQL rows, forced expired leases, admitted new reservation, confirmed `failed=0,inFlight=1` after reconciliation and late settlement false. It simulates process exit during auth admission, not a live HTTP process crash while Argon2 is running. A full DB outage and production failover were **NOT RUN**.
+- `AUTH-23`: Edge route interception held a previously fetched authorized HTTP 200 `/me` across navigation, then supplied a newer 401 for the reloaded document and verified no old identity appears. This is deterministic **cross-navigation** delayed-success evidence; a race within the *same mounted React component* remains open because the navigation invalidates the older component.
+
+**Remaining authorization/sign-off:** WCAG 2.2/manual visual review still requires an independent human reviewer and recorded sign-off; injected whole-DB outage, same-mount old-200-vs-newer-401, browser two-tab unsafe race and independent server restart under persistent sessions are not fully established. Domain tests AUTH-07/08/09/10 and domain portion AUTH-16 remain **BLOCKED by Issues #14?17**. Retain `PARTIAL` where applicable; a passing command does not imply complete AUTH-01..23 acceptance or authorization to merge. All results above are author-run on this worktree before commit; record final SHA after commit. No CI proof.
