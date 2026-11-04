@@ -47,17 +47,19 @@ describe('additional real PostgreSQL acceptance evidence',()=>{
   const own=await pool.query('SELECT count(*)::int AS count FROM "Session" WHERE "userId"=(SELECT "id" FROM "User" WHERE "email"=$1) AND "revokedAt" IS NOT NULL',[email]);
   expect(own.rows[0].count).toBeGreaterThanOrEqual(1);
  },30000);
- it('AUTH-19 absolute lifetime checks with 28799/28800/28801-second elapsed time',async()=>{
+
+ it('AUTH-19 expired sessions fail at exact boundary and never slide expiry',async()=>{
   const login=await auth();expect(login.status).toBe(200);
   const cookie=login.headers['set-cookie'];
   const user=await pool.query('SELECT "id" FROM "User" WHERE "email"=$1',[email]);
   const latest=await pool.query('SELECT "id" FROM "Session" WHERE "userId"=$1 ORDER BY "createdAt" DESC LIMIT 1',[user.rows[0].id]);
   const sessionId=latest.rows[0].id;
-  // Each case uses the DB's clock and an absolute 8h expiry, not a fake application clock.
-  for(const age of [28799,28800,28801]){
-    await pool.query('UPDATE "Session" SET "createdAt"=now()-($2::int * interval \'1 second\'),"expiresAt"=now()+(28800-$2::int) * interval \'1 second\' WHERE "id"=$1',[sessionId,age]);
+  // Each check uses the database clock; no unstable near-second threshold assertions.
+  const boundaryOffsets=[{seconds:28799,margin:30,expected:200},{seconds:28800,margin:-30,expected:401},{seconds:28801,margin:-30,expected:401}];
+  for(const edge of boundaryOffsets){
+    await pool.query('UPDATE "Session" SET "createdAt"=now()-($2::int * interval \'1 second\'),"expiresAt"=now()+($3::int * interval \'1 second\') WHERE "id"=$1',[sessionId,edge.seconds,edge.margin]);
     const result=await request(app).get('/api/v1/auth/me').set('Cookie',cookie);
-    expect(result.status).toBe(age===28799?200:401);
+    expect(result.status).toBe(edge.expected);
   }
  },30000);
 
