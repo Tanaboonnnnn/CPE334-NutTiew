@@ -30,3 +30,9 @@ See the [CPE334 Project Deliverable 1](docs/requirements/requirements-signoff-ch
 ## F-S1-01 Authentication implementation (Issue #13)
 
 See [Part F implementation and local PostgreSQL setup](docs/features/F-S1-01/implementation.md).
+
+## F-S1-02 Tutor Slot availability implementation (Issue #14)
+
+See [Tutor Slot Part F implementation and PostgreSQL privilege setup](docs/features/F-S1-02/implementation.md).
+Part E contracts are in the same folder. Feature/test evidence is tracked in the
+[Slot verification ledger](docs/features/F-S1-02/verification-ledger.md).

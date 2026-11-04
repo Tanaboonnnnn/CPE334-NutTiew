@@ -1,5 +1,7 @@
-import { requireSession,getPrincipal } from './guards.js';
+import { requireSession,requireRole,getPrincipal } from './guards.js';
 import { clientIp } from './client-ip.js';
+import { parseSlotStart } from './slot-time.js';
+import { listOwnSlots, publishOwnSlot, SlotError } from './slots.js';
 import express, { type Request, type Response, type NextFunction, type RequestHandler } from 'express';
 import cookieParser from 'cookie-parser';
 import { randomBytes,randomUUID } from 'node:crypto';
@@ -8,7 +10,7 @@ import type { Pool } from 'pg';
 import { admit, csrf, digest, hmac, QuotaError, randomToken, safeTokenMatch, settle, verifyPassword } from './security.js';
 
 type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword };
-const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',RATE_LIMITED:'Too many login attempts',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
+const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',RATE_LIMITED:'Too many login attempts',SLOT_INVALID_TIME:'Slot must start in the future',SLOT_OVERLAP:'Slot overlaps an existing offer',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
 const code=(res:Response,status:number,error:string)=>res.status(status).json({error:{code:error,message:messages[error]??'Request failed'},requestId:res.locals.requestId??randomUUID()});
 const cookieName=(c:Config)=>c.production?'nuttiew_session':'nuttiew_session_dev';
 const cookieOptions=(c:Config)=>({httpOnly:true,secure:c.production,sameSite:'lax' as const,path:'/' as const});
@@ -36,6 +38,37 @@ export async function createApp(pool:Pool, config:Config) {
  app.get('/api/v1/auth/me',...withSession(async(_req,res,s)=>{res.json(identity({id:s.userId,role:s.role}));}));
  app.get('/api/v1/auth/csrf',...withSession(async(req,res,s)=>{if(req.headers['sec-fetch-site']==='cross-site')return void code(res,403,'ORIGIN_DENIED');const key=sessionCsrfKey(config,s.csrfKeyVersion);if(!key)return void code(res,503,'SERVICE_UNAVAILABLE');res.json({csrfToken:csrf(key,s.id,s.csrfNonce)});}));
  app.post('/api/v1/auth/logout',...withSession(async(req,res,s)=>{if(!allowedOrigin(req,config))return void code(res,403,'ORIGIN_DENIED');if(req.body && (typeof req.body!=='object' || Array.isArray(req.body) || Object.keys(req.body).length>0))return void code(res,400,'INVALID_INPUT');const key=sessionCsrfKey(config,s.csrfKeyVersion);if(!key)return void code(res,503,'SERVICE_UNAVAILABLE');if(!safeTokenMatch(req.headers['x-csrf-token'],csrf(key,s.id,s.csrfNonce)))return void code(res,403,'CSRF_DENIED');await pool.query('UPDATE "Session" SET "revokedAt"=now() WHERE "id"=$1 AND "revokedAt" IS NULL',[s.id]);res.clearCookie(cookieName(config),cookieOptions(config));res.status(204).end();}));
+ // F-S1-02 only: the authenticated Tutor's own create/list projection.
+ // The security and CSRF implementation is shared with Auth (no forked policy).
+ const tutorRole=requireRole('Tutor',(res,status,error)=>{code(res,status,error);});
+ const slotFailure=(res:Response,error:unknown)=>{
+  if(error instanceof SlotError)return void code(res,error.status,error.errorCode);
+  code(res,503,'SERVICE_UNAVAILABLE');
+ };
+ app.get('/api/v1/tutor/slots',guard,tutorRole,async(req,res)=>{
+  if(Object.keys(req.query).length!==0)return void code(res,400,'INVALID_INPUT');
+  const principal=getPrincipal(req);
+  if(!principal)return void code(res,401,'UNAUTHENTICATED');
+  try{res.json({data:await listOwnSlots(pool,principal.userId),meta:{requestId:res.locals.requestId}});}
+  catch(error){slotFailure(res,error);}
+ });
+ app.post('/api/v1/tutor/slots',guard,tutorRole,async(req,res)=>{
+  if(Object.keys(req.query).length!==0)return void code(res,400,'INVALID_INPUT');
+  if(!allowedOrigin(req,config))return void code(res,403,'ORIGIN_DENIED');
+  const principal=getPrincipal(req);
+  if(!principal)return void code(res,401,'UNAUTHENTICATED');
+  const key=sessionCsrfKey(config,principal.csrfKeyVersion);
+  if(!key)return void code(res,503,'SERVICE_UNAVAILABLE');
+  if(!safeTokenMatch(req.headers['x-csrf-token'],csrf(key,principal.sessionId,principal.csrfNonce)))return void code(res,403,'CSRF_DENIED');
+  const body=req.body;
+  if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length!==1||!Object.hasOwn(body,'startsAt'))return void code(res,400,'INVALID_INPUT');
+  const start=parseSlotStart(body.startsAt);
+  if(!start)return void code(res,400,'INVALID_INPUT');
+  try{
+   const data=await publishOwnSlot(pool,{userId:principal.userId,sessionId:principal.sessionId},start);
+   res.status(201).json({data,meta:{requestId:res.locals.requestId}});
+  }catch(error){slotFailure(res,error);}
+ });
  app.use((err:unknown,_req:Request,res:Response,_next:NextFunction)=>{if(res.headersSent)return;const e=err as {type?:string;status?:number};code(res,e.type==='entity.too.large'?413:e.status===400?400:500,e.type==='entity.too.large'?'INVALID_INPUT':e.status===400?'INVALID_INPUT':'INTERNAL_ERROR');});
  return app;
 }

@@ -13,6 +13,18 @@ model User {
  createdAt DateTime @default(now()) @db.Timestamptz(6)
  updatedAt DateTime @updatedAt @db.Timestamptz(6)
  sessions Session[]
+ slots Slot[]
+}
+model Slot {
+ id String @id @default(uuid()) @db.Uuid
+ tutorId String @db.Uuid
+ tutor User @relation(fields:[tutorId], references:[id], onDelete:Restrict)
+ startsAt DateTime @db.Timestamptz(6)
+ endsAt DateTime @db.Timestamptz(6)
+ lifecycle String @default("Offered")
+ createdAt DateTime @default(now()) @db.Timestamptz(6)
+ withdrawnAt DateTime? @db.Timestamptz(6)
+ @@index([tutorId, startsAt, id])
 }
 model Session {
  id String @id @default(uuid()) @db.Uuid
