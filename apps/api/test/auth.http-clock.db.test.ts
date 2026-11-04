@@ -14,9 +14,9 @@ beforeAll(async()=>{await pool.query('INSERT INTO "User"("email","passwordHash",
 afterAll(async()=>{await pool.query('DELETE FROM "User" WHERE "email"=$1',[email]);await pool.end();});
 
 it('AUTH-19 HTTP /me responds 200/401/401 at exactly 28799/28800/28801s using injected authoritative PostgreSQL time',async()=>{
- const config={origin,csrfKey:readKey('AUTH_CSRF_HMAC_KEY'),rateKey:readKey('AUTH_RATE_KEY'),production:false};
+ const config={origin,csrfKey:readKey('AUTH_CSRF_HMAC_KEY'),rateKey:readKey('AUTH_RATE_KEY'),production:false,trustedProxies:['127.0.0.1','::1']};
  const live=await createApp(pool,config);
- const login=await request(live).post('/api/v1/auth/login').set('Origin',origin).send({email,password});
+ const login=await request(live).post('/api/v1/auth/login').set('Origin',origin).set('X-Forwarded-For',`198.18.${parseInt(id.slice(0,2),16)}.${parseInt(id.slice(2,4),16)}`).send({email,password});
  expect(login.status).toBe(200);
  const cookie=login.headers['set-cookie'];
  const raw=/nuttiew_session_dev=([^;]+)/.exec(cookie[0]);expect(raw).not.toBeNull();
