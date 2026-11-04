@@ -48,3 +48,11 @@ eapExpired use the same account-then-reservation lock ordering. New DB test asse
 - **P2 approval-state:** PR #25 reviewer approved OD-005-D in comment #6625521193 (confirmation review #5765005104); Part E docs corrected, approval does **not** imply runtime DoD. Author PostgreSQL 17.2 on Windows; reviewer PostgreSQL 18.3 on separate environment; no GitHub Actions CI checks on these test logs.
 
 No Docker. Open review PR does not imply merge or full AUTH-01..23 acceptance.
+
+## PR #26 review round 2 — commit-based change record (2026-11-04)
+
+Reviewer round 2 [#5767788384](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/26#pullrequestreview-5767788384) identified non-canonical equivalent IPv6 texts and stale OD-005-D approval statements. Follow-up branch updates:
+
+- **P1 IPv6:** `client-ip.ts` maps IPv6 textual variants to an identical 128-bit hexadecimal identity and normalizes mapped IPv4 to dotted decimal before `AUTH_RATE_KEY` HMAC and trusted-peer comparison. `client-ip.test.ts` now includes compressed/expanded/case IPv6, mapped v4, proxy-traversal and invalid-form assertions. `auth.db.test.ts` adds a 20-attempt quota and 21st 429 test with rotating equivalent IPv6 strings through the trusted proxy chain.
+- **P2 approval state:** `specification.md`, `api-spec.md`, `tests.md` and `data-spec.md` replace stale pending design gate text with the actual approval decision in PR #25 comment [#6625521193](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/25#issuecomment-6625521193). **Design approved does not mean Part F STS complete.**
+- **Verification status of these new changes:** **NOT RUN locally yet** because the connected Windows terminal was unavailable during this edit. The previously recorded `8/8` unit, `20/20` DB, `7/7` Edge, and stress results refer to **previous HEAD `99b634f`**, *not* the updated branch. The new IPv6 test and quota behavior are unverified until a fresh runtime proves them. Do not claim new tests pass or mark AUTH-20 or AUTH-22 fully complete without an actual run. Human WCAG sign-off and other PARTIAL/BLOCKED cases remain unchanged.
