@@ -1,0 +1,17 @@
+{
+  "name": "nuttiew",
+  "private": true,
+  "version": "0.1.0",
+  "engines": { "node": ">=24 <25" },
+  "workspaces": ["apps/api", "apps/web"],
+  "scripts": {
+    "dev": "npm run dev -w @nuttiew/api & npm run dev -w @nuttiew/web",
+    "build": "npm run build -w @nuttiew/api && npm run build -w @nuttiew/web",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test -w @nuttiew/api",
+    "test:db": "npm run test:db -w @nuttiew/api",
+    "db:generate": "npm run db:generate -w @nuttiew/api",
+    "db:migrate": "npm run db:migrate -w @nuttiew/api",
+    "db:seed": "npm run db:seed -w @nuttiew/api"
+  }
+}

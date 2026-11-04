@@ -26,3 +26,7 @@ Every feature must be scoped through SRS/traceability/System SDS and have a vers
 See the [CPE334 Project Deliverable 1](docs/requirements/requirements-signoff-checklist.md) evidence checklist. Due **8 Nov 2026 23:59 ICT**.
 
 **Do not commit secrets.** 
+
+## F-S1-01 Authentication implementation (Issue #13)
+
+See [Part F implementation and local PostgreSQL setup](docs/features/F-S1-01/implementation.md).
