@@ -1,0 +1,25 @@
+import { spawnSync } from 'node:child_process';
+import { expect,it,afterAll } from 'vitest';
+import { randomBytes } from 'node:crypto';
+import { createPool,readKey } from '../src/config.js';
+import { admit,hmac,settle } from '../src/security.js';
+const pool=createPool();
+afterAll(async()=>{await pool.end();});
+it('AUTH-22 actual child process exit leaves pending leases; restart reconciles and late settle cannot authenticate',async()=>{
+ const marker=randomBytes(7).toString('hex');
+ const childCode=`import {createPool,readKey} from './src/config.ts';import {hmac,admit} from './src/security.ts';const pool=createPool();const account=hmac(readKey('AUTH_RATE_KEY'),'account','crash-${marker}');const ip=hmac(readKey('AUTH_RATE_KEY'),'ip','crash-${marker}');const results=[];for(let i=0;i<5;i++){results.push(await admit(pool,account,ip));}process.stdout.write(JSON.stringify({ids:results.map(x=>x.id)}));process.exit(77);`;
+ const child=spawnSync(process.execPath,['--import','tsx','--input-type=module','-e',childCode],{cwd:process.cwd(),env:process.env,encoding:'utf8',timeout:15000});
+ expect(child.status).toBe(77);
+ const found=/\{.*"ids".*\}/.exec(child.stdout);expect(found).not.toBeNull();
+ const ids=(JSON.parse(found![0]) as {ids:string[]}).ids;expect(ids).toHaveLength(5);
+ const account=hmac(readKey('AUTH_RATE_KEY'),'account','crash-'+marker),ip=hmac(readKey('AUTH_RATE_KEY'),'ip','crash-'+marker);
+ const prior=await pool.query('SELECT "failed","inFlight" FROM "AuthAttemptBucket" WHERE "kind"=$1 AND "keyDigest"=$2',['account',account]);expect(prior.rows[0]).toMatchObject({failed:0,inFlight:5});
+ const before=await pool.query('SELECT count(*)::int AS n FROM "AuthAttemptReservation" WHERE "id"=ANY($1) AND "state"=$2',[ids,'pending']);expect(before.rows[0].n).toBe(5);
+ await pool.query('UPDATE "AuthAttemptReservation" SET "leaseUntil"=now()-interval \'1 second\' WHERE "id"=ANY($1)',[ids]);
+ const next=await admit(pool,account,ip);expect(next.id).toBeTruthy();
+ const after=await pool.query('SELECT "failed","inFlight" FROM "AuthAttemptBucket" WHERE "kind"=$1 AND "keyDigest"=$2',['account',account]);expect(after.rows[0]).toMatchObject({failed:0,inFlight:1});
+ let inserted=false;
+ expect(await settle(pool,{id:ids[0],account,ip,start:next.start},'success',async()=>{inserted=true;})).toBe(false);
+ expect(inserted).toBe(false);expect(await settle(pool,next,'abandoned')).toBe(false);
+ const end=await pool.query('SELECT "state" FROM "AuthAttemptReservation" WHERE "id"=ANY($1)',[ids]);expect(end.rows.every(x=>x.state==='abandoned')).toBe(true);
+},30000);

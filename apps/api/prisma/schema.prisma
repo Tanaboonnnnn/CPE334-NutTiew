@@ -1,0 +1,48 @@
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "postgresql"
+}
+model User {
+ id String @id @default(uuid()) @db.Uuid
+ email String @unique
+ passwordHash String
+ role String
+ isActive Boolean @default(true)
+ createdAt DateTime @default(now()) @db.Timestamptz(6)
+ updatedAt DateTime @updatedAt @db.Timestamptz(6)
+ sessions Session[]
+}
+model Session {
+ id String @id @default(uuid()) @db.Uuid
+ userId String @db.Uuid
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ tokenDigest Bytes @unique
+ csrfNonce Bytes
+ csrfKeyVersion String @default("v1")
+ createdAt DateTime @default(now()) @db.Timestamptz(6)
+ expiresAt DateTime @db.Timestamptz(6)
+ revokedAt DateTime? @db.Timestamptz(6)
+ @@index([userId])
+}
+model AuthAttemptBucket {
+ kind String
+ keyDigest Bytes
+ windowStart DateTime @db.Timestamptz(6)
+ failed Int @default(0)
+ inFlight Int @default(0)
+ attempts Int @default(0)
+ @@id([kind,keyDigest,windowStart])
+}
+model AuthAttemptReservation {
+ id String @id @default(uuid()) @db.Uuid
+ accountKeyDigest Bytes
+ ipKeyDigest Bytes
+ windowStart DateTime @db.Timestamptz(6)
+ state String @default("pending")
+ leaseUntil DateTime @db.Timestamptz(6)
+ createdAt DateTime @default(now()) @db.Timestamptz(6)
+ settledAt DateTime? @db.Timestamptz(6)
+ @@index([state,leaseUntil])
+}
