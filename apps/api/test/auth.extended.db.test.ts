@@ -60,4 +60,25 @@ describe('additional real PostgreSQL acceptance evidence',()=>{
     expect(result.status).toBe(age===28799?200:401);
   }
  },30000);
+
+ it('AUTH-20 accepts boundary-shaped Unicode emails/password bytes without bypassing strict validation',async()=>{
+  const base='unicode-'+id;
+  const email254=base+'a'.repeat(254-base.length-'@example.test'.length)+'@example.test';
+  const email255=base+'a'.repeat(255-base.length-'@example.test'.length)+'@example.test';
+  const cases=[
+   {email:'a@b',password:'x',expected:400},
+   {email:email255,password:'x',expected:400},
+   {email, password:'',expected:400},
+   {email,password:'é'.repeat(65),expected:400},
+   {email,password:'😀'.repeat(33),expected:400},
+   {email, password:'z'.repeat(129),expected:400}
+  ];
+  for(const testCase of cases){
+    const result=await request(app).post('/api/v1/auth/login').set('Origin',origin).send({email:testCase.email,password:testCase.password});
+    expect(result.status).toBe(testCase.expected);
+    expect(result.headers['set-cookie']).toBeUndefined();
+  }
+  const accepted=await request(app).post('/api/v1/auth/login').set('X-Forwarded-For',currentIp).set('Origin',origin).send({email:email254,password:'é'.repeat(64)});
+  expect(accepted.status).toBe(401); // 128 UTF-8 bytes passes syntax but nonexistent account
+ },30000);
 });
