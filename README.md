@@ -36,3 +36,13 @@ See [Part F implementation and local PostgreSQL setup](docs/features/F-S1-01/imp
 See [Tutor Slot Part F implementation and PostgreSQL privilege setup](docs/features/F-S1-02/implementation.md).
 Part E contracts are in the same folder. Feature/test evidence is tracked in the
 [Slot verification ledger](docs/features/F-S1-02/verification-ledger.md).
+
+## Continuous Integration (PR checks)
+
+The [NutTiew CI workflow](.github/workflows/ci.yml) checks pull requests into
+`sprint1` or `main` and pushes to `sprint1`: Node 24 unit/typecheck/build,
+real PostgreSQL 18 Auth/Slot/Race A integration, and Microsoft Edge E2E. It
+uses disposable test-only database services and **never deploys or merges**.
+See the [CI setup/verification notes](docs/features/F-S1-02/implementation.md)
+for check names, expected scope and the distinction between local tests and
+GitHub-hosted results.

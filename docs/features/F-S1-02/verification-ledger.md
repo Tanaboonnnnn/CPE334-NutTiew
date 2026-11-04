@@ -92,7 +92,15 @@ authenticated GET after restart.
 
 ## NOT RUN / gates before merging
 
-- **NOT RUN:** GitHub Actions CI at the PR commit. Local PASS is not CI PASS.
+- **LOCAL CONFIGURATION CHECK ONLY:** the new GitHub Actions CI workflow
+  (`.github/workflows/ci.yml`) defines separate quality, real PostgreSQL
+  and Microsoft Edge checks with a CI-only runtime role setup script.
+  YAML was parsed and its three jobs/triggers and DB service assertions were
+  validated locally using Python/PyYAML; the Bash script passed `bash -n`.
+  Both files were added **after** the locally tested code commit. A hosted
+  GitHub Actions result must be recorded separately at the exact PR head SHA.
+- **NOT YET VERIFIED HERE:** GitHub-hosted CI conclusions at the future PR head.
+  Local PASS and YAML validation are **not** CI PASS.
 - **NOT RUN:** manual Human WCAG/contrast and keyboard-audit signoff.
   Automated viewport/keyboard cases do not replace human accessibility review.
 - **NOT RUN:** production/GCP migration/grant validation and full service

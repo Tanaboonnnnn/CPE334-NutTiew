@@ -115,6 +115,33 @@ See [Part F verification ledger](verification-ledger.md) for **actual
 observed** command outcomes and unverified checks; no tests in Part E's
 `tests.md` are retroactively relabeled as executed by its design-only PR.
 
+## GitHub Actions CI on Issue #14's Part F PR
+
+This feature branch additionally introduces [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml)
+and a [restricted CI role setup](../../../.github/scripts/prepare-test-db.sh).
+On a PR targeting `sprint1` or `main`, or a push to `sprint1`, GitHub
+Actions runs **three independently visible checks**:
+
+| Check name | Real verification |
+|---|---|
+| **Unit / types / build** | Node 24 `npm ci`, Prisma client generation, all Unit tests, API+web TypeScript checks, production build |
+| **PostgreSQL 18 / Auth / Slot / Race A** | Isolated PostgreSQL 18 container; original Auth and Slot migrations; non-owner runtime DB grants; `npm run test:db` including true forced lock waits, native SQL protection and API process restart |
+| **Microsoft Edge / Auth / Tutor UI E2E** | Separate isolated PostgreSQL service and non-owner runtime role; install Microsoft Edge via Playwright; run all browser tests; upload HTML report and failure traces with seven-day retention |
+
+Workflow security: token permission `contents: read`, `persist-credentials:
+false`, independent jobs, short job timeouts and concurrency cancellation.
+Runtime HMAC keys are generated independently inside each job. CI database
+connection uses **passwordless trust solely in an ephemeral GitHub-hosted
+runner service**, never in shared, developer or production databases; the role
+setup script rejects any non-CI invocation or a connection string other than
+`nuttiew_ci`. All real deployments require normal authenticated
+least-privilege DB access.
+
+The workflow **does not** push to Git, approve/merge a PR, deploy a service,
+modify Project status or close Issue #14. The independent teammate still
+reviews Part F and the team must check real GitHub job conclusions.
+**A locally valid YAML file is not evidence of a passing hosted workflow.**
+
 ## Known limits and next gates
 
 - `occupancy` is a **temporary derived Unoccupied projection** while
