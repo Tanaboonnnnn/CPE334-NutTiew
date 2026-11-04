@@ -1,6 +1,6 @@
 # F-S1-01 — Login, Current Identity and Logout UI (Part E)
 
-> Proposed E-0.1. This is a UX **contract**, not implemented UI or test evidence. See [SDS](specification.md), [API](api-spec.md), [STS](tests.md). Role navigation does not authorize an API request.
+> Part E UX **contract**, not implemented UI or test evidence. **Auth UI design direction APPROVED** by @Tanaboonnnnn in PR #25 Conversation comment #6624817784; implementation, browser review and AUTH-15/23 remain NOT RUN. OD-005-D and revised Part E review/merge still block Part F. See [SDS](specification.md), [API](api-spec.md), [STS](tests.md). Role navigation does not authorize an API request.
 
 | UI state | Action | Observable expected behavior | Trusted server interaction |
 |---|---|---|---|
@@ -22,9 +22,9 @@ Use native `<label>` elements for email/password, `autocomplete=email` and `curr
 
 Record real browser/API/DB verification of Customer and Tutor login, wrong password, trusted role on refresh, logout and replay denial, keyboard navigation and forged access attempts. Screenshots of a hidden Tutor button are **not** a backend permission test. Actual screenshots, Playwright results and integration evidence are **NOT RUN** at this Part E phase.
 
-## Auth-only visual direction — proposed, pending human design approval
+## Auth-only visual direction — APPROVED design decision, implementation/tests pending
 
-The proposed visual direction is a **calm tutoring/scheduling utility**, not a landing or marketing page. @Chxtamos proposes this for **F-S1-01 only**; @Tanaboonnnnn must review/accept the direction before Part F UI implementation. These visual decisions are team proposals, not new instructor business rules.
+The approved visual direction is a **calm tutoring/scheduling utility**, not a landing or marketing page, scoped to **F-S1-01 only**. @Tanaboonnnnn approved the direction and tokens in PR #25 Conversation comment #6624817784; this is a **decision approval**, not evidence that a browser-rendered UI exists or passes accessibility checks. Part F must implement and verify it with AUTH-15/23 after OD-005-D and Part E merge gates. These visual decisions are team technical/UX choices, not new instructor business rules.
 
 | Element | Desktop | Mobile and acceptance |
 |---|---|---|
@@ -44,4 +44,4 @@ The proposed visual direction is a **calm tutoring/scheduling utility**, not a l
 - Loading and duplicate submit: show a visible pending state and disable repeat submit only during active request; after failure/timeout, return to an actionable retry state. Do not leave an indefinite spinner. Do not show an authenticated screen from a client-selected role.
 - Reload, expiry and stale responses: on refresh hide protected content until a fresh /auth/me 200; on 401, clear in-memory identity and CSRF and render signed-out. Use request generation IDs or abort/ignore-stale logic so a late successful login/me response cannot restore identity after logout, 401 or a newer auth transition.
 - Uncertain logout: when network/503 fails, do not claim revocation; stop protected interactions and display a short retry/check-session message. Only confirmed logout 204 or fresh /auth/me 401 can finalize the signed-out state. Discard late old-identity responses. No password/session token in console, URL or browser storage.
-- **AC-S1-01/02 visible own identity:** after trusted 200 `/auth/me`, render a **server-derived short UUID account reference (last 8 hex digits, explicitly labeled “บัญชี”) plus effective role**, not simply a Customer/Tutor role tag shared by all accounts. A shortened UUID is only a privacy-preserving visual hint and may collide; never use it for authorization or claim global uniqueness. The backend continues to use the full ID. The proposed UI must check that seeded C1/C2 and T1/T2 test accounts yield distinguishable visible references; if not, increase displayed UUID length after review, not add email/displayName without privacy approval. Clear both reference and role during reload, 401, logout and session switch, then render only from the latest `/auth/me` response. This non-PII display policy needs teammate approval before Part F.
+- **AC-S1-01/02 visible own identity:** after trusted 200 `/auth/me`, render a **server-derived short UUID account reference (last 8 hex digits, explicitly labeled “บัญชี”) plus effective role**, not simply a Customer/Tutor role tag shared by all accounts. A shortened UUID is only a privacy-preserving visual hint and may collide; never use it for authorization or claim global uniqueness. The backend continues to use the full ID. Part F must check that seeded C1/C2 and T1/T2 test accounts yield distinguishable visible references; if not, submit any proposed longer UUID display for peer review, not add email/displayName without privacy approval. Clear both reference and role during reload, 401, logout and session switch, then render only from the latest `/auth/me` response. **Auth UI direction was approved** in comment #6624817784; the exact rendered identity label still requires AUTH-23 visual/functional verification in Part F.
