@@ -22,12 +22,13 @@ Implementation PR against `sprint1`, based on the approved Part E contracts in `
 ## Evidence (local Windows PostgreSQL 17.2)
 
 - `npm run db:generate` — PASS; `npm run db:migrate` — PASS on dedicated local `nuttiew` DB.
-- `npm run typecheck` — PASS; `npm run build` — PASS; `npm test` — **4/4 unit tests PASS**.
-- `npm run test:db` — **15/15 PostgreSQL integration tests PASS**, including login/me/CSRF/logout, five failed account attempts, five simultaneous permits and temporary 429, successful settlement/retry, 20 total IP attempts, 4 KiB rejection and cross-Session CSRF denial.
-- `npm run test:e2e` — **6/6 real Microsoft Edge browser tests PASS** at 320/375/768/1280px, session reload/logout, error and password toggle; synthetic-account screenshots in `evidence/`. These are automated checks, **not human visual sign-off** or full WCAG 2.2 audit.
+- `npm run typecheck` — PASS; `npm run build` — PASS; `npm test` — **8/8 unit tests PASS**.
+- `npm run test:db` — **20/20 PostgreSQL integration tests PASS**, including login/me/CSRF/logout, five failed account attempts, five simultaneous permits and temporary 429, successful settlement/retry, 20 total IP attempts, 4 KiB rejection and cross-Session CSRF denial.
+- `npm run test:e2e` — **7/7 real Microsoft Edge browser tests PASS** at 320/375/768/1280px, session reload/logout, error and password toggle; synthetic-account screenshots in `evidence/`. These are automated checks, **not human visual sign-off** or full WCAG 2.2 audit.
 - `npm run test:stress` — **PASS** on **two independent running API processes**, 40 simultaneous HTTP logins per scenario against shared PostgreSQL: all wrong => 5×401 + 35×429, account failed=5/inFlight=0/sessions=0; all correct => 5×200 + 35×429, account failed=0/inFlight=0/sessions=5. This does not implement the deterministic Argon2 hold/release barrier or mixed-credential scenario.
 - **NOT RUN / still required before DoD:** complete AUTH-01..23 matrix; cross-feature owner/role guards in Issues #14–17; browser WCAG/manual review and screenshot reviewer sign-off; deterministic all-valid Argon2 barrier and manual HTTP retry; forced process crash recovery; production key rotation rollout; production HTTPS/proxy behavior; DB outage and UPDATE rollback injection; CI and deployment. Do not interpret partial tests as full contract acceptance.
 
 ## Reviewer gate
 
 Reviewer: **@Tanaboonnnnn**. Please review code, auth security, Postgres transaction semantics, rate-limit availability tradeoff, evidence and missing tests. PR may be marked Ready for Review while unresolved gaps remain explicit; do not self-merge; Issue #13 remains open until acceptance and full DoD evidence. No Kanban changes performed.
+**Reviewer feedback patch:** PR #26 review #5767022017 P1/P2 changes include trusted-chain IP handling, reusable DB role/ownership middleware, atomic lease reconciliation, sanitized error envelopes, input ARIA/focus and timeout. Reviewer-run environment PostgreSQL 18.3 is distinct from author Windows PostgreSQL 17.2. This does not constitute CI or human approval; see [verification ledger](verification-ledger.md).
