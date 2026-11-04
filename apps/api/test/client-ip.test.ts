@@ -18,11 +18,11 @@ describe('trusted proxy client IP',()=>{
   expect(canonicalIp('::ffff:192.0.2.1')).toBe('192.0.2.1');
   expect(canonicalIp('0:0:0:0:0:ffff:c000:201')).toBe('192.0.2.1');
   expect(canonicalIp('::FFFF:C000:0201')).toBe('192.0.2.1');
-  expect(ip('::1','2001:0DB8:0:0:0:0:0:1, 2001:DB8::1',['0:0:0:0:0:0:0:1'])).toBe('20010db8000000000000000000000001');
+  expect(ip('::1','2001:0DB8:0:0:0:0:0:1, 2001:DB8::1',['0:0:0:0:0:0:0:1','2001:db8::1'])).toBe('20010db8000000000000000000000001');
  });
  it('does not allow invalid and untrusted IPv6 forwarded hops to choose buckets',()=>{
   expect(ip('2001:db8::10','2001:db8::20',[])).toBe(canonicalIp('2001:db8::10'));
-  expect(ip('::1','bad-ip,['+'::1')).toBe(canonicalIp('::1'));
+  expect(ip('::1','bad-ip',['::1'])).toBe(canonicalIp('::1'));
   expect(canonicalIp('fe80::1%eth0')).toBe(null);
   expect(canonicalIp('[2001:db8::1]')).toBe(null);
  });
