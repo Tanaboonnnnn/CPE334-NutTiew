@@ -1,6 +1,39 @@
 # F-S1-02 — Tutor Slot Feature SDS (Part E)
 
-> **REVISED PART E / AWAITING INDEPENDENT PEER APPROVAL / NOT IMPLEMENTED OR TESTED.** Issue #14, owner @Tanaboonnnnn, reviewer @Chxtamos. Based on merged `sprint1` SHA `6fd3931` (PR #25/#26). Review feedback: [PR #27](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/27). This is a design contract, not Part F acceptance; peer review and merge precede feature code.
+> **UX-only amendment proposed 2026-11-05 (owner-directed, peer acceptance
+> pending):** Replace only the Tutor screen's former narrow form/list
+> presentation with a NutTiew navy/orange 24-hour client-side calendar plus
+> complete private chronological agenda. See [dated UX decision](ui-decision-2026-11-05.md),
+> [new UI contract](ui-spec.md), and [UX-R1…UX-R6 STS](tests.md).
+> **Unchanged:** Auth/Customer visual design, Tutor role/owner/session/CSRF,
+> exactly 60-minute future Offered Slot semantics, PostgreSQL race protection,
+> strict POST + full-list GET contract, DTO fields, Asia/Bangkok timestamps,
+> Option A no hour/day/horizon/grid constraints, safe uncertain-write
+> reconciliation, and denial of cross-Tutor private data. Calendar day
+> navigation is a pure read-only **client-side projection**, never a business
+> rule or a new GET filter. This amendment has **not** yet received
+> independent peer approval; the baseline Part E history below is preserved.
+
+> **Mandatory sequential amendment gate (new UI direction):** this
+> specification/UX decision/STS update is **Part E only**. Obtain
+> @Chxtamos peer acceptance and merge this docs-only amendment into
+> `sprint1` before opening a separate Part F Dashboard code PR from the
+> updated base. This preserves the original Issue #14 two-PR rule.
+> **Additional UX-R5 obligations:** initial/retry GET 503 must not
+> assert an empty schedule; unknown count remains unknown until 200.
+> On Logout click, hide account identity and all private Slots
+> immediately and suspend protected interactions, while retaining the
+> previous Tutor ID **only internally** for uncertain Session recheck.
+> A confirmed Logout 204 or `/auth/me` 401 finalizes signed-out.
+> Only a fresh same-Tutor `/auth/me` 200 **followed by fresh own-list
+> GET 200** may restore the Dashboard and actions; otherwise remain
+> hidden/blocked. Owner-selected 768px two-day / 1280px three-day /
+> mobile agenda design, full-own-list summary and WCAG 2.2 AA target
+> are detailed in [dated UX decision](ui-decision-2026-11-05.md).
+> See [UI contract](ui-spec.md) and
+> [UX-R5-GET / UX-R5-LOGOUT STS](tests.md). No backend/API/DB changes.
+
+> **DOCS-ONLY NEW DASHBOARD CONTRACT / AWAITING PEER ACCEPTANCE.** Issue #14, owner @Tanaboonnnnn, reviewer @Chxtamos. **Historical initial Part E baseline:** `sprint1` `6fd3931` (PR #25/#26), from before Slot implementation. **Current PR #30 base:** `sprint1` `ed451be2ca3e366bdfc1900f4c4697aa7e50b6a0`, with the previously reviewed and merged Slot feature from PR #27/#28 already implemented and tested. This amended UI contract itself neither runs nor approves new Dashboard implementation; its review/merge precedes the *new* Part F UI code-only PR.
 
 ## Sources and traceability
 
@@ -26,7 +59,25 @@ Use half-open intervals `[start,end)`: overlap iff `a.start < b.end AND b.start 
 
 **SLOT-I1:** exactly 60m and immutable identity/owner/interval, enforced against ordinary direct SQL by the Sprint 1 trigger (all UPDATE/DELETE/TRUNCATE rejected). **I2:** no overlapping currently Offered Slots per Tutor, even under Race A. **I3:** active Tutor-only identity from Session. **I4:** strictly future by authoritative post-lock DB time; no Q05 Booking cutoff on Slot creation. **I5:** no partial writes/false success; restart durability. **I6:** UTC storage and Bangkok display. **I7:** no Withdrawn insertion/transition in Sprint 1; later approved Sprint 2 transition is one-way `Offered -> Withdrawn`, never `Withdrawn -> Offered` on an old ID, with separately verified migration and tests. Privileged DDL/superuser tampering is outside the ordinary DML invariant and must be controlled by DB privileges.
 
-## AC and verification (all planned, not executed)
+## Original Slot AC mapping — historical Part E verification plan
+
+The AC-to-VC mapping below was written as the **original Slot Part E test
+plan**, before the Slot feature was implemented. **It is not a statement
+that these tests remain unexecuted.** The merged Slot Part F work (PR #28)
+already has recorded real API/PostgreSQL/browser executions, including
+failures, reruns, exact commands and remaining limitations in the
+[Slot Part F verification ledger](verification-ledger.md). Consult that
+ledger and the relevant GitHub CI run for actual outcomes at their
+respective commit SHAs; this historical table is a traceability map,
+not a live PASS/FAIL dashboard.
+
+The **new Tutor Calendar Dashboard amendment** and its
+`UX-R1…UX-R6`, `UX-R5-GET-01/02` and `UX-R5-LOGOUT-01/02` acceptance
+checks are separate **planned Part E requirements** in
+[the amended STS](tests.md). This docs-only PR neither implements nor
+executes those new Dashboard/Logout checks; subsequent Part F code and
+independent peer review remain necessary. Human WCAG 2.2 AA signoff
+is likewise **NOT RUN**.
 
 | AC | Expected | Test |
 |---|---|---|
