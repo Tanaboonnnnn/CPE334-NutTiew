@@ -6,6 +6,14 @@ import { config as loadEnv } from 'dotenv';
 loadEnv({path:'.env',quiet:true});
 const pool=new Pool({connectionString:process.env.DATABASE_URL});
 const tag=randomBytes(8).toString('hex'),password='AccountMatrixPassword#34';
+// Dedicated disposable E2E client-IP identity; repeated runs of a shared
+// local test DB must not accumulate another run's legitimate login quota.
+// Playwright's localhost-only trusted proxy setting is test infrastructure,
+// not a production rate-limit change.
+test.beforeEach(async ({page})=>{
+ const h=randomBytes(12).toString('hex');
+ await page.setExtraHTTPHeaders({'X-Forwarded-For': '2001:db8:'+h.slice(0,4)+':'+h.slice(4,8)+':'+h.slice(8,12)+'::4'});
+});
 const users=[
  {email:`auth-c1-${tag}@example.test`,role:'Customer'},
  {email:`auth-c2-${tag}@example.test`,role:'Customer'},

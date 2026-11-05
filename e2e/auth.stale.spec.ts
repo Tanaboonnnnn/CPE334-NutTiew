@@ -6,6 +6,15 @@ import {config as loadEnv} from 'dotenv';
 loadEnv({path:'.env',quiet:true});
 const pool=new Pool({connectionString:process.env.DATABASE_URL});
 const tag=randomBytes(5).toString('hex'),email=`stale-${tag}@example.test`,password='StalePassword#2026';
+let currentTestIp='';
+// A shared disposable PostgreSQL database retains Auth admission buckets
+// across repeated local E2E runs. Give each test its own reserved, trusted
+// documentation IPv6 identity; never relax the production rate-limit policy.
+test.beforeEach(async({page})=>{
+ const h=randomBytes(12).toString('hex');
+ currentTestIp='2001:db8:'+h.slice(0,4)+':'+h.slice(4,8)+':'+h.slice(8,12)+'::5';
+ await page.setExtraHTTPHeaders({'X-Forwarded-For':currentTestIp});
+});
 test.beforeAll(async()=>{await pool.query('INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3)',[email,await argon2.hash(password),'Customer']);});
 test.afterAll(async()=>{await pool.query('DELETE FROM "User" WHERE "email"=$1',[email]);await pool.end();});
 
@@ -33,7 +42,7 @@ test('AUTH-23 held old 200 across reload cannot restore identity after newer 401
 test('AUTH-23 StrictMode same-instance stale 200 cannot replace newer 401',async({page})=>{
  // Log in via the context's request API before mounting React.
  // React.StrictMode dev effect setup -> cleanup -> setup generates overlapping /me GETs.
- const loggedIn=await page.request.post('/api/v1/auth/login',{headers:{Origin:'http://localhost:5173'},data:{email,password}});
+ const loggedIn=await page.request.post('/api/v1/auth/login',{headers:{Origin:'http://localhost:5173','X-Forwarded-For':currentTestIp},data:{email,password}});
  expect(loggedIn.status()).toBe(200);
  const me=await page.request.get('/api/v1/auth/me');expect(me.status()).toBe(200);
  const ref=(await me.json()).user.id.replaceAll('-','').slice(-8);
