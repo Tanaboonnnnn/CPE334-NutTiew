@@ -1,5 +1,31 @@
 # F-S1-02 — Tutor Slot Software Test Specification (Part E)
 
+> **UX delta proposed 2026-11-05:** preserve SLOT-01…SLOT-20 below;
+> add these *new, not-yet-executed-at-design-time* dashboard checks from
+> [the dated UX decision](ui-decision-2026-11-05.md). The older Part E
+> run ledger is historical; actual new executions belong in the Part F
+> [verification ledger](verification-ledger.md), not this planned list.
+
+| ID | New dashboard evidence to collect |
+|---|---|
+| UX-R1 | Logged-in Tutor sees original NutTiew identity, navy/orange shell, functional nav, no fake data or actions; Customer sees original authorized Auth page |
+| UX-R2 | Real PG Slot at Bangkok 13:17 and 13:59 positions at exact minute-offset, 23:30→00:30 splits over two dates; all 24 hours accessible |
+| UX-R3 | Prev/Next/Today and day picker change local view without changing GET URL; all returned Slot IDs remain in chronological agenda |
+| UX-R4 | Real app 320/375/768/1280 screenshots, no overflow, keyboard nav/order/focus, 44px controls, measured contrast; human signoff separately declared |
+| UX-R5 | Re-run existing SLOT-09/12/14/15/18/20, including real 200-after-switch privacy and uncertain-POST reconciliation, with new shell |
+| **UX-R5-GET-01** | Authenticated Tutor with 4 committed own Slots: initial GET 503 → retry GET 503 show loading/error and retry only, **no empty Agenda/Calendar/zero**; next genuine GET 200 restores all 4 Slot IDs, sorted and private |
+| **UX-R5-GET-02** | Authenticated Tutor with **no** committed Slot: initial GET 503 → retry GET 503 must not claim an empty schedule; only authorized GET 200 with `data: []` may show true empty state and 0 total |
+| **UX-R5-LOGOUT-01** | A Tutor begins Logout; hold pending CSRF/Logout, then inject HTTP 503 or network loss/timeout. Attempt a valid Create Slot while pending and uncertain, verify **zero POST /api/v1/tutor/slots**, no DB row, blocked UI; on failed `/auth/me` recheck protected actions stay blocked. Must not falsely claim revocation |
+| **UX-R5-LOGOUT-02** | After uncertain Logout, fresh `/auth/me` 200 for the **same** Tutor restores actions; fresh 401 clears identity and old Slot cards (and stale T1 200 remains ignored). A different trusted account must never unlock the previous Tutor |
+| UX-R6 | Real rendered screenshots from DB-backed Tutor account; no invented data or unimplemented domain action |
+
+**Provenance / test gate:** the above are **Part E planned acceptance
+checks**, not outcomes of this docs-only PR. The implementation PR must
+link these stable IDs to real Playwright/DB evidence with RED→GREEN
+for unsafe Logout and GET states, rerun the original SLOT-01…20 and Auth
+regressions, and record exact commit SHA and hosted CI. Do not mark
+this design accepted before peer review and merge.
+
 > **REVISED PART E / ALL TESTS PLANNED / NOT RUN.** Issue #14, owner @Tanaboonnnnn, reviewer @Chxtamos. Source contracts: [SDS / owner policy decision](specification.md), [HTTP](api-spec.md), [UI](ui-spec.md), [Data / DB trigger matrix](data-spec.md). Baseline `sprint1` `6fd3931` has Auth tests but **no Slot code/migration/test**.
 
 ## Test harness, data and TDD evidence

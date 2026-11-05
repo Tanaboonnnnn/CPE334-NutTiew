@@ -1,5 +1,77 @@
 # F-S1-02 — Tutor Availability UI Specification (Part E)
 
+> **2026-11-05 proposed visual-contract amendment (pending peer review):**
+> The feature owner selected the @Chxtamos Tutorix-inspired **NutTiew Tutor
+> Calendar Dashboard** as the new Tutor presentation. See
+> [dated UX decision](ui-decision-2026-11-05.md). The older approved
+> form+list content below remains a *historical Part E baseline*; its
+> Auth palette and prohibition on calendar presentation are **proposed
+> to be superseded for the Tutor view only**. The HTTP/DB/security/UTC/
+> ownership/business-rule contract is **not** being superseded. Do not
+> label this amendment peer-approved until review actually occurs.
+
+> **Review sequencing:** this is a new **docs-only Part E proposal**;
+> it must receive peer approval and merge into `sprint1` before the
+> separate Tutor Dashboard Part F implementation PR. Original Part E
+> PR #27 / Part F PR #28 remain historical, previously merged baselines.
+> A combined docs-and-code PR is not a substitute for this gate.
+
+## Amendment: Tutor Calendar Dashboard candidate
+
+- Desktop uses a navy `#202B44` sidebar, a bright canvas `#F7F8FB`,
+  white surfaces, accessible orange `#F47736` call-to-action and
+  deliberate dark text/focus. These tokens are **scoped to the Tutor
+  dashboard**; existing Auth Login/Customer palette remains unchanged.
+- Sidebar contains only functional **ตารางเวลาของฉัน**, **บัญชีของฉัน**
+  and **ออกจากระบบ**. Account data and role come from trusted `/auth/me`.
+  Do **not** construct fake Students, Revenue, Messages, Bookings,
+  notifications, learner names, courses or rescheduling.
+- Header: **ตารางเวลาติวของฉัน**, role/account reference, `Asia/Bangkok`
+  and `+ เพิ่มช่วงเวลาติว` that takes the user to the inline form.
+- Calendar: accessible **24-hour** local timeline, **3 days** at desktop,
+  fewer columns at tablet. Slot cards use genuine Offered records and
+  computed minute-exact offsets (no snapping), including 13:17, 13:59,
+  and a 23:30→00:30 date crossing. Hour marks are presentation ticks.
+  Previous/Next/Today/day picker only change local view state and never
+  append filters to `GET /api/v1/tutor/slots`.
+- Mobile 320/375: no horizontal overflow; use a complete **agenda/list
+  fallback** instead of a squeezed timeline. The **รายการ Slot ทั้งหมด**
+  agenda is **always available** and preserves `startsAt ASC, id ASC`
+  for all returned private Slots, including dates outside the current
+  calendar. Do not silently paginate, crop or hide other times.
+- The create form retains native labeled Bangkok date and any-minute
+  time, derived read-only +60-minute end, POST security, real loading,
+  conflict (409), invalid (400/422), and uncertain 503/network states.
+  After success or ambiguous write, reconcile with owner-only GET.
+  The old T1 authenticated 200 must never reappear after T2 login.
+- **Read-side state machine:** until the authenticated own-list GET
+  returns 200, the schedule is **unknown**, not empty. Initial load
+  shows progress, initial GET 503/network failure or retry 503 shows
+  an accessible error with a working **โหลดอีกครั้ง** control, **hides**
+  the empty/full Agenda and Calendar, and shows unknown `—` instead of
+  an unverified zero summary. Only a confirmed 200 + `data: []`
+  may show **ยังไม่มีช่วงเวลาติวที่เปิดไว้** and total zero;
+  a confirmed 200 with rows restores all committed own Slots. These
+  rules apply to both initial load and later refresh failures and must
+  prevent stale old-Tutor data from reappearing.
+- **Auth/logout guard inherited from F-S1-01:** disable protected Slot
+  creation **synchronously when Logout starts**, including while CSRF
+  fetch and POST are in progress. If Logout fails with network/503 or
+  an ambiguous timeout, **keep Create and other protected actions
+  disabled**; never infer revocation or silently re-enable after catch.
+  Keep an accessible message with **retry logout / check-session**
+  options. A fresh authenticated `/api/v1/auth/me` 200 for the **same
+  Tutor ID** may clear uncertainty and restore actions; a 401 clears
+  identity and private data; 503/network leaves actions blocked.
+  Invalidated/stale requests must not restore the previous Tutor.
+- Required new test IDs: **UX-R1…UX-R6** from the
+  [dated decision](ui-decision-2026-11-05.md). Add screenshots from
+  *real DB-backed browser sessions* at 320, 375, 768 and 1280, and
+  keyboard/contrast evidence. For read-side failure and logout guard
+  tests, use **UX-R5-GET-01/02** and **UX-R5-LOGOUT-01/02** in
+  [STS](tests.md). **Human manual signoff remains NOT RUN
+  until a person performs it**.
+
 > **REVISED PROPOSED PART E / NOT IMPLEMENTED OR BROWSER-TESTED.** Issue #14, @Tanaboonnnnn owner, @Chxtamos reviewer. See [SDS and owner decision](specification.md), [HTTP](api-spec.md), [Data](data-spec.md), [STS](tests.md), [Auth UI direction](../F-S1-01/ui-spec.md).
 
 ## Screen and navigation

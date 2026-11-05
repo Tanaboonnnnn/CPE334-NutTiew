@@ -1,5 +1,31 @@
 # F-S1-02 — Tutor Slot Feature SDS (Part E)
 
+> **UX-only amendment proposed 2026-11-05 (owner-directed, peer acceptance
+> pending):** Replace only the Tutor screen's former narrow form/list
+> presentation with a NutTiew navy/orange 24-hour client-side calendar plus
+> complete private chronological agenda. See [dated UX decision](ui-decision-2026-11-05.md),
+> [new UI contract](ui-spec.md), and [UX-R1…UX-R6 STS](tests.md).
+> **Unchanged:** Auth/Customer visual design, Tutor role/owner/session/CSRF,
+> exactly 60-minute future Offered Slot semantics, PostgreSQL race protection,
+> strict POST + full-list GET contract, DTO fields, Asia/Bangkok timestamps,
+> Option A no hour/day/horizon/grid constraints, safe uncertain-write
+> reconciliation, and denial of cross-Tutor private data. Calendar day
+> navigation is a pure read-only **client-side projection**, never a business
+> rule or a new GET filter. This amendment has **not** yet received
+> independent peer approval; the baseline Part E history below is preserved.
+
+> **Mandatory sequential amendment gate (new UI direction):** this
+> specification/UX decision/STS update is **Part E only**. Obtain
+> @Chxtamos peer acceptance and merge this docs-only amendment into
+> `sprint1` before opening a separate Part F Dashboard code PR from the
+> updated base. This preserves the original Issue #14 two-PR rule.
+> **Additional UX-R5 obligations:** initial/retry GET 503 must not
+> assert an empty schedule; unknown count remains unknown until 200.
+> Network/503 uncertain logout must block protected Slot mutations until
+> same-account `/auth/me` 200 confirms the live Session, or 401 clears
+> identity. See [UI contract](ui-spec.md) and
+> [UX-R5-GET / UX-R5-LOGOUT STS](tests.md). No backend/API/DB changes.
+
 > **REVISED PART E / AWAITING INDEPENDENT PEER APPROVAL / NOT IMPLEMENTED OR TESTED.** Issue #14, owner @Tanaboonnnnn, reviewer @Chxtamos. Based on merged `sprint1` SHA `6fd3931` (PR #25/#26). Review feedback: [PR #27](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/27). This is a design contract, not Part F acceptance; peer review and merge precede feature code.
 
 ## Sources and traceability
