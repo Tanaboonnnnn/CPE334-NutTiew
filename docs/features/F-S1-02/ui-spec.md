@@ -19,9 +19,24 @@
 ## Amendment: Tutor Calendar Dashboard candidate
 
 - Desktop uses a navy `#202B44` sidebar, a bright canvas `#F7F8FB`,
-  white surfaces, accessible orange `#F47736` call-to-action and
+  white surfaces, orange `#F47736` call-to-action with the **explicit
+  contrast-safe foreground/border/focus pairing below**, and
   deliberate dark text/focus. These tokens are **scoped to the Tutor
   dashboard**; existing Auth Login/Customer palette remains unchanged.
+- **Required CTA pairing (WCAG 2.2 AA design target, not human signoff):**
+  button fill `#F47736`, **dark-ink label/icon `#172137`** (measured
+  **5.76:1** against the orange fill), and a **1 CSS px solid border
+  `#D96123`** to distinguish the component from adjacent surfaces
+  (**3.48:1** against canvas `#F7F8FB`; **3.69:1** against white).
+  The keyboard focus indicator is **3 CSS px solid `#AA4519` with
+  `outline-offset: 3px`** outside the button/border, contrasting
+  **5.53:1** with the canvas or **5.87:1** with white. These values
+  are calculated from the specified sRGB tokens; Part F must verify
+  computed browser colors, focus visibility, hover/disabled/error
+  states and adjacent backgrounds. **Do not use white text on
+  `#F47736` (only 2.79:1), or the unbordered orange fill as the
+  only visible control boundary** (2.62:1 against canvas, 2.79:1
+  against white). This pairing does not by itself certify WCAG AA.
 - Sidebar contains only functional **ตารางเวลาของฉัน**, **บัญชีของฉัน**
   and **ออกจากระบบ**. Account data and role come from trusted `/auth/me`.
   Do **not** construct fake Students, Revenue, Messages, Bookings,

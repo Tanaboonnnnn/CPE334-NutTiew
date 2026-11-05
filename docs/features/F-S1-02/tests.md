@@ -32,6 +32,16 @@ inspection of all applicable WCAG 2.2 A/AA criteria including SC
 1.4.3/1.4.10/1.4.11, 2.1.1, 2.4.7/2.4.11 and 2.5.8, and (c) explicit
 NOT RUN items with reviewer, date and exact implementation SHA.
 The old handful of 4.5:1 samples does **not** establish WCAG 2.2 AA.
+For UX-R4, validate the CTA's full rendered pairing (not just its
+label): `#172137` text/icons on `#F47736` fill (target calculated
+**5.76:1**), `#D96123` visible border versus both `#F7F8FB` canvas
+and white (calculated **3.48:1 / 3.69:1**), and `#AA4519`
+`3px` offset keyboard focus outline against both backgrounds
+(calculated **5.53:1 / 5.87:1**). Verify hover, disabled, keyboard,
+zoom and any additional component states using **actual computed
+browser colors**. White text on orange and borderless orange on
+canvas/white are **not accepted**. This is a future Part F test
+obligation, not a test PASS recorded by this Part E PR.
 
 > **NEW DASHBOARD UX TESTS PLANNED / NOT RUN IN THIS DOCS-ONLY PR.** The original SLOT-01…SLOT-20 design and earlier implementation/tests from merged PR #28 are historical, **not missing** in today's `sprint1`. Issue #14, owner @Tanaboonnnnn, reviewer @Chxtamos. Source contracts: [SDS / owner policy decision](specification.md), [HTTP](api-spec.md), [UI](ui-spec.md), [Data / DB trigger matrix](data-spec.md).
 >
@@ -43,7 +53,17 @@ Use **clean disposable** real PostgreSQL with Auth migration plus **new** Slot m
 
 Record **RED** first (missing route/schema/constraint causes expected failure), **GREEN** after implementation, command, exact SHA, PG/Node version, migration revision, PASS/FAIL/SKIP and final DB rows. UI-only warnings and `Promise.all()` without verified contention do not prove Race A.
 
-## Planned test cases
+## Original Slot STS cases — historical Part E test plan
+
+The `SLOT-01` through `SLOT-20` cases below were **planned before the
+original Slot implementation**, and many were subsequently exercised
+by the reviewed Part F work (PR #28). This section records the original
+**expected observations**, not the current execution state.
+For actual command output, PASS/FAIL/rerun counts and limitations at
+their recorded commit SHAs, see the separate
+[original Slot Part F verification ledger](verification-ledger.md).
+The **new Dashboard UX and Logout tests above are separately PLANNED
+and have not been executed by this docs-only PR**.
 
 | STS | Trace IDs | Setup/action | Required observable result |
 |---|---|---|---|
@@ -79,7 +99,15 @@ Record **RED** first (missing route/schema/constraint causes expected failure), 
 
 Important: Test with real PostgreSQL, not SQLite, only ORM mock, or HTTP status without DB assertions. A `23P01` conflict is not a successful retry; bounded `40001`/`40P01` retries start new transactions and must still fail an actual overlap. Tests **must** prove B waited on A, not only that two requests were launched.
 
-## Privacy and DB immutability drill-down (planned, no executions)
+## Original privacy and DB immutability procedures (historical Part E plan)
+
+The procedures below were originally written **before the Slot feature
+was implemented**, not as a claim that the original privacy or
+immutability tests are still unexecuted. Actual Slot Part F evidence,
+including executed SLOT-17/19/20 cases and residual manual/production
+verification gaps, is recorded in the
+[verification ledger](verification-ledger.md). Do not infer new
+Dashboard UX acceptance from these historical checks.
 
 - **SLOT-08:** authenticate as T1. Request `GET /api/v1/tutor/slots?tutorId=T2`, `?page=1` or another unknown query. All return 400 INVALID_INPUT and no foreign rows; own unfiltered GET returns only T1 rows. `GET /api/v1/tutor/slots/{T2SlotId}` and an unknown UUID both return 404 because **there is no detail route**, not because a foreign record was looked up. A forged `tutorId` in POST is a 400. No query can change `WHERE tutorId=principal.userId`.
 - **SLOT-20:** with T1 signed in, intercept/hold a genuine successful T1 GET while the component is mounted. Trigger Logout (or switch auth identity to T2), clear protected state and issue T2 own-list if applicable. Release the **old 200** response **after** logout/new T2 success. Assert no T1 row IDs/time appear; verify T2 can see only T2 data. Repeat with a 401 or network failure from the stale request.
@@ -90,17 +118,34 @@ Important: Test with real PostgreSQL, not SQLite, only ORM mock, or HTTP status 
 
 AUTH-07/08/09 and domain part of AUTH-16 are exercised with actual Slot routes in #14. Customer availability and stale selection belong to #15; Booking cutoff Q05 and races B/C belong to #16; Customer-private Booking reads belong to #17; final integrated `sprint1→main` release to #18. Do not report those as #14 PASS.
 
-## Run ledger (Part F only)
+## Original pre-Part-F run checklist — historical planning snapshot
 
-| Command/check | Status |
+**The status cells below describe the original pre-implementation
+checklist, not the present Slot feature or its current PASS/FAIL state.**
+The original test commands and Race A/immutability/precision/privacy
+cases were subsequently executed in Part F; the authoritative
+observed outcomes, any failures, reruns and limitations are in the
+[original Slot Part F verification ledger](verification-ledger.md).
+The new Dashboard UX-R1…R6, GET/Logout acceptance tests, and any
+future regression reruns must be documented **separately** in their
+own Part F evidence. Human WCAG signoff remains **NOT RUN** until
+performed, and any stakeholder policy approval remains a separate gate.
+
+| Original planned command/check | Historical Part E state — consult linked Part F ledger for actual result |
 |---|---|
-| `npm ci` / `npm run db:generate` / `npm run db:migrate` (fresh DB) | NOT RUN |
-| `npm run typecheck` / `npm run build` | NOT RUN |
-| `npm test`, `npm run test:db` with Slot test discovered | NOT RUN |
-| `npm run test:e2e` including Tutor UI | NOT RUN |
-| Real DB Race A observed `pg_blocking_pids()` / direct SQL / rollback / restart | NOT RUN |
-| SLOT-17 immutability trigger and Sprint 1 mutation matrix | NOT RUN |
-| SLOT-19/20 precision and stale protected GET tests | NOT RUN |
-| Human accessibility/privacy/OD decision review | NOT RUN |
+| `npm ci` / `npm run db:generate` / `npm run db:migrate` (fresh DB) | Planned in original Part E; check actual Part F ledger |
+| `npm run typecheck` / `npm run build` | Planned in original Part E; check actual Part F ledger |
+| `npm test`, `npm run test:db` with Slot test discovered | Planned in original Part E; check actual Part F ledger |
+| `npm run test:e2e` including Tutor UI | Planned in original Part E; check actual Part F ledger |
+| Real DB Race A observed `pg_blocking_pids()` / direct SQL / rollback / restart | Planned in original Part E; check actual Part F ledger |
+| SLOT-17 immutability trigger and Sprint 1 mutation matrix | Planned in original Part E; check actual Part F ledger |
+| SLOT-19/20 precision and stale protected GET tests | Planned in original Part E; check actual Part F ledger |
+| Human WCAG/keyboard/contrast signoff (separate manual gate) | **NOT RUN** for the new Dashboard; no human conformance claim |
+| Stakeholder/instructor OD policy approvals | Separately gated; no approval implied by test execution |
 
-**Pre-code review gate:** @Chxtamos reviews case setup, fixtures, AC coverage, actual concurrency orchestration, expected SQL statuses and policy uncertainty; approves/requests edits to this STS **before** code. No Part F work begins merely because a file exists.
+**Original pre-code review gate (historical):** @Chxtamos reviewed
+the original Slot Part E contract through PR #27 before the Slot
+implementation in PR #28. For the **new** Tutor Calendar Dashboard,
+the amended Part E in PR #30 still requires independent approval and
+merge **before** a new code-only Part F PR; this historical checklist
+does not satisfy that new gate.

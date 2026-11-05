@@ -36,6 +36,18 @@ the Option A absence of working hours/advance-horizon/grid limitations,
 UTC transport/Asia-Bangkok display, cross-midnight precision, full private
 own-list, network-uncertainty reconciliation and stale-success protection.
 
+**Owner-selected CTA contrast pairing (Tutor view only):** use orange
+`#F47736` with dark text/icons `#172137` (**5.76:1** on orange),
+`#D96123` border (**3.48:1** against `#F7F8FB` canvas;
+**3.69:1** against white), and a `3px` `#AA4519` keyboard focus
+outline offset outward by `3px` (**5.53:1** against canvas,
+**5.87:1** against white). Do **not** use white text on orange
+(**2.79:1**) or rely on the orange fill alone for component
+visibility (**2.62:1** against canvas). Ratios are token calculations
+for the design contract, **not evidence of a complete WCAG audit**;
+verify rendered styles and states in Part F. This does not recolor
+the previously approved Auth/Customer UI.
+
 ## Ownership and display boundaries
 
 - Only `GET /api/v1/tutor/slots` (full owner DTO list, no query) and
@@ -99,7 +111,8 @@ complete human keyboard/contrast/reflow accessibility signoff.
 Color is never the sole Slot status indicator. The 24-hour timeline is a *visual
 projection*: every Slot remains readable in its accessible agenda row.
 
-**UX-R1:** desktop navy sidebar, white canvas, orange accessible action,
+**UX-R1:** desktop navy sidebar, white canvas, orange CTA with the
+specified dark-ink/border/focus contrast pairing,
 real Tutor role/ID and no fictitious navigation or figures.
 **UX-R2:** real Slot clock placement at arbitrary minutes (13:17, 13:59);
 cross-midnight and all-day (24-hour) access without work-hour restrictions.
