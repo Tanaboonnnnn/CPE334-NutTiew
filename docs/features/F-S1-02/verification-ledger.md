@@ -84,8 +84,12 @@ authenticated GET after restart.
   `document.documentElement.scrollWidth > window.innerWidth` was false.
 - Intercepted a 503 POST: no success announcement; form usable and safe
   uncertainty message shown.
-- Held an old Tutor own-list response until after Logout: late response
-  never restored the prior Tutor's protected schedule.
+- **Original 19/19 run had a narrower SLOT-20 test:** it delayed the
+  outgoing own-list request **before** it reached the API, then forwarded
+  or cancelled it after Logout. That was **not proof** that an already
+  authorized HTTP 200 with private T1 Slots could not reappear. The
+  reviewer-requested 200-before-Logout regression is recorded separately
+  in the remediation evidence below; do not cite the original test for it.
 - Real API cases denied anonymous/Customer roles, forged POST owner and GET
   `?tutorId=...`, unknown query parameters, invalid dates/precision,
   wrong Origin and invalid/cross-session CSRF.
@@ -116,3 +120,92 @@ authenticated GET after restart.
 **Issue #14 remains OPEN** until teammate-reviewed Part F merge and full
 Definition of Done. Do not use an AI-assisted design review as a claim of
 independent human confirmation.
+
+## PR #28 requested-changes remediation — 2026-11-05 (Asia/Bangkok)
+
+**Reviewer:** @Chxtamos, [requested-changes review](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/28#pullrequestreview-5783653506).
+**Implementation commit:** `34bf4174ca8ea8d918d974fc6cc2714ba4a5fdc0`
+on `feature/issue-14-tutor-slots`. This is a focused correction to
+`e2e/slots.spec.ts` and `apps/web/src/tutor-slots.tsx` only; **no CSS,
+theme, layout, colors, API, DB schema or production server code changed**.
+The prior `1d0f5ac` [GitHub Actions run #41897343367](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/41897343367)
+was 3/3 SUCCESS for **that earlier SHA** only, not proof of CI at this
+new review-fix commit.
+
+### P1 — SLOT-20 delayed *authorized* T1 200 (review thread 4479485580)
+
+The new Playwright test inserts two distinguishable PostgreSQL-backed
+fixtures (T1 Slot ID and T2 Slot ID; Bangkok 10:06 versus 15:43).
+After logging in as T1, it triggers a fresh GET; the route handler invokes
+`route.fetch()` **while T1 is authenticated**, verifies HTTP **200** and
+asserts the captured DTO contains **T1's exact Slot ID** and **not T2's**.
+It retains that actual authorized response without browser fulfillment
+while T1 logs out and T2 signs in, verifies T2's own Slot is visible, then
+releases the **previous T1 HTTP 200** with `route.fulfill({response})` and
+checks again that T2's Slot is visible and T1's distinct times are absent.
+
+**Observed:** targeted SLOT-20 Playwright execution **1/1 PASS**;
+the complete browser suite also includes this case below.
+The original request-before-authorization test is superseded and is
+**not** counted as evidence for this stronger scenario.
+
+### P2 — Timeout / network uncertainty + duplicate-retry gate
+
+`isUncertainWrite` now recognizes DOM `AbortError` by its **name**,
+network `TypeError` and uncertain server HTTP 502/503/504, while
+preserving specific 400/403/409/422 handling. A potentially committed
+POST with a lost response uses the already-existing uncertainty message,
+then **authenticates and refreshes its owner-only Slot list** before the
+submit control is enabled again. If reconciliation GET fails, the submit
+control stays disabled; the existing **โหลดอีกครั้ง** list-retry
+action must successfully re-read own Slots before a new submission.
+No new visible components or styling were introduced.
+
+Test-first **RED** proof (before the implementation change):
+
+- Network loss **after a real server-committed POST**, injected via
+  `route.fetch()` followed by `route.abort('failed')`, **FAILED**:
+  expected the uncertainty text but got the generic
+  "ไม่สามารถดำเนินการได้ โปรดลองอีกครั้ง".
+- Real **10-second AbortController timeout**, triggered by preserving
+  a `route.fetch()` POST response but withholding browser fulfillment,
+  **FAILED** for the same incorrect generic error message.
+
+After the correction, **4 targeted Playwright cases PASS**: real
+ten-second timeout after COMMIT with a GET reconciliation, network
+disconnect after COMMIT with GET reconciliation, network disconnect
+plus an initially **failed reconciliation GET** (submit remains disabled
+until manual list reload succeeds), and P1's old-200/T2-switch test.
+Each uncertain-POST case checks no false success notice; the successfully
+reconciled DB Slot is visible in the own list.
+
+### Fresh local checks performed after the review fix
+
+Environment: the dedicated local Windows PostgreSQL 18.3 test cluster,
+Node v24.14.0, npm 11.18.0 and Microsoft Edge. **No production DB used.**
+
+| Executed command | Observed result |
+|---|---|
+| `npm run db:generate` | **PASS**; Prisma Client generated |
+| `npm run db:migrate` | **PASS**; two migrations present, no pending migrations |
+| `npm test` | **PASS, 25/25** |
+| `npm run typecheck` | **PASS**, both API and web |
+| `npm run build` | **PASS**, API and Vite web |
+| `npm run test:db` (first full attempt) | **FAIL, 42/43**; existing `AUTH-19` returned 503 instead of expected 200 in `auth.extended.db.test.ts`. No Auth implementation edits made. |
+| `npx vitest run test/auth.extended.db.test.ts` (isolated) | **PASS, 16/16** |
+| `npm run test:db` (second full attempt) | **PASS, 43/43** across ten real PostgreSQL test files, including Race A both winner orders |
+| `npm run test:e2e -- --reporter=line` | **PASS, 22/22** in Microsoft Edge (15 Auth + 7 Slot), including all newly added scenarios |
+
+**Latest successful full-suite total: 25 Unit + 43 PostgreSQL +
+22 Microsoft Edge = 90 automated tests passing.**
+The original 42/43 result is not rewritten as a pass: the transient
+`AUTH-19` 503 did **not** recur in the isolated run or full rerun,
+but its precise cause remains **unconfirmed**. Monitor the next
+GitHub-hosted DB job and do not claim the flake has been rooted out.
+
+**Pending at this documentation edit:** 3/3 new-head GitHub Actions CI
+verification (must be checked at the subsequently pushed PR HEAD),
+fresh independent peer review of both requested corrections, and the
+previously documented manual WCAG / production deployment / combined
+post-INSERT process fault-injection limitations. **No PR merge** and
+**no Issue #14 closure** are authorized by these local results.
