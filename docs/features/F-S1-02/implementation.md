@@ -155,3 +155,7 @@ reviews Part F and the team must check real GitHub job conclusions.
 - The feature branch must receive independent human review and a separate
   reviewed PR before merging to `sprint1`; do not merge or close #14 solely
   based on automation.
+# Tutor Calendar Dashboard follow-up (2026-11-05)
+
+**UI-only extension after merged Part F PR #28:** see the [dated design decision](ui-decision-2026-11-05.md), [proposed UI contract](ui-spec.md) and [dedicated dashboard verification with real-browser screenshots](tutor-dashboard-verification.md).
+The implementation uses the existing Auth/session and full Tutor Slot GET/POST; no API, database or Booking behavior changes. This design candidate still requires independent teammate review and human accessibility signoff.
