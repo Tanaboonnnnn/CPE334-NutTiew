@@ -43,13 +43,23 @@ async function apiJson<T>(path: string, init: RequestInit = {}, externalSignal?:
   }
 }
 
+/** A failed POST response may be lost even after the server has committed. */
+function isUncertainWrite(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'name' in error &&
+      (error.name === 'AbortError' || error.name === 'TypeError')) return true;
+  return error instanceof Error && (
+    error.message === 'SERVICE_UNAVAILABLE' ||
+    error.message === 'HTTP_502' || error.message === 'HTTP_503' || error.message === 'HTTP_504'
+  );
+}
+
 function userMessage(error: unknown): string {
   const code = error instanceof Error ? error.message : '';
   if (code === 'SLOT_OVERLAP') return 'ช่วงเวลานี้ทับกับเวลาที่คุณเปิดไว้แล้ว กรุณาเลือกเวลาใหม่';
   if (code === 'SLOT_INVALID_TIME') return 'ต้องเลือกเวลาเริ่มที่ยังไม่ผ่านไปแล้วตามเวลาประเทศไทย';
   if (code === 'INVALID_INPUT') return 'วันที่หรือเวลาไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง';
   if (code === 'CSRF_DENIED' || code === 'ORIGIN_DENIED') return 'ไม่สามารถตรวจสอบความปลอดภัยของคำขอได้ กรุณาเข้าสู่ระบบใหม่';
-  if (code === 'AbortError' || code === 'SERVICE_UNAVAILABLE') return 'ยังยืนยันผลการบันทึกไม่ได้ โปรดตรวจสอบรายการด้านล่างก่อนลองอีกครั้ง';
+  if (isUncertainWrite(error)) return 'ยังยืนยันผลการบันทึกไม่ได้ โปรดตรวจสอบรายการด้านล่างก่อนลองอีกครั้ง';
   return 'ไม่สามารถดำเนินการได้ โปรดลองอีกครั้ง';
 }
 function accessExpired(error: unknown) {
@@ -62,6 +72,7 @@ export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => vo
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [reconciliationPending, setReconciliationPending] = useState(false);
   const [error, setError] = useState('');
   const [listError, setListError] = useState('');
   const [notice, setNotice] = useState('');
@@ -83,6 +94,7 @@ export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => vo
       if (version.current === current) {
         setSlots(result.data);
         setListError('');
+        setReconciliationPending(false);
       }
     } catch (e) {
       if (version.current === current) {
@@ -110,7 +122,7 @@ export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => vo
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
-    if (creating) return;
+    if (creating || reconciliationPending) return;
     setNotice('');
     setError('');
     if (!preview) {
@@ -136,10 +148,15 @@ export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => vo
       if (!controller.signal.aborted) {
         if (accessExpired(e)) { setSlots([]); onUnauthorized(); }
         else {
+          const unknownOutcome = isUncertainWrite(e);
+          if (unknownOutcome) setReconciliationPending(true);
           setError(userMessage(e));
           queueMicrotask(() => errorRef.current?.focus());
-          if (e instanceof Error && (e.name === 'AbortError' || e.message === 'SERVICE_UNAVAILABLE')) {
-            await refresh(); // server might have committed before network failure
+          if (unknownOutcome) {
+            // Hold duplicate submission until an authenticated own-list read
+            // has reconciled the possibly committed POST. On GET failure, the
+            // existing "โหลดอีกครั้ง" control is the only recovery path.
+            await refresh(true);
           }
         }
       }
@@ -175,7 +192,7 @@ export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => vo
           <output aria-label="เวลาสิ้นสุด">{end ? bangkokTime(end) : '—'}</output>
           {end && bangkokDayKey(end) !== date && <small>สิ้นสุดในวันถัดไป</small>}
         </div>
-        <button type="submit" disabled={creating}>{creating ? 'กำลังบันทึก…' : 'เพิ่มเวลาติว'}</button>
+        <button type="submit" disabled={creating || reconciliationPending}>{creating ? 'กำลังบันทึก…' : 'เพิ่มเวลาติว'}</button>
         {error && <p id="slot-error" className="error" role="alert" tabIndex={-1} ref={errorRef}>{error}</p>}
         {notice && <p className="success" role="status">{notice}</p>}
       </form>
