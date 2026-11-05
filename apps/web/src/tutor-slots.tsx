@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { AllSlotsAgenda, SlotCalendar, type OfferedSlot } from './tutor-calendar.js';
+import { TutorDashboardShell } from './tutor-dashboard-shell.js';
 
-type Slot = {
-  id: string;
-  startsAt: string;
-  endsAt: string;
-  lifecycle: 'Offered';
-  occupancy: 'Unoccupied' | 'Occupied';
-};
-type SlotList = { data: Slot[]; meta: { requestId: string } };
+type SlotList = { data: OfferedSlot[]; meta: { requestId: string } };
 
 /** A Bangkok wall-clock input must never be interpreted in the device's timezone. */
 function bangkokStart(date: string, time: string): Date | null {
@@ -17,8 +12,6 @@ function bangkokStart(date: string, time: string): Date | null {
 }
 const bangkokTime = (instant: Date) =>
   new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(instant);
-const bangkokDate = (instant: Date) =>
-  new Intl.DateTimeFormat('th-TH-u-ca-gregory-nu-latn', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric' }).format(instant);
 const bangkokDayKey = (instant: Date) => new Date(instant.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
 
 async function apiJson<T>(path: string, init: RequestInit = {}, externalSignal?: AbortSignal): Promise<T> {
@@ -66,10 +59,20 @@ function accessExpired(error: unknown) {
   return error instanceof Error && (error.message === 'UNAUTHENTICATED' || error.message === 'FORBIDDEN');
 }
 
-export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => void }) {
+export function TutorAvailability({
+  onUnauthorized, accountId, onLogout, logoutBusy, logoutError, canMutate,
+}: {
+  onUnauthorized: () => void;
+  accountId: string;
+  onLogout: () => void | Promise<void>;
+  logoutBusy: boolean;
+  logoutError: string;
+  canMutate: () => boolean;
+}) {
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('');
-  const [slots, setSlots] = useState<Slot[]>([]);
+  const [calendarStart, setCalendarStart] = useState(() => bangkokDayKey(new Date()));
+  const [slots, setSlots] = useState<OfferedSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [reconciliationPending, setReconciliationPending] = useState(false);
@@ -122,7 +125,7 @@ export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => vo
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
-    if (creating || reconciliationPending) return;
+    if (!canMutate() || creating || reconciliationPending) return;
     setNotice('');
     setError('');
     if (!preview) {
@@ -135,6 +138,9 @@ export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => vo
     setCreating(true);
     try {
       const { csrfToken } = await apiJson<{ csrfToken: string }>('/api/v1/auth/csrf', {}, controller.signal);
+      // Do not turn a CSRF response started before Logout into a new Slot
+      // POST after the user has asked to hide/suspend the Tutor dashboard.
+      if (!canMutate() || controller.signal.aborted) return;
       await apiJson('/api/v1/tutor/slots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
@@ -142,6 +148,7 @@ export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => vo
       }, controller.signal);
       if (!controller.signal.aborted) {
         setNotice('บันทึกเวลาติวสำเร็จ');
+        setCalendarStart(date);
         await refresh();
       }
     } catch (e) {
@@ -168,55 +175,73 @@ export function TutorAvailability({ onUnauthorized }: { onUnauthorized: () => vo
     }
   };
 
-  return (
-    <section className="panel schedule-panel" aria-labelledby="schedule-heading">
-      <p className="eyebrow">NutTiew · Tutor availability</p>
-      <h2 id="schedule-heading">ตารางเวลาติวของฉัน</h2>
-      <p className="subtitle">เปิดช่วงเวลาติวครั้งละ 60 นาทีสำหรับตารางของคุณเท่านั้น</p>
-      <div className="timezone-note">เวลาที่แสดงเป็นเวลาไทย · Asia/Bangkok (UTC+07:00)</div>
-      <form className="slot-form" onSubmit={create}>
-        <div className="slot-fields">
-          <div>
-            <label htmlFor="slot-date">วันที่</label>
-            <input id="slot-date" type="date" value={date} onChange={e => setDate(e.target.value)}
-              aria-invalid={!!error} aria-describedby={error ? 'slot-error' : undefined} required />
-          </div>
-          <div>
-            <label htmlFor="slot-start">เวลาเริ่ม</label>
-            <input id="slot-start" type="time" step={60} value={startTime} onChange={e => setStartTime(e.target.value)}
-              aria-invalid={!!error} aria-describedby={error ? 'slot-error' : undefined} required />
-          </div>
-        </div>
-        <div className="slot-preview" aria-live="polite">
-          <span>เวลาสิ้นสุด (+60 นาที)</span>
-          <output aria-label="เวลาสิ้นสุด">{end ? bangkokTime(end) : '—'}</output>
-          {end && bangkokDayKey(end) !== date && <small>สิ้นสุดในวันถัดไป</small>}
-        </div>
-        <button type="submit" disabled={creating || reconciliationPending}>{creating ? 'กำลังบันทึก…' : 'เพิ่มเวลาติว'}</button>
-        {error && <p id="slot-error" className="error" role="alert" tabIndex={-1} ref={errorRef}>{error}</p>}
-        {notice && <p className="success" role="status">{notice}</p>}
-      </form>
-      <div className="schedule-list-heading">
-        <h3>เวลาติวที่เปิดไว้</h3>
-        <span>{slots.length} ช่วงเวลา</span>
+  return <TutorDashboardShell accountId={accountId} onLogout={onLogout} logoutBusy={logoutBusy} logoutError={logoutError}>
+    <section className="dashboard-overview" aria-label="สรุปเวลาติวจริงจากฐานข้อมูล">
+      <div className="overview-tile">
+        <span className="overview-label">ช่วงเวลาที่เปิดไว้ทั้งหมด</span>
+        <div><strong>{loading || listError ? '—' : slots.length}</strong><span>ช่วงเวลา</span></div>
+        <small>นับจาก Slot ของบัญชีนี้เท่านั้น</small>
       </div>
-      {loading ? <p role="status">กำลังโหลดรายการเวลาติว…</p> : (
-        <>
-          {listError && <p className="error" role="alert">{listError} <button className="retry-button" type="button" onClick={() => void refresh(true)}>โหลดอีกครั้ง</button></p>}
-          {!listError && slots.length === 0 && <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่เปิดไว้</p>}
-          {slots.length > 0 && <ul className="slot-list">
-            {slots.map(slot => (
-              <li key={slot.id} className="slot-item">
-                <div>
-                  <div className="slot-item-date">{bangkokDate(new Date(slot.startsAt))}</div>
-                  <div className="slot-item-hours"><time>{bangkokTime(new Date(slot.startsAt))}</time><span aria-hidden="true">–</span><time>{bangkokTime(new Date(slot.endsAt))}</time></div>
-                </div>
-                <div className="slot-tags"><span>เปิดช่วงเวลาแล้ว</span><span>{slot.occupancy === 'Occupied' ? 'มีการจองแล้ว' : 'ยังไม่มีการจอง'}</span></div>
-              </li>
-            ))}
-          </ul>}
-        </>
-      )}
+      <div className="overview-tile overview-help">
+        <span className="overview-label">ระยะเวลาต่อช่วง</span>
+        <div><strong>60</strong><span>นาที</span></div>
+        <small>เลือกเวลาเริ่มได้ทุกนาที ไม่จำกัดช่วงเวลาทำการ</small>
+      </div>
+      <div className="overview-tile overview-timezone">
+        <span className="overview-label">เขตเวลาที่ใช้</span>
+        <div><strong className="overview-timezone-text">UTC+07:00</strong></div>
+        <small>Asia/Bangkok • ไม่ขึ้นกับ Timezone ของอุปกรณ์</small>
+      </div>
     </section>
-  );
+
+    <div className="dashboard-workspace">
+      {loading || listError
+        ? <div className="dashboard-card loading-agenda" role="status">
+          {loading ? 'กำลังโหลดปฏิทินเวลาติว…' : 'ยังไม่สามารถแสดงปฏิทินได้ กรุณาโหลดรายการเวลาติวอีกครั้ง'}
+        </div>
+        : <SlotCalendar slots={slots} startDay={calendarStart} onChangeDay={setCalendarStart}/>}
+      <section className="dashboard-card create-card" aria-labelledby="create-slot-heading" id="create-slot">
+        <div className="create-card-heading">
+          <p className="dashboard-kicker">NEW AVAILABILITY</p>
+          <h2 id="create-slot-heading">เปิดช่วงเวลาติวใหม่</h2>
+          <p>เลือกวันที่และเวลาเริ่ม ระบบจะกำหนดเวลาสิ้นสุดให้อัตโนมัติ</p>
+        </div>
+        <form className="slot-form" onSubmit={create}>
+          <div className="slot-fields">
+            <div>
+              <label htmlFor="slot-date">วันที่</label>
+              <input id="slot-date" type="date" value={date} onChange={e => setDate(e.target.value)}
+                aria-invalid={!!error} aria-describedby={error ? 'slot-error' : undefined} required />
+            </div>
+            <div>
+              <label htmlFor="slot-start">เวลาเริ่ม</label>
+              <input id="slot-start" type="time" step={60} value={startTime} onChange={e => setStartTime(e.target.value)}
+                aria-invalid={!!error} aria-describedby={error ? 'slot-error' : undefined} required />
+            </div>
+          </div>
+          <div className="slot-preview" aria-live="polite">
+            <span>เวลาสิ้นสุด (+60 นาที)</span>
+            <output aria-label="เวลาสิ้นสุด">{end ? bangkokTime(end) : '—'}</output>
+            {end && bangkokDayKey(end) !== date && <small>สิ้นสุดในวันถัดไป</small>}
+          </div>
+          <button type="submit" className="create-submit" disabled={!canMutate() || creating || reconciliationPending}>
+            {creating ? 'กำลังบันทึก…' : 'เพิ่มเวลาติว'}
+          </button>
+          {error && <p id="slot-error" className="error" role="alert" tabIndex={-1} ref={errorRef}>{error}</p>}
+          {notice && <p className="success" role="status">{notice}</p>}
+        </form>
+        <div className="create-privacy-note">
+          <span className="privacy-shield" aria-hidden="true">✓</span>
+          ตารางเวลานี้แสดงให้เฉพาะบัญชี Tutor ของคุณ
+        </div>
+      </section>
+    </div>
+
+    {loading ? <div className="dashboard-card loading-agenda" role="status">กำลังโหลดรายการเวลาติว…</div> : listError
+      ? <div className="dashboard-list-error" role="alert">
+        <p className="error">ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่</p>
+        <button className="retry-button" type="button" onClick={() => void refresh(true)}>โหลดอีกครั้ง</button>
+      </div>
+      : <AllSlotsAgenda slots={slots}/>}
+  </TutorDashboardShell>;
 }

@@ -1,6 +1,12 @@
 import {test,expect} from '@playwright/test';
 import {randomBytes} from 'node:crypto';
 
+// Browser fixtures use isolated, documented test IPv6 addresses (not public proxies).
+test.beforeEach(async({page})=>{
+ const h=randomBytes(12).toString('hex');
+ await page.setExtraHTTPHeaders({'X-Forwarded-For':'2001:db8:'+h.slice(0,4)+':'+h.slice(4,8)+':'+h.slice(8,12)+'::3'});
+});
+
 const luminance=(css:string)=>{
  const channels=(css.match(/[0-9]+(?:\.[0-9]+)?/g)??[]).slice(0,3).map(Number);
  if(channels.length!==3)throw new Error('Expected computed rgb color: '+css);
