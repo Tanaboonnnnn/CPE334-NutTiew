@@ -175,7 +175,10 @@ test.describe('F-S1-02 Tutor UI / durable own schedule', () => {
       }
     });
     await page.getByRole('button', { name: 'เพิ่มเวลาติว' }).click();
-    await expect(page.getByRole('alert')).toContainText('ยังยืนยันผลการบันทึกไม่ได้');
+    // A failed reconciliation also renders the independent list error alert.
+    // Address the create error specifically: getByRole('alert') is ambiguous
+    // when both correctly remain visible on fast hosted CI runners.
+    await expect(page.locator('#slot-error')).toContainText('ยังยืนยันผลการบันทึกไม่ได้');
     await expect(page.getByText('ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่')).toBeVisible();
     await expect(page.getByRole('button', { name: 'เพิ่มเวลาติว' })).toBeDisabled();
     await page.getByRole('button', { name: 'โหลดอีกครั้ง' }).click();

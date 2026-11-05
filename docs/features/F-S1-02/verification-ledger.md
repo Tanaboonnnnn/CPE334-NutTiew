@@ -209,3 +209,36 @@ fresh independent peer review of both requested corrections, and the
 previously documented manual WCAG / production deployment / combined
 post-INSERT process fault-injection limitations. **No PR merge** and
 **no Issue #14 closure** are authorized by these local results.
+
+### GitHub-hosted first follow-up CI: test selector diagnosis and correction
+
+Run [#42022093365](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42022093365)
+at `84e5c5183e79d821fec5b677730cb1cb973c34b2` completed
+**FAILURE**, with **2/3 success**:
+
+- GitHub Unit / TypeScript / production build: **SUCCESS**.
+- GitHub PostgreSQL 18 / real Auth + Slot + Race A: **SUCCESS**.
+- GitHub Microsoft Edge E2E: **FAILURE, 21/22**. The new
+  `SLOT-18 prevents duplicate submission until a failed reconciliation GET
+  is retried` test contained an ambiguous
+  `page.getByRole('alert')` locator when a fast Linux runner correctly
+  displayed **two** simultaneous alerts: the uncertain POST result and
+  the failed GET reconciliation. Playwright's strict-mode selector matched
+  two nodes and failed at `e2e/slots.spec.ts:178`. This was a **test
+  selector error**; the desired app behavior (both alerts visible)
+  was present in the captured failure output.
+
+**Surgical correction (test only):** the affected assertion now targets
+the existing specific `#slot-error` element, without removing either
+alert, changing product behavior or changing visual design/CSS. On the
+unchanged application code, local tests after this correction:
+
+- Targeted `SLOT-18 prevents duplicate submission`: **PASS, 1/1**.
+- Full `npm run test:e2e -- --reporter=line`: **PASS, 22/22**
+  (15 Auth + 7 Slot) in Microsoft Edge.
+- `git diff --check`: no whitespace errors.
+
+The **next pushed commit's hosted CI**, not these local reruns, determines
+whether the correction is accepted on Linux. Preserve the historical
+21/22 hosted failure as evidence; do not overwrite it with a claim that
+run #42022093365 succeeded.
