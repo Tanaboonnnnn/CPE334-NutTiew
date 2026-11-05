@@ -8,15 +8,15 @@
 
 | ID | New dashboard evidence to collect |
 |---|---|
-| UX-R1 | Logged-in Tutor sees original NutTiew identity, navy/orange shell, functional nav, no fake data or actions; Customer sees original authorized Auth page |
+| UX-R1 | Logged-in Tutor sees original NutTiew identity, navy/orange shell, no fake data or actions; `บัญชีของฉัน` navigates to in-page `#account-details` showing **only role and shortened ID from trusted /auth/me**; Customer sees original authorized Auth page |
 | UX-R2 | Real PG Slot at Bangkok 13:17 and 13:59 positions at exact minute-offset, 23:30→00:30 splits over two dates; all 24 hours accessible |
-| UX-R3 | Prev/Next/Today and day picker change local view without changing GET URL; all returned Slot IDs remain in chronological agenda |
-| UX-R4 | Real app 320/375/768/1280 screenshots, no overflow, keyboard nav/order/focus, 44px controls, measured contrast; human signoff separately declared |
+| UX-R3 | Prev/Next/Today and day picker change local view without changing GET URL; all returned Slot IDs remain in chronological agenda. **Overview count** equals full own-list Slot count across **all dates** and is constant across viewport navigation; **ช่วงที่แสดง** separately counts distinct Slots intersecting the current window (including cross-midnight only once per window) |
+| UX-R4 | Real app **320/375px = full mobile Agenda** (`<=620px`), **768px = two-day timeline** (`621–1060px`), **1280px = three-day timeline** (`>1060px`); check 620/621 and 1060/1061 boundaries; screenshots, 320 CSS px reflow/no unexpected horizontal scroll, keyboard-only nav and visible unobscured focus, valid labels/status, primary controls **>=44x44 CSS px** and applicable WCAG 2.2 AA target size **>=24x24 CSS px or normative exception**. Record separate **>=4.5:1 normal text**, **>=3:1 large text**, **>=3:1 UI/non-text** computed contrast for all critical states. Automated subset is not conformance; manual human WCAG 2.2 AA signoff **NOT RUN** until actually assessed |
 | UX-R5 | Re-run existing SLOT-09/12/14/15/18/20, including real 200-after-switch privacy and uncertain-POST reconciliation, with new shell |
 | **UX-R5-GET-01** | Authenticated Tutor with 4 committed own Slots: initial GET 503 → retry GET 503 show loading/error and retry only, **no empty Agenda/Calendar/zero**; next genuine GET 200 restores all 4 Slot IDs, sorted and private |
 | **UX-R5-GET-02** | Authenticated Tutor with **no** committed Slot: initial GET 503 → retry GET 503 must not claim an empty schedule; only authorized GET 200 with `data: []` may show true empty state and 0 total |
-| **UX-R5-LOGOUT-01** | A Tutor begins Logout; hold pending CSRF/Logout, then inject HTTP 503 or network loss/timeout. Attempt a valid Create Slot while pending and uncertain, verify **zero POST /api/v1/tutor/slots**, no DB row, blocked UI; on failed `/auth/me` recheck protected actions stay blocked. Must not falsely claim revocation |
-| **UX-R5-LOGOUT-02** | After uncertain Logout, fresh `/auth/me` 200 for the **same** Tutor restores actions; fresh 401 clears identity and old Slot cards (and stale T1 200 remains ignored). A different trusted account must never unlock the previous Tutor |
+| **UX-R5-LOGOUT-01** | T1 starts Logout: hold CSRF and Logout requests, then inject HTTP 503, network loss or timeout. **Immediately hide T1 account ID, signed-in status, Calendar, Agenda and private cards; block Create/header CTA and any new protected POST before and after uncertainty**. Attempt creation and verify **zero new POST /api/v1/tutor/slots after Logout begins**, no newly committed Slot row. A pre-Logout in-flight POST may have committed and is not asserted rolled back. A failed `/auth/me` recheck keeps content hidden/actions blocked; do not falsely claim Logout succeeded |
+| **UX-R5-LOGOUT-02** | After T1 uncertain Logout, retry Logout or `/auth/me` session check. A **fresh /auth/me 200 matching exact internal T1 ID and Tutor role** must be followed by fresh owner-list GET 200 **before** restoring T1 display or Create; failed owner GET stays hidden/blocked. Fresh Logout 204 or `/auth/me` 401 finalizes signed-out; different account or recheck 503/network stays blocked; stale T1 authorized 200 never repopulates hidden content |
 | UX-R6 | Real rendered screenshots from DB-backed Tutor account; no invented data or unimplemented domain action |
 
 **Provenance / test gate:** the above are **Part E planned acceptance
@@ -26,7 +26,16 @@ for unsafe Logout and GET states, rerun the original SLOT-01…20 and Auth
 regressions, and record exact commit SHA and hosted CI. Do not mark
 this design accepted before peer review and merge.
 
-> **REVISED PART E / ALL TESTS PLANNED / NOT RUN.** Issue #14, owner @Tanaboonnnnn, reviewer @Chxtamos. Source contracts: [SDS / owner policy decision](specification.md), [HTTP](api-spec.md), [UI](ui-spec.md), [Data / DB trigger matrix](data-spec.md). Baseline `sprint1` `6fd3931` has Auth tests but **no Slot code/migration/test**.
+**WCAG evidence gate:** the Part F verification report must distinguish
+(a) automated measured contrast/keyboard/viewport samples, (b) manual
+inspection of all applicable WCAG 2.2 A/AA criteria including SC
+1.4.3/1.4.10/1.4.11, 2.1.1, 2.4.7/2.4.11 and 2.5.8, and (c) explicit
+NOT RUN items with reviewer, date and exact implementation SHA.
+The old handful of 4.5:1 samples does **not** establish WCAG 2.2 AA.
+
+> **NEW DASHBOARD UX TESTS PLANNED / NOT RUN IN THIS DOCS-ONLY PR.** The original SLOT-01…SLOT-20 design and earlier implementation/tests from merged PR #28 are historical, **not missing** in today's `sprint1`. Issue #14, owner @Tanaboonnnnn, reviewer @Chxtamos. Source contracts: [SDS / owner policy decision](specification.md), [HTTP](api-spec.md), [UI](ui-spec.md), [Data / DB trigger matrix](data-spec.md).
+>
+> **Historical baseline only:** `sprint1` `6fd3931` was the **original Part E snapshot before Slot implementation** and had Auth tests but no Slot code/migration/test. **Current PR #30 base:** `sprint1` `ed451be2ca3e366bdfc1900f4c4697aa7e50b6a0` **already contains** the original Slot API, DB migration and tests from merged PR #27/#28. The new dashboard/Logout cases above are not claimed executed by this documentation PR.
 
 ## Test harness, data and TDD evidence
 

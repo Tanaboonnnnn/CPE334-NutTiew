@@ -21,12 +21,19 @@
 > updated base. This preserves the original Issue #14 two-PR rule.
 > **Additional UX-R5 obligations:** initial/retry GET 503 must not
 > assert an empty schedule; unknown count remains unknown until 200.
-> Network/503 uncertain logout must block protected Slot mutations until
-> same-account `/auth/me` 200 confirms the live Session, or 401 clears
-> identity. See [UI contract](ui-spec.md) and
+> On Logout click, hide account identity and all private Slots
+> immediately and suspend protected interactions, while retaining the
+> previous Tutor ID **only internally** for uncertain Session recheck.
+> A confirmed Logout 204 or `/auth/me` 401 finalizes signed-out.
+> Only a fresh same-Tutor `/auth/me` 200 **followed by fresh own-list
+> GET 200** may restore the Dashboard and actions; otherwise remain
+> hidden/blocked. Owner-selected 768px two-day / 1280px three-day /
+> mobile agenda design, full-own-list summary and WCAG 2.2 AA target
+> are detailed in [dated UX decision](ui-decision-2026-11-05.md).
+> See [UI contract](ui-spec.md) and
 > [UX-R5-GET / UX-R5-LOGOUT STS](tests.md). No backend/API/DB changes.
 
-> **REVISED PART E / AWAITING INDEPENDENT PEER APPROVAL / NOT IMPLEMENTED OR TESTED.** Issue #14, owner @Tanaboonnnnn, reviewer @Chxtamos. Based on merged `sprint1` SHA `6fd3931` (PR #25/#26). Review feedback: [PR #27](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/27). This is a design contract, not Part F acceptance; peer review and merge precede feature code.
+> **DOCS-ONLY NEW DASHBOARD CONTRACT / AWAITING PEER ACCEPTANCE.** Issue #14, owner @Tanaboonnnnn, reviewer @Chxtamos. **Historical initial Part E baseline:** `sprint1` `6fd3931` (PR #25/#26), from before Slot implementation. **Current PR #30 base:** `sprint1` `ed451be2ca3e366bdfc1900f4c4697aa7e50b6a0`, with the previously reviewed and merged Slot feature from PR #27/#28 already implemented and tested. This amended UI contract itself neither runs nor approves new Dashboard implementation; its review/merge precedes the *new* Part F UI code-only PR.
 
 ## Sources and traceability
 
