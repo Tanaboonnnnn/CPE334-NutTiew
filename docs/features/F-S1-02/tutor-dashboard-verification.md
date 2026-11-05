@@ -76,3 +76,73 @@ These are **local** results; hosted GitHub Actions for the new commit are separa
 ## Review checklist
 
 Verify the exact before/after contract in [ui-spec.md](ui-spec.md), inspect the five screenshots at full resolution, view the genuine Slot creation on a fresh local PostgreSQL setup, check the new dashboard tests **without skipping the original Auth/Slot suites**, and inspect GitHub Actions conclusions at the exact PR HEAD. Record any new visual approval or rejected proposal explicitly; historical Part E approval is not retroactive approval of this redesign.
+
+## PR #29 peer review P2 — false empty own-list on HTTP GET failure
+
+**Reviewer:** @Chxtamos, two REQUEST_CHANGES reviews on PR #29 at
+`0c947c001c1f585ec244a480b476cd34dc2a843a` (2026-11-05);
+both refer to the **same P2 defect** at `apps/web/src/tutor-slots.tsx`.
+An unsuccessful owner-only GET previously showed the list error **and**
+`AllSlotsAgenda slots={[]}`, falsely claiming there were no Slots.
+
+**Minimal production fix:** in `apps/web/src/tutor-slots.tsx` the
+dashboard distinguishes `loading`, `listError`, **successful empty**
+and **successful nonempty**. While loading, it renders the loading state;
+while GET fails, it renders an error and functional Retry **without**
+the Agenda, empty-state assertion, zero Slot summary or empty calendar
+count. A successful GET clears the error, then renders the real
+`AllSlotsAgenda` and `SlotCalendar` using only committed owner rows.
+Creating a Slot, original Auth/CSRF/ownership behavior, the
+network/timeout reconciliation gate, CSS, theme, and Backend were not
+changed. A previously successful list is also hidden while retry fails
+so stale data is not presented as newly confirmed.
+
+**Test-first evidence** in `e2e/tutor.dashboard.spec.ts`:
+
+1. New seeded Tutor with persisted real Slots: initial GET 503 and a
+   retry GET 503 must show **no** false empty state, no Agenda and no
+   zero count. The following authorized GET 200 must restore all four
+   exact committed IDs to the Agenda.
+2. New Tutor with **no** persisted Slot: initial GET 503 and retry 503
+   must not show empty text; only **after a real authenticated 200 with
+   `data: []`** may the genuine empty Agenda and zero count appear.
+
+Both new E2E scenarios **RED** before changing application code, each
+failing on `ยังไม่มีช่วงเวลาติวที่เปิดไว้` while server GET returned
+503. Once the UI fix was applied, the tests revealed an unrelated test
+harness assumption: React StrictMode can cause more than one initial
+GET. The tests now hold all GETs at 503 until the test explicitly
+switches to 200, rather than counting a fixed initial request number.
+With the production fix and deterministic test harness, targeted
+E2E **2/2 GREEN**.
+
+### Fresh local verification (post-fix)
+
+| Command | Actual outcome |
+|---|---|
+| `npm run db:migrate` | **PASS**; no pending migration |
+| `npm test` | **PASS 25/25** |
+| `npm run typecheck` | **PASS** API and Web |
+| `npm run build` | **PASS** API and Web |
+| `npm run test:e2e -- --reporter=line` | **PASS 34/34**, includes 15 Auth, 7 Slot and **12** Tutor Dashboard cases |
+| `npm exec -- vitest run test/slots.restart.db.test.ts` (from `apps/api`) | **PASS 1/1**, real child API stop/restart and committed Slot persistence |
+| `npm run test:db` (default worker concurrency, **two attempts**) | **FAIL 42/43 on both attempts**: the existing real-process restart test reached its 15s API-start readiness timeout while all ten DB test files were competing for resources; all other DB tests passed |
+| `npm run test:db -w @nuttiew/api -- --maxWorkers=2` | **PASS 43/43**, same ten DB files, both deterministic Race A winner orders and real API restart |
+
+**Local successful-suite count: 25 + 43 + 34 = 102 passing
+automated tests**, with the DB full-suite success explicitly
+qualified by `--maxWorkers=2`. The two default-concurrency
+42/43 failures are **not** relabeled as passes. The isolated restart
+test succeeds, and the two-worker full run succeeds. Heavy parallel
+test startup contention is the leading explanation, but the exact
+underlying cause of the default-worker timeout has **not** been
+independently proven; track it separately if it recurs on hosted CI.
+No test, production security policy or backend behavior was changed to
+work around this observation.
+
+**Hosted GitHub Actions for the forthcoming review-fix SHA: NOT YET
+RUN** at this ledger revision. Only successful checks for the
+previous PR head `0c947c0` are established; verify all three new
+hosted jobs before claiming CI GREEN. PR remains open pending actual
+human re-review. Manual full WCAG signoff and other original downstream
+gates remain as documented above.

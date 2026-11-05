@@ -175,7 +175,7 @@ export function TutorAvailability({
     <section className="dashboard-overview" aria-label="สรุปเวลาติวจริงจากฐานข้อมูล">
       <div className="overview-tile">
         <span className="overview-label">ช่วงเวลาที่เปิดไว้ทั้งหมด</span>
-        <div><strong>{loading ? '—' : slots.length}</strong><span>ช่วงเวลา</span></div>
+        <div><strong>{loading || listError ? '—' : slots.length}</strong><span>ช่วงเวลา</span></div>
         <small>นับจาก Slot ของบัญชีนี้เท่านั้น</small>
       </div>
       <div className="overview-tile overview-help">
@@ -191,7 +191,11 @@ export function TutorAvailability({
     </section>
 
     <div className="dashboard-workspace">
-      <SlotCalendar slots={slots} startDay={calendarStart} onChangeDay={setCalendarStart}/>
+      {loading || listError
+        ? <div className="dashboard-card loading-agenda" role="status">
+          {loading ? 'กำลังโหลดปฏิทินเวลาติว…' : 'ยังไม่สามารถแสดงปฏิทินได้ กรุณาโหลดรายการเวลาติวอีกครั้ง'}
+        </div>
+        : <SlotCalendar slots={slots} startDay={calendarStart} onChangeDay={setCalendarStart}/>}
       <section className="dashboard-card create-card" aria-labelledby="create-slot-heading" id="create-slot">
         <div className="create-card-heading">
           <p className="dashboard-kicker">NEW AVAILABILITY</p>
@@ -229,12 +233,11 @@ export function TutorAvailability({
       </section>
     </div>
 
-    {loading ? <div className="dashboard-card loading-agenda" role="status">กำลังโหลดรายการเวลาติว…</div> : <>
-      {listError && <div className="dashboard-list-error" role="alert">
+    {loading ? <div className="dashboard-card loading-agenda" role="status">กำลังโหลดรายการเวลาติว…</div> : listError
+      ? <div className="dashboard-list-error" role="alert">
         <p className="error">ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่</p>
         <button className="retry-button" type="button" onClick={() => void refresh(true)}>โหลดอีกครั้ง</button>
-      </div>}
-      <AllSlotsAgenda slots={slots}/>
-    </>}
+      </div>
+      : <AllSlotsAgenda slots={slots}/>}
   </TutorDashboardShell>;
 }

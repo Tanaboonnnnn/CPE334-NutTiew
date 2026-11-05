@@ -226,6 +226,79 @@ test.describe('Tutor Calendar Dashboard / reviewed UX-R1…UX-R6 candidate', () 
     await expect(page.getByRole('button', { name: 'เพิ่มเวลาติว' })).toBeEnabled();
   });
 
+  test('UX-R5 initial GET failure and failed retry never claim an empty schedule; successful retry restores actual Slots', async ({ page }) => {
+    let getCount = 0;
+    let permitSuccessfulGet = false;
+    await page.route('**/api/v1/tutor/slots', async route => {
+      if (route.request().method() !== 'GET') { await route.continue(); return; }
+      getCount++;
+      // React StrictMode may start multiple initial GETs. Keep the server
+      // unavailable until the test explicitly authorizes the successful retry.
+      if (!permitSuccessfulGet) {
+        await route.fulfill({
+          status: 503, contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }),
+        });
+      } else {
+        await route.continue(); // Real 200 and all persisted Slot rows from PostgreSQL.
+      }
+    });
+    await signIn(page);
+    const retry = page.getByRole('button', { name: 'โหลดอีกครั้ง' });
+    await expect(retry).toBeVisible();
+    await expect(page.getByText('ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่')).toBeVisible();
+    await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่เปิดไว้')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'รายการ Slot ทั้งหมด' })).toHaveCount(0);
+    await expect(page.getByText('0', { exact: true })).toHaveCount(0);
+    await retry.click(); // Second 503 must also keep the state unknown.
+    await expect(retry).toBeVisible();
+    await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่เปิดไว้')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'รายการ Slot ทั้งหมด' })).toHaveCount(0);
+    permitSuccessfulGet = true;
+    await retry.click(); // Real authorized 200 with committed Slots.
+    await expect(page.locator('#all-slots [data-slot-id]')).toHaveCount(4);
+    for (const id of seedIds) await expect(page.locator('#all-slots [data-slot-id="' + id + '"]')).toHaveCount(1);
+    await expect(page.getByText('ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่')).toHaveCount(0);
+    expect(getCount).toBeGreaterThanOrEqual(3);
+  });
+
+  test('UX-R5 successful empty state is shown only after authenticated GET 200, not after initial 503 or failed retry', async ({ page }) => {
+    const emptyTutor = 'dashboard-empty-retry-' + randomBytes(8).toString('hex') + '@example.test';
+    await pool.query('INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3)',
+      [emptyTutor, await argon2.hash(password), 'Tutor']);
+    let getCount = 0;
+    let permitSuccessfulGet = false;
+    await page.route('**/api/v1/tutor/slots', async route => {
+      if (route.request().method() !== 'GET') { await route.continue(); return; }
+      getCount++;
+      if (!permitSuccessfulGet) {
+        await route.fulfill({
+          status: 503, contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }),
+        });
+      } else {
+        const response = await route.fetch();
+        expect(response.status()).toBe(200);
+        expect((await response.json() as { data: unknown[] }).data).toEqual([]);
+        await route.fulfill({ response });
+      }
+    });
+    await signIn(page, emptyTutor);
+    const retry = page.getByRole('button', { name: 'โหลดอีกครั้ง' });
+    await expect(retry).toBeVisible();
+    await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่เปิดไว้')).toHaveCount(0);
+    await retry.click();
+    await expect(retry).toBeVisible();
+    await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่เปิดไว้')).toHaveCount(0);
+    permitSuccessfulGet = true;
+    await retry.click();
+    await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่เปิดไว้')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'รายการ Slot ทั้งหมด' })).toBeVisible();
+    await expect(page.getByText('0', { exact: true })).toBeVisible();
+    await expect(retry).toHaveCount(0);
+    expect(getCount).toBeGreaterThanOrEqual(3);
+  });
+
   test('UX-R5 uncertain logout preserves trusted Tutor identity and shows a visible alert', async ({ page }) => {
     await signIn(page);
     await expect(page.locator('#all-slots [data-slot-id]')).toHaveCount(4);
