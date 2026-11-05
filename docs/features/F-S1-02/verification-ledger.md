@@ -242,3 +242,47 @@ The **next pushed commit's hosted CI**, not these local reruns, determines
 whether the correction is accepted on Linux. Preserve the historical
 21/22 hosted failure as evidence; do not overwrite it with a claim that
 run #42022093365 succeeded.
+
+### GitHub-hosted second follow-up CI: shared Auth test pool contamination
+
+Run [#42023290317](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42023290317)
+at `989dead99f9ff752289db1e621f466aa68e4f2db` finished
+**FAILURE (2/3 jobs PASS)**: Unit/TypeScript/Build **SUCCESS**,
+Microsoft Edge E2E **SUCCESS 22/22**, but PostgreSQL Integration
+**FAILURE 39/43**. All four failed assertions were in existing
+`apps/api/test/auth.extended.db.test.ts`, with a real login unexpectedly
+returning 503 rather than 200.
+
+**Root cause found in the pre-existing AUTH-12 *test harness*, not the
+Auth application code:** the test deliberately throws when a SQL
+`INSERT INTO "Session"` executes, by replacing `client.query` on a real
+`pg.PoolClient` obtained from the **shared** test `pool`. It returned the
+monkey-patched client to that common pool **without restoring the method**.
+Other unrelated Auth tests could then borrow that same modified client,
+silently still throw on valid Session inserts, and observe spurious 503
+responses; this accounts for the previously intermittent local AUTH-19
+and hosted multiple-Auth-test failures. The observed failure sequence in
+GitHub's log followed the simulated-Session-insert case.
+
+**Test-harness-only correction:** `AUTH-12 database failure on session
+INSERT returns 503 with no cookie` now uses its **own independent
+`createPool()`** for fault injection, and `finally` closes that pool.
+The test still requires the intended simulated failure response
+(503 / no cookie) and **also asserts a subsequent normal authenticated
+login succeeds (200)** using the unmodified shared pool. No production
+Auth code, security limits, database migration, UI logic or CSS was
+changed to mask the problem.
+
+Local verification after isolating the injected failure:
+
+- `npx vitest run test/auth.extended.db.test.ts`: **16/16 PASS**.
+- `npm run typecheck` in `apps/api`: **PASS**.
+- `npm run test:db` in `apps/api`: **43/43 PASS** across all
+  ten actual PostgreSQL test files, including both observed-lock Race A
+  ordering cases, direct SQL constraints and API restart.
+- No test is skipped, removed or weakened.
+
+Both GitHub runs with **failure** are retained in this ledger.
+**Next-head GitHub Actions CI remains the decisive verification**;
+do not mark this issue approved or merged until the next checks and
+human re-review finish.
