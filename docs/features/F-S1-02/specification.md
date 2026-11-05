@@ -59,7 +59,25 @@ Use half-open intervals `[start,end)`: overlap iff `a.start < b.end AND b.start 
 
 **SLOT-I1:** exactly 60m and immutable identity/owner/interval, enforced against ordinary direct SQL by the Sprint 1 trigger (all UPDATE/DELETE/TRUNCATE rejected). **I2:** no overlapping currently Offered Slots per Tutor, even under Race A. **I3:** active Tutor-only identity from Session. **I4:** strictly future by authoritative post-lock DB time; no Q05 Booking cutoff on Slot creation. **I5:** no partial writes/false success; restart durability. **I6:** UTC storage and Bangkok display. **I7:** no Withdrawn insertion/transition in Sprint 1; later approved Sprint 2 transition is one-way `Offered -> Withdrawn`, never `Withdrawn -> Offered` on an old ID, with separately verified migration and tests. Privileged DDL/superuser tampering is outside the ordinary DML invariant and must be controlled by DB privileges.
 
-## AC and verification (all planned, not executed)
+## Original Slot AC mapping — historical Part E verification plan
+
+The AC-to-VC mapping below was written as the **original Slot Part E test
+plan**, before the Slot feature was implemented. **It is not a statement
+that these tests remain unexecuted.** The merged Slot Part F work (PR #28)
+already has recorded real API/PostgreSQL/browser executions, including
+failures, reruns, exact commands and remaining limitations in the
+[Slot Part F verification ledger](verification-ledger.md). Consult that
+ledger and the relevant GitHub CI run for actual outcomes at their
+respective commit SHAs; this historical table is a traceability map,
+not a live PASS/FAIL dashboard.
+
+The **new Tutor Calendar Dashboard amendment** and its
+`UX-R1…UX-R6`, `UX-R5-GET-01/02` and `UX-R5-LOGOUT-01/02` acceptance
+checks are separate **planned Part E requirements** in
+[the amended STS](tests.md). This docs-only PR neither implements nor
+executes those new Dashboard/Logout checks; subsequent Part F code and
+independent peer review remain necessary. Human WCAG 2.2 AA signoff
+is likewise **NOT RUN**.
 
 | AC | Expected | Test |
 |---|---|---|
