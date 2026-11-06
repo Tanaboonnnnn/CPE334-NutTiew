@@ -149,6 +149,9 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
+      // Login has already replaced the shared cookie. Suspend other tabs
+      // before /me verification, including when /me fails or times out.
+      notifyOtherTabs();
       // The authenticated principal and opaque session binding must be read
       // together after the cookie is committed. Never trust login-form state.
       const verified = await request('me');
@@ -163,7 +166,6 @@ function App() {
         setTutorPhase('active');
         setUser(verified.user as User);
         setPassword('');
-        notifyOtherTabs();
       }
     } catch (cause) {
       if (version.current === current) {

@@ -501,6 +501,56 @@ test.describe('Tutor Calendar Dashboard / reviewed UX-R1…UX-R6 candidate', () 
     await expect(page.getByRole('button', { name: 'เพิ่มเวลาติว' })).toHaveCount(0);
   });
 
+  test('UX-R5-LOGOUT-01: T2 login with failed /me hides T1 private data in the other tab', async ({ page, context }) => {
+    const t2Email = 'dashboard-login-failed-me-' + randomBytes(8).toString('hex') + '@example.test';
+    const created = await pool.query<{ id: string }>(
+      'INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3) RETURNING "id"',
+      [t2Email, await argon2.hash(password), 'Tutor'],
+    );
+    const t2Id = created.rows[0].id;
+    const other = await context.newPage();
+    try {
+      // Open T2's login form before T1 logs in, so both tabs share the same
+      // cookie without an earlier Logout event hiding T1's private view.
+      await other.goto('/');
+      await expect(other.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+      await signIn(page);
+      await expect(page.locator('#all-slots [data-slot-id]')).toHaveCount(4);
+      await expect(page.getByText(tutorId.replaceAll('-', '').slice(-8), { exact: true })).toBeVisible();
+
+      // The real login must replace the shared HttpOnly cookie; only T2's
+      // subsequent UI /auth/me is simulated as unavailable.
+      await other.route('**/api/v1/auth/me', route => route.fulfill({
+        status: 503, contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }),
+      }));
+      await other.getByLabel('อีเมล').fill(t2Email);
+      await other.getByLabel('รหัสผ่าน').fill(password);
+      const login = other.waitForResponse(response =>
+        response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
+      );
+      const failedMe = other.waitForResponse(response =>
+        response.url().endsWith('/api/v1/auth/me') && response.request().method() === 'GET',
+      );
+      await other.getByRole('button', { name: 'เข้าสู่ระบบ' }).click();
+      const loginResponse = await login;
+      expect(loginResponse.status()).toBe(200);
+      expect((await loginResponse.json() as { user: { id: string } }).user.id).toBe(t2Id);
+      expect((await failedMe).status()).toBe(503);
+      const actualSession = await other.request.get('/api/v1/auth/me');
+      expect(actualSession.status()).toBe(200);
+      expect((await actualSession.json() as { user: { id: string } }).user.id).toBe(t2Id);
+
+      // Tab A receives no private-data GET here: hiding must be driven by the
+      // cross-tab login signal even though Tab B cannot verify /auth/me.
+      await expect(page.locator('[data-slot-id]')).toHaveCount(0);
+      await expect(page.getByText(tutorId.replaceAll('-', '').slice(-8), { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'ตรวจสอบเซสชัน' })).toBeVisible();
+    } finally {
+      await other.close();
+    }
+  });
+
   test('UX-R5-LOGOUT-02: two tabs must not render T2 Slots beneath a held T1 session recheck', async ({ page, context }) => {
     const t2Email = 'dashboard-switch-' + randomBytes(8).toString('hex') + '@example.test';
     const newUser = await pool.query<{ id: string }>(

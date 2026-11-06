@@ -179,3 +179,36 @@ hashes**. No stock/demo appointment objects were inserted.
   **endpoint**, Slot DTO owner fields or DB schema was invented here.
 - **Peer approval and merge of this Part F code PR: PENDING** until
   @Chxtamos independently reviews the actual new PR HEAD.
+
+## Follow-up P2 — successful login must notify other tabs before /me verification (2026-11-06)
+
+Reviewer @Chxtamos accepted and resolved the prior two P2 findings but identified a
+remaining login-notification race in `apps/web/src/main.tsx`: a successful
+login POST replaces the browser's shared HttpOnly cookie, while the old client
+only notified other tabs after the subsequent `/auth/me` succeeded.
+If `/auth/me` failed, an older Tutor tab could keep displaying stale private
+data indefinitely without another network request.
+
+- **RED (old code, real Microsoft Edge):** the new
+  `UX-R5-LOGOUT-01: T2 login with failed /me hides T1 private data in the
+  other tab` test failed: Tab A still rendered **4 private T1 Slots** after
+  Tab B's real authenticated T2 login returned 200 and its intercepted
+  follow-up UI `/auth/me` returned HTTP 503. The test also verified via
+  unmocked `other.request.get('/api/v1/auth/me')` that the shared session
+  actually belonged to T2.
+- **GREEN:** moved the existing `notifyOtherTabs()` invocation immediately
+  after successful `request('login')` and before awaiting `request('me')`.
+  The existing per-tab session guard, response-binding verification and
+  fail-closed recovery remain unchanged. The exact new test passed **1/1**.
+- **Full local regression:** `npm test` **25/25 PASS**;
+  `npm run typecheck` **PASS**; `npm run build` **PASS**;
+  `npm run test:db -w @nuttiew/api -- --maxWorkers=2` **43/43 PASS**;
+  `npm run test:e2e -- --reporter=line` **47/47 PASS**, including all
+  existing Auth, Slot, Dashboard and the new real two-tab regression.
+  **115/115 tests across three suites**; `git diff --check` **PASS**.
+- **Scope:** only the login notification ordering in `apps/web/src/main.tsx`,
+  one new Playwright test in `e2e/tutor.dashboard.spec.ts`, and this
+  verification note. No API, DB, contracts or unrelated features changed.
+- **Separate gates:** hosted CI of the eventual new HEAD, peer re-review,
+  manual WCAG 2.2 AA signoff and any release/merge decision must be checked
+  separately; none is implied by local tests.
