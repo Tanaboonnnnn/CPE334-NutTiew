@@ -9,7 +9,7 @@
 - Run one migration test from an empty database and another from the exact `sprint1` migration chain. Do not use a manually approximated schema.
 - Use synthetic Customers and Tutors only. Create actual committed Slot and Booking rows satisfying all FKs/constraints.
 - For concurrency tests, use separate PostgreSQL connections and explicit synchronization barriers. `Promise.all` without a controlled interleaving is not sufficient. Inspect the final committed rows after both transactions settle.
-- Tests that use a Cancelled Booking must create an isolated `Cancelled` fixture with a direct INSERT inside the disposable database. Do not use UPDATE to create or mutate a fixture: the Sprint 1 Booking trigger rejects every UPDATE, including test-only direct SQL.
+- Tests that use a Cancelled Booking must create an isolated `Cancelled` fixture with a direct INSERT inside the disposable database. Do not use UPDATE or DELETE to create or mutate a fixture, and never TRUNCATE to reset it: the Sprint 1 Booking guards reject these operations. UPDATE/DELETE/TRUNCATE appear only as explicit negative-test actions in BDF-20 and BDF-24/25.
 - Verify that the application runtime role is distinct from the migration/table-owner role and is not owner/superuser; it has no UPDATE/DELETE/TRUNCATE or DDL/trigger-management privilege and cannot set `session_replication_role` to bypass triggers.
 - No test case below is a PASS in this Part E PR.
 
@@ -62,7 +62,7 @@ For concurrent cases, do not require one exact error code when PostgreSQL may re
 | Behavior | Owner / evidence |
 |---|---|
 | Customer role, active account and Session-derived `customerId` | #16 API/transaction tests; the FK alone does not enforce role. |
-| Booking Offered-state, Q05 database guard and Sprint 1 UPDATE prohibition (`BEFORE INSERT OR UPDATE`, 60:00/59:59, Slot-lock wait, `Cancelled → Booked` rejection) | #33 Part F migration and BDF-20..22; all are pre-merge foundation gates and direct-SQL tests must prove the trigger independently of the API. |
+| Booking Offered-state, Q05 database guard and Sprint 1 row-level UPDATE/DELETE prohibition (`BEFORE INSERT OR UPDATE OR DELETE`, 60:00/59:59, Slot-lock wait, `Cancelled → Booked` rejection) | #33 Part F migration and BDF-20..22; all are pre-merge foundation gates and direct-SQL tests must prove the trigger independently of the API. |
 | Booking DELETE/TRUNCATE guard and application runtime role boundary | #33 Part F migration/deployment contract and BDF-24..26; pre-merge gates prove actual runtime privilege denial, row/statement trigger rejection and committed occupancy preservation. |
 | Application lock order and no-post-guard-contention / full-transaction retry proof | #16 Part E/F and BDF-23; run only after #33 Part F is merged and the schema SHA is recorded. BDF-23 is not a prerequisite for #33 migration merge. |
 | `Booking.id` immutability | Application-level invariant only (BDF-D01): #16 generates the ID server-side and accepts no ID replacement. Any future update/reschedule path must prove it preserves the original ID; no DB immutability guard or SQL negative test is claimed by #33. |
