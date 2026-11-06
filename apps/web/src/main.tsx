@@ -20,7 +20,11 @@ async function request(path: string, options?: RequestInit) {
       const payload = await response.json().catch(() => ({}));
       throw new Error(payload?.error?.code ?? 'HTTP_' + response.status);
     }
-    return response.status === 204 ? null : response.json();
+    if (response.status === 204) return null;
+    const body = await response.json();
+    return path === 'me'
+      ? { ...body, sessionBinding: response.headers.get('X-NutTiew-Session-Binding') }
+      : body;
   } finally {
     clearTimeout(timeout);
   }
@@ -30,7 +34,7 @@ async function request(path: string, options?: RequestInit) {
  * A resumed Tutor must have a newly verified Session AND a fresh full
  * owner-only Slot GET before any of the private dashboard is rendered.
  */
-async function verifyOwnList(): Promise<void> {
+async function verifyOwnList(expectedBinding: string): Promise<void> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -42,6 +46,9 @@ async function verifyOwnList(): Promise<void> {
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
       throw new Error(body?.error?.code ?? 'HTTP_' + response.status);
+    }
+    if (response.headers.get('X-NutTiew-Session-Binding') !== expectedBinding) {
+      throw new Error('SESSION_MISMATCH');
     }
     const body = await response.json();
     if (!Array.isArray(body?.data)) throw new Error('INVALID_SLOT_LIST');
@@ -57,6 +64,7 @@ function isUnauthenticated(error: unknown): boolean {
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [sessionBinding, setSessionBinding] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -72,18 +80,51 @@ function App() {
   const emailRef = useRef<HTMLInputElement>(null);
   const guardHeadingRef = useRef<HTMLHeadingElement>(null);
 
+  // A same-origin login/logout in another tab may replace/revoke the shared
+  // HttpOnly cookie. Signal the other UI to hide private data immediately.
+  const notifyOtherTabs = () => {
+    try { window.localStorage.setItem('nuttiew-auth-changed', crypto.randomUUID()); } catch { /* Private mode: response binding still fails closed. */ }
+  };
+
+  useEffect(() => {
+    const onAuthChange = (event: StorageEvent) => {
+      if (event.key !== 'nuttiew-auth-changed' || !user) return;
+      ++version.current; // Ignore pending /me or own-list callbacks.
+      tutorActionsAllowed.current = false;
+      busyRef.current = false;
+      setBusy(false);
+      setSessionBinding(null);
+      if (user.role === 'Tutor') {
+        suspendedTutorId.current = user.id; // Hidden until explicit same-session verification.
+        setTutorPhase('logout-uncertain');
+        setError('มีการเปลี่ยนเซสชันจากแท็บอื่น กรุณาตรวจสอบเซสชันก่อนใช้งานต่อ');
+      } else {
+        setUser(null); // Never keep a stale Customer identity visible.
+      }
+    };
+    window.addEventListener('storage', onAuthChange);
+    return () => window.removeEventListener('storage', onAuthChange);
+  }, [user]);
+
   useEffect(() => {
     let active = true;
     const current = ++version.current;
     request('me')
       .then(result => {
         if (active && version.current === current) {
+          if (result.user?.role === 'Tutor' && !result.sessionBinding) {
+            throw new Error('SESSION_BINDING_MISSING');
+          }
+          setSessionBinding(result.sessionBinding ?? null);
           setUser(result.user as User);
           tutorActionsAllowed.current = true;
         }
       })
       .catch(() => {
-        if (active && version.current === current) setUser(null);
+        if (active && version.current === current) {
+          setSessionBinding(null);
+          setUser(null);
+        }
       })
       .finally(() => {
         if (active && version.current === current) setLoading(false);
@@ -108,16 +149,26 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
+      // The authenticated principal and opaque session binding must be read
+      // together after the cookie is committed. Never trust login-form state.
+      const verified = await request('me');
+      if (verified.user?.id !== result.user?.id || verified.user?.role !== result.user?.role ||
+          (verified.user?.role === 'Tutor' && !verified.sessionBinding)) {
+        throw new Error('IDENTITY_CHANGED');
+      }
       if (version.current === current) {
         suspendedTutorId.current = null;
         tutorActionsAllowed.current = true;
+        setSessionBinding(verified.sessionBinding ?? null);
         setTutorPhase('active');
-        setUser(result.user as User);
+        setUser(verified.user as User);
         setPassword('');
+        notifyOtherTabs();
       }
     } catch (cause) {
       if (version.current === current) {
         setUser(null);
+        setSessionBinding(null);
         setError(
           cause instanceof Error && cause.message === 'RATE_LIMITED'
             ? 'คำขอเข้าสู่ระบบมากเกินไป โปรดลองอีกครั้งภายหลัง'
@@ -138,6 +189,7 @@ function App() {
     // Synchronous mutation guard: even a previously pending CSRF fetch
     // cannot initiate a new protected Slot POST after Logout starts.
     tutorActionsAllowed.current = false;
+    notifyOtherTabs();
     busyRef.current = true;
     const current = ++version.current;
     const tutorLogout = user?.role === 'Tutor';
@@ -155,13 +207,16 @@ function App() {
       });
       if (version.current === current) {
         suspendedTutorId.current = null;
+        setSessionBinding(null);
         setUser(null);
         setTutorPhase('active');
+        notifyOtherTabs();
       }
     } catch (cause) {
       if (version.current === current) {
         if (isUnauthenticated(cause)) {
           suspendedTutorId.current = null;
+          setSessionBinding(null);
           setUser(null);
           setTutorPhase('active');
         } else {
@@ -189,10 +244,12 @@ function App() {
       if (!currentUser || currentUser.role !== 'Tutor' || currentUser.id !== expectedTutor) {
         throw new Error('IDENTITY_CHANGED');
       }
-      await verifyOwnList();
+      if (!result.sessionBinding) throw new Error('SESSION_BINDING_MISSING');
+      await verifyOwnList(result.sessionBinding);
       if (version.current === current) {
         suspendedTutorId.current = null;
         tutorActionsAllowed.current = true;
+        setSessionBinding(result.sessionBinding);
         setUser(currentUser);
         setTutorPhase('active'); // fresh TutorAvailability remounts and does its own GET
         setError('');
@@ -201,6 +258,7 @@ function App() {
       if (version.current === current) {
         if (isUnauthenticated(cause)) {
           suspendedTutorId.current = null;
+          setSessionBinding(null);
           setUser(null);
           setTutorPhase('active');
           setError('');
@@ -223,6 +281,7 @@ function App() {
     ++version.current;
     suspendedTutorId.current = null;
     tutorActionsAllowed.current = false;
+    setSessionBinding(null);
     setUser(null);
     setTutorPhase('active');
     setLoading(false);
@@ -245,10 +304,12 @@ function App() {
         </section>
       </main>;
     }
+    if (!sessionBinding) return null; // No private surface without a server-issued binding.
     return <main className="dashboard-root">
       <TutorAvailability
-        key={user.id}
+        key={sessionBinding}
         accountId={user.id}
+        sessionBinding={sessionBinding}
         onLogout={logout}
         logoutBusy={busy}
         logoutError={error}

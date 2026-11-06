@@ -22,6 +22,7 @@ main.dashboard-root {
   --tutor-muted: #58697f;
   --tutor-border: #e0e6ef;
   --tutor-focus: #aa4519;
+  --tutor-control-border: #66778a; /* 4.59:1 on white; >4:1 on hover #eff3f9 */
   --tutor-radius: 13px;
   display: grid;
   grid-template-columns: 245px minmax(0, 1fr);
@@ -167,10 +168,13 @@ main.dashboard-root {
 .calendar-toolbar {display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:21px 23px 16px}
 .calendar-hint {margin:6px 0 0;font-size:.76rem;color:var(--tutor-muted)}
 .calendar-actions {display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.tutor-app .calendar-step {width:44px;min-width:44px;padding:0;background:#fff;border-color:#d6deea;border-radius:8px;color:#223653;font-size:1.9rem;font-weight:400;line-height:1}
+.tutor-app .calendar-step {width:44px;min-width:44px;padding:0;background:#fff;border-color:var(--tutor-control-border);border-radius:8px;color:#223653;font-size:1.9rem;font-weight:400;line-height:1}
 .tutor-app .calendar-step:hover,.tutor-app .calendar-today:hover {background:#eff3f9}
-.tutor-app .calendar-today {padding:8px 11px;background:#fff;border-color:#d6deea;border-radius:8px;color:#29415f}
-.tutor-app .calendar-date-picker {width:130px;min-height:44px;padding:8px;color:#29415f;background:#fff;border:1px solid #c7d4e4;border-radius:8px;font-size:.78rem}
+.tutor-app .calendar-today {padding:8px 11px;background:#fff;border-color:var(--tutor-control-border);border-radius:8px;color:#29415f}
+.tutor-app .calendar-date-picker {width:130px;min-height:44px;padding:8px;color:#29415f;background:#fff;border:1px solid var(--tutor-control-border);border-radius:8px;font-size:.78rem}
+.tutor-app .calendar-step:disabled,.tutor-app .calendar-today:disabled {
+  opacity:1;background:#f5f6fa;color:#53657d;border-color:var(--tutor-control-border);cursor:not-allowed
+}
 .calendar-window-summary {
   display:flex;align-items:center;gap:9px;padding:12px 23px;
   background:#f8fafc;border-top:1px solid #eef1f6;border-bottom:1px solid #e6ebf2;
@@ -219,7 +223,7 @@ main.dashboard-root {
 .tutor-app .slot-fields {display:grid;grid-template-columns:minmax(0,1fr);gap:1px}
 .tutor-app label {font-size:.84rem;font-weight:700;color:#263a53;display:block;margin:13px 0 8px}
 .tutor-app .slot-fields input {
-  display:block;width:100%;min-height:46px;border:1px solid #b8c8d9;border-radius:9px;
+  display:block;width:100%;min-height:46px;border:1px solid var(--tutor-control-border);border-radius:9px;
   padding:9px 12px;background:#fff;color:#24374f;font-size:.94rem;line-height:1.4;
 }
 .tutor-app .slot-fields input:focus-visible {outline-color:var(--tutor-focus)}
@@ -314,7 +318,9 @@ main.dashboard-root {
 .loading-agenda {margin-top:19px;padding:25px;color:#536982}
 .dashboard-list-error {background:#fff;border:1px solid #e5c5c5;border-radius:11px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:13px 20px;margin-top:19px}
 .dashboard-list-error .error {margin:0}
-.tutor-app .retry-button {min-height:44px;padding:9px 13px;font-size:.82rem;background:#fff;border:1px solid #b7c3d1;border-radius:8px;color:#263e5a}
+.tutor-app .retry-button {min-height:44px;padding:9px 13px;font-size:.82rem;background:#fff;border:1px solid var(--tutor-control-border);border-radius:8px;color:#263e5a}
+.tutor-app .retry-button:hover {background:#eff3f9}
+.tutor-app .retry-button:disabled {opacity:1;background:#f5f6fa;color:#53657d;cursor:not-allowed}
 .dashboard-footer {display:flex;justify-content:space-between;gap:15px;padding:25px 2px 4px;color:#617289;font-size:.72rem}
 
 @media (max-width:1270px) {

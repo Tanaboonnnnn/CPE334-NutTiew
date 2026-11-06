@@ -14,7 +14,9 @@ const bangkokTime = (instant: Date) =>
   new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(instant);
 const bangkokDayKey = (instant: Date) => new Date(instant.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
 
-async function apiJson<T>(path: string, init: RequestInit = {}, externalSignal?: AbortSignal): Promise<T> {
+async function apiJson<T>(
+  path: string, init: RequestInit = {}, externalSignal?: AbortSignal, expectedBinding?: string,
+): Promise<T> {
   const controller = new AbortController();
   const stop = () => controller.abort();
   if (externalSignal?.aborted) stop();
@@ -29,6 +31,9 @@ async function apiJson<T>(path: string, init: RequestInit = {}, externalSignal?:
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.error?.code ?? 'HTTP_' + response.status);
+    if (expectedBinding && response.headers.get('X-NutTiew-Session-Binding') !== expectedBinding) {
+      throw new Error('SESSION_MISMATCH');
+    }
     return payload as T;
   } finally {
     window.clearTimeout(timeout);
@@ -56,14 +61,18 @@ function userMessage(error: unknown): string {
   return 'ไม่สามารถดำเนินการได้ โปรดลองอีกครั้ง';
 }
 function accessExpired(error: unknown) {
-  return error instanceof Error && (error.message === 'UNAUTHENTICATED' || error.message === 'FORBIDDEN');
+  return error instanceof Error && (
+    error.message === 'UNAUTHENTICATED' || error.message === 'FORBIDDEN' ||
+    error.message === 'SESSION_MISMATCH'
+  );
 }
 
 export function TutorAvailability({
-  onUnauthorized, accountId, onLogout, logoutBusy, logoutError, canMutate,
+  onUnauthorized, accountId, sessionBinding, onLogout, logoutBusy, logoutError, canMutate,
 }: {
   onUnauthorized: () => void;
   accountId: string;
+  sessionBinding: string;
   onLogout: () => void | Promise<void>;
   logoutBusy: boolean;
   logoutError: string;
@@ -93,7 +102,9 @@ export function TutorAvailability({
     pendingGet.current = controller;
     if (showLoading) setLoading(true);
     try {
-      const result = await apiJson<SlotList>('/api/v1/tutor/slots', {}, controller.signal);
+      const result = await apiJson<SlotList>(
+        '/api/v1/tutor/slots', {}, controller.signal, sessionBinding,
+      );
       if (version.current === current) {
         setSlots(result.data);
         setListError('');
@@ -143,7 +154,10 @@ export function TutorAvailability({
       if (!canMutate() || controller.signal.aborted) return;
       await apiJson('/api/v1/tutor/slots', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        headers: {
+          'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken,
+          'X-NutTiew-Expected-Session-Binding': sessionBinding,
+        },
         body: JSON.stringify({ startsAt: preview.toISOString() }),
       }, controller.signal);
       if (!controller.signal.aborted) {

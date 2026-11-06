@@ -46,6 +46,37 @@ async function signIn(page: Page, email = tutor) {
   await expect(page.getByText('เข้าสู่ระบบแล้ว')).toBeVisible();
 }
 
+/** Compare actual computed sRGB colors; control edges need >=3:1 against the surface. */
+function contrastFromCss(a: string, b: string): number {
+  const luminance = (css: string): number => {
+    const parts = /^#[0-9a-f]{6}$/i.test(css)
+      ? [1, 3, 5].map(index => parseInt(css.slice(index, index + 2), 16))
+      : css.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+    if (!parts || parts.length !== 3) throw new Error('Unrecognized computed color: ' + css);
+    const [r, g, blue] = parts.map(v => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * blue;
+  };
+  const x = luminance(a);
+  const y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+async function computedControl(page: Page, selector: string) {
+  return page.locator(selector).first().evaluate(element => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      border: style.borderTopColor,
+      opacity: style.opacity,
+      outline: style.outlineColor,
+      outlineWidth: style.outlineWidth,
+    };
+  });
+}
+
 test.describe('Tutor Calendar Dashboard / reviewed UX-R1…UX-R6 candidate', () => {
   test.use({ timezoneId: 'America/Los_Angeles' });
 
@@ -468,6 +499,201 @@ test.describe('Tutor Calendar Dashboard / reviewed UX-R1…UX-R6 candidate', () 
     await expect(page.locator('[data-slot-id]')).toHaveCount(0);
     await expect(page.getByText(tutorId.replaceAll('-', '').slice(-8))).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'เพิ่มเวลาติว' })).toHaveCount(0);
+  });
+
+  test('UX-R5-LOGOUT-02: two tabs must not render T2 Slots beneath a held T1 session recheck', async ({ page, context }) => {
+    const t2Email = 'dashboard-switch-' + randomBytes(8).toString('hex') + '@example.test';
+    const newUser = await pool.query<{ id: string }>(
+      'INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3) RETURNING "id"',
+      [t2Email, await argon2.hash(password), 'Tutor'],
+    );
+    const t2Id = newUser.rows[0].id;
+    const t2Start = dateTime(day(81), '10:41');
+    const inserted = await pool.query<{ id: string }>(
+      'INSERT INTO "Slot"("tutorId","startsAt","endsAt") VALUES($1,$2,$3) RETURNING "id"',
+      [t2Id, t2Start, new Date(t2Start.getTime() + 3_600_000)],
+    );
+    const t2SlotId = inserted.rows[0].id;
+
+    await signIn(page);
+    await expect(page.locator('#all-slots [data-slot-id]')).toHaveCount(4);
+    await page.route('**/api/v1/auth/logout', route => route.fulfill({
+      status: 503, contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }),
+    }));
+    await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('button', { name: 'ตรวจสอบเซสชัน' })).toBeVisible();
+
+    let releaseT1!: () => void;
+    let markT1Me!: () => void;
+    const heldResponse = new Promise<void>(resolve => { releaseT1 = resolve; });
+    const receivedT1Me = new Promise<void>(resolve => { markT1Me = resolve; });
+    let held = false;
+    await page.route('**/api/v1/auth/me', async route => {
+      const response = await route.fetch();
+      if (!held && response.status() === 200) {
+        held = true;
+        const body = await response.json() as { user: { id: string } };
+        expect(body.user.id).toBe(tutorId); // Genuine T1 Session captured before T2 login.
+        markT1Me();
+        await heldResponse; // Return T1 /me only after another tab has replaced the cookie.
+      }
+      await route.fulfill({ response });
+    });
+
+    const other = await context.newPage();
+    try {
+      await page.getByRole('button', { name: 'ตรวจสอบเซสชัน' }).click();
+      await receivedT1Me;
+      await other.goto('/');
+      // A login from a second tab changes the real same-origin HttpOnly cookie;
+      // no fake identity headers or fabricated Slot DTOs are involved.
+      const loginStatus = await other.evaluate(async ({ email, password: pass }) => {
+        const res = await fetch('/api/v1/auth/login', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: pass }),
+        });
+        return res.status;
+      }, { email: t2Email, password });
+      expect(loginStatus).toBe(200);
+      expect((await other.request.get('/api/v1/auth/me')).status()).toBe(200);
+      const t2List = await other.request.get('/api/v1/tutor/slots');
+      expect(t2List.status()).toBe(200);
+      expect((await t2List.json() as { data: { id: string }[] }).data.map(x => x.id)).toContain(t2SlotId);
+      releaseT1();
+      await expect(page.getByRole('button', { name: 'ตรวจสอบเซสชัน' })).toBeVisible();
+      await expect(page.locator('[data-slot-id]')).toHaveCount(0);
+      await expect(page.getByText(tutorId.replaceAll('-', '').slice(-8), { exact: true })).toHaveCount(0);
+      await expect(page.locator('[data-slot-id="' + t2SlotId + '"]')).toHaveCount(0);
+    } finally {
+      releaseT1();
+      await other.close();
+    }
+  });
+
+  test('UX-R5-LOGOUT-02: cross-tab cookie replacement cannot create a Slot for the wrong Tutor', async ({ page, context }) => {
+    const t2Email = 'dashboard-post-switch-' + randomBytes(8).toString('hex') + '@example.test';
+    const user = await pool.query<{ id: string }>(
+      'INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3) RETURNING "id"',
+      [t2Email, await argon2.hash(password), 'Tutor'],
+    );
+    const t2Id = user.rows[0].id;
+    await signIn(page);
+    await expect(page.locator('#all-slots [data-slot-id]')).toHaveCount(4);
+    await page.getByLabel('วันที่').fill(day(86));
+    await page.getByLabel('เวลาเริ่ม').fill('11:47');
+    const second = await context.newPage();
+    try {
+      await second.goto('/');
+      const status = await second.evaluate(async ({ email, password: pass }) => {
+        const response = await fetch('/api/v1/auth/login', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: pass }),
+        });
+        return response.status;
+      }, { email: t2Email, password });
+      expect(status).toBe(200);
+      const post = page.waitForResponse(response =>
+        response.url().includes('/api/v1/tutor/slots') && response.request().method() === 'POST',
+      );
+      await page.getByRole('button', { name: 'เพิ่มเวลาติว' }).click();
+      expect((await post).status()).toBe(403);
+      await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+      const persisted = await pool.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM "Slot" WHERE "tutorId"=$1', [t2Id],
+      );
+      expect(persisted.rows[0].n).toBe(0);
+    } finally {
+      await second.close();
+    }
+  });
+
+  test('UX-R5-LOGOUT-01: Logout starting in another tab immediately hides private Tutor data', async ({ page, context }) => {
+    await signIn(page);
+    await expect(page.locator('#all-slots [data-slot-id]')).toHaveCount(4);
+    const other = await context.newPage();
+    let releaseCsrf!: () => void;
+    const pending = new Promise<void>(resolve => { releaseCsrf = resolve; });
+    let csrfStarted!: () => void;
+    const began = new Promise<void>(resolve => { csrfStarted = resolve; });
+    try {
+      await other.goto('/');
+      await expect(other.locator('#all-slots [data-slot-id]')).toHaveCount(4);
+      await other.route('**/api/v1/auth/csrf', async route => {
+        csrfStarted();
+        await pending;
+        await route.continue().catch(() => {});
+      });
+      await other.getByRole('button', { name: 'ออกจากระบบ' }).click();
+      await began; // Session not revoked; the other tab must hide at Logout start.
+      await expect(page.locator('[data-slot-id]')).toHaveCount(0);
+      await expect(page.getByText(tutorId.replaceAll('-', '').slice(-8), { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'ตรวจสอบเซสชัน' })).toBeVisible();
+      releaseCsrf();
+      await expect(other.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+      await expect(page.locator('[data-slot-id]')).toHaveCount(0);
+    } finally {
+      releaseCsrf();
+      await other.close();
+    }
+  });
+
+  test('UX-R4 non-text control boundaries satisfy 3:1 across focus, hover, disabled and error states', async ({ page }) => {
+    await signIn(page);
+    await expect(page.locator('#all-slots [data-slot-id]')).toHaveCount(4);
+    const selectors = [
+      '.slot-fields input[type="date"]',
+      '.slot-fields input[type="time"]',
+      '.calendar-step',
+      '.calendar-today',
+      '.calendar-date-picker',
+    ];
+    for (const selector of selectors) {
+      const element = page.locator(selector).first();
+      await expect(element).toBeVisible();
+      const original = await computedControl(page, selector);
+      expect(contrastFromCss(original.border, original.background), selector + ' border').toBeGreaterThanOrEqual(3);
+      await element.hover();
+      const hovered = await computedControl(page, selector);
+      expect(contrastFromCss(hovered.border, hovered.background), selector + ' hover border').toBeGreaterThanOrEqual(3);
+      await page.keyboard.press('Tab');
+      await element.focus();
+      const focused = await computedControl(page, selector);
+      expect(focused.outlineWidth, selector + ' focus indicator').toBe('3px');
+      expect(contrastFromCss(focused.outline, '#ffffff'), selector + ' focus versus white').toBeGreaterThanOrEqual(3);
+    }
+    const invalidDate = page.locator('.slot-fields input[type="date"]');
+    await invalidDate.evaluate(node => node.setAttribute('aria-invalid', 'true'));
+    const invalid = await computedControl(page, '.slot-fields input[type="date"]');
+    expect(contrastFromCss(invalid.border, invalid.background), 'invalid date input border').toBeGreaterThanOrEqual(3);
+
+    const step = page.locator('.calendar-step').first();
+    await step.evaluate(node => { (node as HTMLButtonElement).disabled = true; });
+    const disabled = await computedControl(page, '.calendar-step');
+    expect(disabled.opacity, 'disabled calendar control remains distinguishable').toBe('1');
+    expect(contrastFromCss(disabled.border, disabled.background)).toBeGreaterThanOrEqual(3);
+  });
+
+  test('UX-R4 retry button boundary and keyboard focus remain visible after real GET failure', async ({ page }) => {
+    await page.route('**/api/v1/tutor/slots', route => route.fulfill({
+      status: 503, contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }),
+    }));
+    await signIn(page);
+    const retry = page.getByRole('button', { name: 'โหลดอีกครั้ง' });
+    await expect(retry).toBeVisible();
+    for (const state of ['default', 'hover', 'focus']) {
+      if (state === 'hover') await retry.hover();
+      if (state === 'focus') { await page.keyboard.press('Tab'); await retry.focus(); }
+      const computed = await computedControl(page, '.retry-button');
+      expect(contrastFromCss(computed.border, computed.background), 'retry ' + state).toBeGreaterThanOrEqual(3);
+      if (state === 'focus') {
+        expect(computed.outlineWidth).toBe('3px');
+        expect(contrastFromCss(computed.outline, '#ffffff')).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 
   test('UX-R4 CTA uses approved dark text, visible border and focus contrast tokens', async ({ page }) => {
