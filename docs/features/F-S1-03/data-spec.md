@@ -66,8 +66,14 @@ SELECT
       jsonb_build_object(
         'slotId', eligible_slots."slotId",
         'tutorRef', eligible_slots."tutorRef",
-        'startsAt', eligible_slots."startsAt",
-        'endsAt', eligible_slots."endsAt"
+        'startsAt', to_char(
+          eligible_slots."startsAt" AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+        ),
+        'endsAt', to_char(
+          eligible_slots."endsAt" AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+        )
       )
       ORDER BY eligible_slots."startsAt" ASC,
                eligible_slots."tutorRef" ASC,
@@ -75,18 +81,22 @@ SELECT
     ) FILTER (WHERE eligible_slots."slotId" IS NOT NULL),
     '[]'::jsonb
   ) AS "data",
-  view_clock.evaluated_at AS "evaluatedAt"
+  to_char(
+    view_clock.evaluated_at AT TIME ZONE 'UTC',
+    'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
+  ) AS "evaluatedAt"
 FROM view_clock
 LEFT JOIN eligible_slots ON TRUE
 GROUP BY view_clock.evaluated_at;
 ~~~
 
-Intent: sample DB clock once as T_view; use persisted Slot lifecycle/interval; exclude active Booked rows on the candidate Slot; exclude any overlapping Active Booking belonging to the authenticated Customer (including another Tutor); return only the safe projection; order deterministically. The outer query starts from the one-row `view_clock` CTE and LEFT JOINs the candidate set, then aggregates with a filtered `jsonb_agg` and `COALESCE`. Therefore it returns one row with `data = []` and the same non-null `evaluatedAt` when no candidate exists. This is one SQL statement, not a second clock read or an application-clock fallback. Exact SQL/Prisma query and read-isolation require peer review and a real PostgreSQL test after Booking schema exists. This pseudocode has not been run.
+Intent: sample DB clock once as T_view; use persisted Slot lifecycle/interval; exclude active Booked rows on the candidate Slot; exclude any overlapping Active Booking belonging to the authenticated Customer (including another Tutor); return only the safe projection; order deterministically. The outer query starts from the one-row `view_clock` CTE and LEFT JOINs the candidate set, then aggregates with a filtered `jsonb_agg` and `COALESCE`. Therefore it returns one row with `data = []` and the same non-null `evaluatedAt` when no candidate exists. This is one SQL statement, not a second clock read or an application-clock fallback. **Before values enter JSON, every timestamp is explicitly normalized to UTC with `AT TIME ZONE 'UTC'` and formatted as `YYYY-MM-DDTHH:mm:ss.sssZ` by `to_char`; no raw `timestamptz` is passed to `jsonb_build_object`.** This makes the wire representation independent of the PostgreSQL connection `TimeZone`. Exact SQL/Prisma query and read-isolation require peer review and a real PostgreSQL test after Booking schema exists. This pseudocode has not been run.
 
 ## 4. Time and timezone
 
 - PostgreSQL stores startsAt/endsAt as TIMESTAMPTZ.
-- API returns UTC RFC 3339 strings ending Z.
+- The SQL response projection converts `startsAt`, `endsAt` and `T_view` to UTC before JSON construction: `to_char(value AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`. The wire values have exactly three fractional-second digits and end in `Z` (for example `2026-11-08T06:00:00.000Z`). Never put a raw `timestamptz` directly into `jsonb_build_object` or rely on the connection `TimeZone` to serialize it.
+- API returns these already-normalized UTC RFC 3339 strings unchanged; it does not reinterpret a timezone-dependent database timestamp string.
 - UI always formats Asia/Bangkok (UTC+07:00), independent of browser timezone.
 - T_view is the single PostgreSQL time for this read; startsAt - T_view >= 60 minutes is the confirmed Customer-availability read rule and equality passes.
 - A Customer's own `Booked` rows are checked by persisted `[startsAt, endsAt)` intervals; only strict overlap is excluded, so adjacency passes. The principal comes from the Session.

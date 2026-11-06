@@ -39,9 +39,9 @@ Unknown query parameters (customerId, tutorId, from, to, page, cursor, limit or 
 }
 ~~~
 
-Values are illustrative. `evaluatedAt` is database `T_view`. Every row is bookable for the authenticated Customer at that evaluation instant only; it is not a reservation or guarantee that a later Booking succeeds. `tutorRef` is the current identity fallback because no Tutor display-name field is approved in the base schema.
+Values are illustrative. Before the response is written, `data[].startsAt`, `data[].endsAt` and `meta.evaluatedAt` must all be normalized to UTC with exactly three fractional-second digits (`YYYY-MM-DDTHH:mm:ss.sssZ`). The data projection uses explicit UTC conversion/formatting (`AT TIME ZONE 'UTC'` followed by `to_char`) before constructing JSON; raw PostgreSQL `timestamptz` values must never be serialized into JSON using the connection's session `TimeZone`. The API sends those normalized strings unchanged. `evaluatedAt` is database `T_view`. Every row is bookable for the authenticated Customer at that evaluation instant only; it is not a reservation or guarantee that a later Booking succeeds. `tutorRef` is the current identity fallback because no Tutor display-name field is approved in the base schema.
 
-An empty successful response has the same envelope and metadata, with `data: []` and a non-null RFC 3339 UTC `meta.evaluatedAt`. The endpoint sets `Cache-Control: no-store` for populated and empty 200 responses (and for errors). The timestamp comes from the same database statement/read evaluation as the offer list; it is not omitted or generated from the application/browser clock when there are no offers.
+An empty successful response has the same envelope and metadata, with `data: []` and a non-null RFC 3339 UTC `meta.evaluatedAt` normalized by the same explicit UTC formatting rule. The endpoint sets `Cache-Control: no-store` for populated and empty 200 responses (and for errors). The timestamp comes from the same database statement/read evaluation as the offer list; it is not omitted or generated from the application/browser clock when there are no offers. Populated and empty responses must be byte-for-byte stable in timestamp representation when the PostgreSQL connection `TimeZone` changes between `UTC` and `Asia/Bangkok` for the same persisted instants.
 
 ~~~json
 {
