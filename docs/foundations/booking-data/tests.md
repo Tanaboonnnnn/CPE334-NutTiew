@@ -1,6 +1,6 @@
 # D1-08A — Shared Booking Data Test Specification (Part E)
 
-> **PLANNED TESTS ONLY — NOT IMPLEMENTED OR RUN.** These cases are the Part F database verification contract. Passing them requires real PostgreSQL and inspection of committed rows/constraint outcomes; Prisma mocks or HTTP-only assertions are insufficient. See [foundation SDS](specification.md) and [data spec](data-spec.md).
+> **PLANNED TESTS ONLY — NOT IMPLEMENTED OR RUN.** Passing these cases requires real PostgreSQL and inspection of committed rows/constraint outcomes; Prisma mocks or HTTP-only assertions are insufficient. **Gate split:** BDF-01..BDF-22 are the #33 Part F pre-merge foundation gate. BDF-23 is a separate #16 Part F joint integration gate, run only after the #33 migration is merged and its exact schema SHA is recorded; BDF-23 must not block the #33 migration PR merge. See [foundation SDS](specification.md) and [data spec](data-spec.md).
 
 ## 1. Test environment and evidence
 
@@ -9,7 +9,7 @@
 - Run one migration test from an empty database and another from the exact `sprint1` migration chain. Do not use a manually approximated schema.
 - Use synthetic Customers and Tutors only. Create actual committed Slot and Booking rows satisfying all FKs/constraints.
 - For concurrency tests, use separate PostgreSQL connections and explicit synchronization barriers. `Promise.all` without a controlled interleaving is not sufficient. Inspect the final committed rows after both transactions settle.
-- Tests that use a Cancelled Booking must create an isolated test fixture or perform a test-only direct SQL state transition inside the disposable database. This is not a Sprint 1 cancellation API or workflow.
+- Tests that use a Cancelled Booking must create an isolated `Cancelled` fixture with a direct INSERT inside the disposable database. Do not use UPDATE to create or mutate a fixture: the Sprint 1 Booking trigger rejects every UPDATE, including test-only direct SQL.
 - No test case below is a PASS in this Part E PR.
 
 ## 2. Planned database test cases
@@ -35,10 +35,10 @@
 | BDF-17 | #15 AVA-02/15/16/17 | Query persisted rows using `status = 'Booked'`, `currentSlotId`, and half-open interval predicates. | Occupied Slot and same-Customer overlap predicates match actual committed data; adjacent and Cancelled controls are handled correctly. |
 | BDF-18 | System SDS §3.3 | Verify `btree_gist` exists and supports the UUID equality/range exclusion migration under the actual migration role. | Extension creation/use succeeds on the recorded target version without dropping an existing extension; missing privilege/version is BLOCKED, not silently skipped. |
 | BDF-19 | NFR-S1-12 | Inspect Prisma model, migration SQL, and database catalog after generation/deploy. | Relations/types/indexes match; Prisma schema drift or a generated migration dropping SQL-only partial/exclusion constraints fails the test. |
-| BDF-20 | System SDS §3.3; BDF-D11 | In a disposable DB, create a controlled non-`Offered` Slot fixture using the privileged test setup only, restore normal Slot guards, then attempt direct-SQL `Booked` INSERT and an UPDATE whose resulting status is `Booked` and whose Slot/interval points to that non-`Offered` Slot. | The #33 Booking trigger rejects both writes with a non-success SQLSTATE; no invalid Booked row commits. This proves the database guard independently of the #16 API. |
+| BDF-20 | System SDS §3.3; BDF-D11 | In a disposable DB, create a controlled non-`Offered` Slot fixture using privileged setup only, restore normal Slot guards, then attempt a direct-SQL `Booked` INSERT against it. Separately, INSERT a valid `Cancelled` fixture for an `Offered` Slot whose start is less than 60 minutes away, then attempt direct SQL `UPDATE status = 'Booked'` (the `Cancelled → Booked` Q05-bypass case). Also attempt a `Booked → Cancelled` or Slot/window UPDATE as a control. | The trigger rejects the non-`Offered` `Booked` INSERT and rejects **every UPDATE** with SQLSTATE `0A000`, including `Cancelled → Booked` even though Q05 would fail; no row changes state, no moved/active Booking commits, and the original fixture rows remain intact. This proves the guard independently of the #16 API. |
 | BDF-21 | Q05; System SDS §§3.3/4; BDF-D11 | In the disposable DB, exercise the Q05 comparison with fixed DB-side `startsAt`/`T_elig` instants at exactly 60:00 and 59:59; separately execute the actual trigger path with the real PostgreSQL clock and verify it reads `clock_timestamp()` only after the Slot lock, never a caller-supplied time. | The exact comparison accepts 60:00 and rejects 59:59; the trigger integration proves the authoritative time source/order. If the exact-boundary subcase cannot be exercised without bypassing the production decision path, mark that subcase BLOCKED rather than PASS. |
 | BDF-22 | System SDS §§3.3/7.1/7.3; BDF-D11 | On independent PostgreSQL sessions, hold the selected Slot row lock in transaction A. Start a direct Booking INSERT in transaction B while the Slot has more than 60 minutes remaining, then release A only after the cutoff has passed. Capture both backend PIDs, `pg_blocking_pids`, trigger-observed `T_elig`, SQLSTATE and final rows. | B waits on the Slot lock; after the lock is acquired the trigger samples a fresh `T_elig` and rejects the now-too-late Booking. No row commits. This proves the trigger does not sample Q05 before its own Slot-lock wait. |
-| BDF-23 | System SDS §§7.1/7.3; #16 Part E/F; BDF-D11 | Run the complete #16 transaction adapter against real PostgreSQL with independent sessions and synchronized same-Slot and same-Customer/cross-Tutor attempts. Instrument lock waits and trigger `T_elig`; include a control that forces an unexpected conflict-capable index/constraint wait. | Prove all conflict-capable waits occur before `T_elig`; otherwise the complete transaction aborts/retries with all locks reacquired and a fresh DB clock. Inspect final committed rows and prove no stale-eligibility success, duplicate claim or partial write. This is a joint acceptance gate; #16 owns the application-adapter evidence. |
+| BDF-23 | System SDS §§7.1/7.3; #16 Part E/F; BDF-D11 | **Run only after #33 Part F is merged and its exact schema SHA is recorded.** Run the complete #16 transaction adapter against real PostgreSQL with independent sessions and synchronized same-Slot and same-Customer/cross-Tutor attempts. Instrument lock waits and trigger `T_elig`; include a control that forces an unexpected conflict-capable index/constraint wait. | Prove all conflict-capable waits occur before `T_elig`; otherwise the complete transaction aborts/retries with all locks reacquired and a fresh DB clock. Inspect final committed rows and prove no stale-eligibility success, duplicate claim or partial write. This is a **post-merge joint integration gate**, owned by #16; it is not part of the #33 pre-merge BDF-01..22 gate. |
 
 ## 3. Constraint outcome interpretation
 
@@ -48,6 +48,7 @@ Expected PostgreSQL classes for isolated negative cases:
 - Foreign-key violations: SQLSTATE `23503`.
 - Unique partial-index conflicts: SQLSTATE `23505`.
 - Exclusion conflicts: SQLSTATE `23P01`.
+- The Sprint 1 Booking UPDATE-prohibition trigger raises SQLSTATE `0A000` (`feature_not_supported`); BDF-20 must verify this for `Cancelled → Booked` and other UPDATE attempts.
 - Serializable/deadlock outcomes may surface as `40001` / `40P01` if the accepted transaction strategy uses them; #16 must classify and handle them according to its reviewed contract.
 
 For concurrent cases, do not require one exact error code when PostgreSQL may report a serialization failure under the selected isolation/locking design. The acceptance oracle is the final committed state plus correctly classified non-success for the losing operation.
@@ -57,8 +58,8 @@ For concurrent cases, do not require one exact error code when PostgreSQL may re
 | Behavior | Owner / evidence |
 |---|---|
 | Customer role, active account and Session-derived `customerId` | #16 API/transaction tests; the FK alone does not enforce role. |
-| Booking Offered-state and Q05 database guard (`BEFORE INSERT/UPDATE`, 60:00/59:59, Slot-lock wait) | #33 Part F migration and BDF-20..22; direct-SQL tests must prove the trigger independently of the API. |
-| Application lock order and no-post-guard-contention / full-transaction retry proof | #16 Part E/F and BDF-23; use the actual application adapter with real PostgreSQL barriers. |
+| Booking Offered-state, Q05 database guard and Sprint 1 UPDATE prohibition (`BEFORE INSERT OR UPDATE`, 60:00/59:59, Slot-lock wait, `Cancelled → Booked` rejection) | #33 Part F migration and BDF-20..22; all are pre-merge foundation gates and direct-SQL tests must prove the trigger independently of the API. |
+| Application lock order and no-post-guard-contention / full-transaction retry proof | #16 Part E/F and BDF-23; run only after #33 Part F is merged and the schema SHA is recorded. BDF-23 is not a prerequisite for #33 migration merge. |
 | `Booking.id` immutability | Application-level invariant only (BDF-D01): #16 generates the ID server-side and accepts no ID replacement. Any future update/reschedule path must prove it preserves the original ID; no DB immutability guard or SQL negative test is claimed by #33. |
 | Duplicate/uncertain HTTP request response semantics (OD-013) | #16 Part E decision and #16 API tests; not decided here. |
 | Customer availability 60-day horizon and safe response allowlist | #15 AVA tests; OD-002 is confirmed as 60 days in Issue #15. |
@@ -82,4 +83,4 @@ The implementation PR must replace this planned status with actual results; do n
 | Concurrency | Barrier setup, connections, final committed rows, losing error classification |
 | Review | Human reviewer and accepted schema SHA |
 
-**Part E status:** all BDF-01..BDF-23 are planned. No migration, database test, API, UI, or concurrency result is claimed by this document PR.
+**Part E status:** BDF-01..BDF-23 are planned, with the execution split above. #33 Part F must pass BDF-01..BDF-22 before its migration PR merges; #16 Part F runs BDF-23 after the merged schema SHA exists. No migration, database test, API, UI, or concurrency result is claimed by this documentation-only PR.
