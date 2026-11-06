@@ -1,17 +1,26 @@
 # F-S1-03 — Customer Availability UI Specification (Part E)
 
-> **Proposed Part E contract only; no UI implementation/browser test.** See [Feature SDS](specification.md), [API](api-spec.md), [Data](data-spec.md), [STS](tests.md). Peer review and display-policy acceptance are required before Part F.
+> **Part E UI contract only; no UI implementation/browser test.** Customer-specific bookable-only and the shared NutTiew design direction are recorded as peer decisions in [Feature SDS](specification.md#5-peer-review-decision-record). Tutor display name remains conditional on its separate data-approval gate. See [API](api-spec.md), [Data](data-spec.md), [STS](tests.md).
 
 ## 1. Screen and visual direction
 
 Screen: **ช่วงเวลาติวที่พร้อมให้เลือก** — authenticated Customer availability discovery.
 
-This is a focused scheduling utility, not a marketing or Tutor Dashboard page. Proposed Customer visual direction reuses the approved NutTiew Auth language:
+This is a focused scheduling utility, not a marketing page or a visually separate application. Customer Availability and the Tutor Calendar Dashboard share one NutTiew design system while allowing role-specific layouts.
 
-- Warm neutral canvas #F6F4EF, white surface #FFFFFF, graphite text #262B28, muted text #4F5853, restrained pine accent #285C4B, visible boundary #77877B and visible focus.
-- Thai/English font stack: Noto Sans Thai, Sarabun, system-ui, sans-serif.
-- The navy/orange F-S1-02 Calendar Dashboard is scoped to Tutor screens; do not copy it into Customer UI without a separate decision.
-- No gradients, glassmorphism, hero banners, fake tutor profiles, testimonials, ratings, prices, message panels, decorative emoji or card-in-card layouts.
+| Shared product token | Customer Availability application |
+|---|---|
+| Brand / navigation | Text-only NutTiew wordmark; shared navy `#202B44` for brand/navigation and the same active-navigation, account and logout patterns as Tutor Dashboard |
+| Canvas / surface | Light canvas `#F7F8FB`, white surface `#FFFFFF`; no nested cards |
+| Text | Dark ink `#172137`; muted text must remain contrast-safe on the shared light surfaces |
+| Primary action | Orange `#F47736` with dark-ink label/icon `#172137` and border `#D96123`; do not use white text on orange |
+| Focus | Shared visible focus ring `3px solid #AA4519` with `outline-offset: 3px`; verify it remains unobscured in every state |
+| Typography | Noto Sans Thai, Sarabun, system-ui, sans-serif; use the same type hierarchy as Tutor Dashboard |
+| Spacing / corners | Shared 4/8/12/16/24/32px spacing scale and 8px radius; align component padding and row rhythm with Tutor Dashboard |
+
+Use the same reusable button, status, focus and navigation patterns as Tutor Dashboard. Desktop navigation follows the same NutTiew shell; only Customer-authorized destinations are shown (availability, account and logout), never Tutor-only or unimplemented menus. At mobile widths use the same accessible collapsed-navigation behavior. Keep the Customer content light and readable; do not create a second brand palette with an unrelated accent.
+
+No gradients, glassmorphism, hero banners, fake Tutor profiles, testimonials, ratings, prices, message panels, decorative emoji or card-in-card layouts. The orange CTA pairing and focus values are design tokens from the Tutor UI contract, not proof of WCAG conformance; Part F must verify actual rendered states and contrast.
 
 ## 2. Screen anatomy
 
@@ -20,16 +29,14 @@ This is a focused scheduling utility, not a marketing or Tutor Dashboard page. P
 3. Helper: appointment times are displayed in Asia/Bangkok.
 4. Optional ตรวจสอบล่าสุด timestamp from response meta.evaluatedAt.
 5. Chronological offers grouped by Bangkok calendar date.
-6. Each offer shows a stable non-sensitive Tutor reference, Bangkok date, 24-hour start/end and a เลือกช่วงเวลานี้ action.
-7. Selected-offer summary may show Tutor reference/time and must state that selection **is not a Booking**.
+6. Each offer shows an approved Tutor public display name when the OD-AV-02 data gate is cleared; otherwise it shows the stable opaque Tutor reference. Also show Bangkok date, 24-hour start/end and a เลือกช่วงเวลานี้ action.
+7. Selected-offer summary uses the same approved name/fallback reference and time, and must state that selection **is not a Booking**.
 
 Selecting an offer stores slotId in transient UI state only. It does not POST, reserve, occupy or confirm a Booking. The later #16 flow owns confirmation and must revalidate the selected Slot on the server.
 
 ### Display policy OD-AV-01
 
-**Proposed default: bookable-only for the authenticated Customer.** Show only offers the API evaluated as bookable at meta.evaluatedAt, including the absence of an overlapping Active Booking owned by that Customer. This follows the proposal in requirements.md §14.2 but remains pending owner confirmation and peer review.
-
-If rejected, the alternative is to show future Offered Slots with a generic ไม่พร้อมให้จอง state. Never distinguish Occupied from Too soon, reveal a Customer/Booking ID/reason, or allow selecting an unavailable offer. Do not mix policies.
+**Confirmed: Customer-specific bookable-only.** Show only offers the API evaluated as bookable for the authenticated Customer at `meta.evaluatedAt`: current Offered Slot, not occupied by an Active `Booked` row, at least 60 minutes before start, and not overlapping that Customer's own Active Booking even if the existing Booking belongs to another Tutor. Exact adjacency is allowed. Do not render unavailable offers or disclose why another Slot was excluded.
 
 The maximum advance horizon remains open under SRS OD-002. The UI must not invent a date cap or imply that an unlimited horizon has been approved; update the visible range only after the team records that decision.
 
@@ -56,8 +63,8 @@ Only a successful authorized 200 with data: [] may render confirmed-empty. A fai
 - Every offer is keyboard selectable; selected state is communicated with text/semantics, not color alone.
 - Visible :focus-visible; focus must not be obscured. Move focus to an error summary for blocking failures where appropriate.
 - Announce loading, result count, empty and error transitions without repeatedly announcing the entire list.
-- Primary controls target at least 44×44 CSS px as a design proposal. Verify contrast, focus, zoom and 320 CSS px reflow in Part F.
-- NFR-S1-09 is proposed; this specification does not claim WCAG 2.2 AA conformance.
+- Primary controls target at least 44×44 CSS px as a design target only; this is not a verified pass. Part F records actual target-size, contrast, focus, zoom and 320 CSS px reflow evidence.
+- NFR-S1-09 test planning is accepted, but this specification does not claim WCAG 2.2 AA conformance. Do not report WCAG AA or 44px as passed without the corresponding manual/browser evidence.
 
 ## 5. Responsive behavior
 
@@ -71,14 +78,14 @@ Preserve the same chronological offer set and field visibility at every viewport
 
 ## 6. Privacy and content rules
 
-Show only the opaque Tutor reference and Slot date/time. The server-side overlap check may use the authenticated Customer ID but must not reveal whether a matching Active Booking exists, which Tutor owns it, or any Booking/Customer details. Do not show/fetch Customer identity, emails/phones, Booking IDs/reasons, Tutor email, credentials/session fields or full private Tutor schedule. No fake names, subjects, ratings, prices, locations, images or availability. No Booking confirmed/Booked/Reserved state in #15.
+Show only the approved Tutor public display name when the OD-AV-02 gate is cleared; otherwise show the opaque Tutor reference, plus Slot date/time. The server-side overlap check may use the authenticated Customer ID but must not reveal whether a matching Active Booking exists, which Tutor owns it, or any Booking/Customer details. Never derive a name from email or invent a name. Do not show/fetch Customer identity, emails/phones, Booking IDs/reasons, Tutor email, credentials/session fields or full private Tutor schedule. No unapproved profile fields, subjects, ratings, prices, locations, images or unrelated availability. No Booking confirmed/Booked/Reserved state in #15.
 
 ## 7. Acceptance mapping
 
 | Criterion | UI requirement |
 |---|---|
-| AC-S1-15 | Selectable Tutor reference and Bangkok start/end |
-| AC-S1-16 | Occupied/inside-cutoff offers and offers overlapping this Customer's Active Booking are not bookable; generic unavailable state only if alternate policy accepted |
+| AC-S1-15 | Selectable approved Tutor display name after its data gate, otherwise opaque Tutor reference, and Bangkok start/end |
+| AC-S1-16 | Occupied/inside-cutoff offers and offers overlapping this Customer's Active Booking are excluded from the bookable-only list |
 | AC-S1-17 | Selection is not reservation; #16 revalidates and UI shows non-success |
 | AC-S1-18 | Asia/Bangkok rendering independent of device timezone |
 

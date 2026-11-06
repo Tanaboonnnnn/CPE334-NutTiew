@@ -58,32 +58,48 @@ PostgreSQL stores TIMESTAMPTZ; API returns RFC 3339 UTC instants ending Z; UI fo
 
 A Slot can become occupied or cross Q05 after T_view. If #16 later rejects a stale selection, UI shows non-success and refreshes; #15 does not create a fake Booking endpoint.
 
-## 5. Proposed decisions — peer review required
+## 5. Peer-review decision record
 
-| ID | Proposed contract | Status |
+The following states record the decisions in [PR #32 comment #6683929084](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32#issuecomment-6683929084). “Confirmed” means the team engineering/design choice recorded by peer review; it does not claim a new stakeholder business rule or implementation/test completion.
+
+| ID | Decision / contract | Status |
 |---|---|---|
-| OD-AV-01 Display | **Bookable-only for the authenticated Customer**: return/display only offers that pass Slot occupancy, Q05 and that Customer's BR-S1-09/10 overlap checks. This follows the proposed default in requirements.md §14.2; it is not stakeholder approval. Alternative: show future Offered Slots with a generic unavailable state. | Owner confirmation and peer acceptance required. |
-| OD-AV-02 Tutor identity | Opaque Tutor UUID reference only; no name, email, phone, profile or Booking identity. UI may compact the label but must avoid collisions in the visible result set. | Proposed; peer review required. |
-| OD-AV-03 List | Full unfiltered result set; no query filters/pagination in this S1 proposal; stable order startsAt ASC, tutorRef ASC, slotId ASC. | Proposed technical choice, not a scale guarantee. OD-002 remains OPEN; this list proposal does not approve an unlimited advance horizon. |
-| OD-AV-04 Clock | One database T_view per read; include evaluatedAt in response metadata. | Proposed; does not replace T_elig. |
-| OD-AV-05 Occupancy | Derive from active Booked rows through #16 Booking relation; never store a duplicate occupancy flag on Slot. | Required invariant; blocked by missing schema. |
-| OD-AV-06 Error/privacy | Existing /api/v1 envelope, no-store, explicit empty/error distinction, safe retry, session binding. | Proposed alignment with Auth/Slot APIs. |
-| OD-AV-07 Performance | NFR-S1-10 p95 ≤2.0s is a proposal only. | Not a gate unless approved with workload and method. |
-| OD-AV-08 Visual | Reuse calm NutTiew Auth visual language for Customer page; Tutor navy/orange remains scoped to Tutor Dashboard. | Proposed; peer review required. |
+| OD-AV-01 Display | Customer-specific bookable-only: return/display only Slots that pass current Slot offer, occupancy, Q05 and the authenticated Customer's BR-S1-09/10 overlap rules at `T_view`. | **CONFIRMED design choice**; not a Booking guarantee. |
+| OD-AV-02 Tutor identity | Desired UI identity is an approved Tutor public display name. Do not read/add/publish a name until its source, owner/consent, field, migration and allowlist are approved. Until then use opaque `tutorRef`. | **CONDITIONAL DATA-APPROVAL GATE**. |
+| OD-AV-03 List | No filters or pagination in Sprint 1; stable order `startsAt ASC → tutorRef ASC → slotId ASC`. | **CONFIRMED technical constraint**; not an unlimited-horizon decision. |
+| OD-AV-04 Clock | One PostgreSQL `T_view` per read; `meta.evaluatedAt` is present for both populated and empty success responses. | **CONFIRMED**; not a substitute for #16 `T_elig`. |
+| OD-AV-05 Occupancy | Exclude a Slot through active `Booking.status = Booked` and `Booking.currentSlotId = Slot.id`; never store duplicate `Slot.isBooked`. Customer overlap is a separate owner-derived interval predicate. | **CONFIRMED invariant**; schema-dependent Part F STOP GATE. |
+| OD-AV-06 Error/privacy | Reuse existing API/session security, Customer role, session binding, request ID/error envelope, `Cache-Control: no-store`, and distinguish error from empty. | **CONFIRMED**. |
+| OD-AV-07 Performance | Record p95 under a reproducible Part F workload; ≤2.0s remains a proposed reference only. | **NON-BLOCKING MEASUREMENT**; no pass/fail threshold approved. |
+| OD-AV-08 Visual | Customer UI remains light/readable but shares NutTiew brand, typography, related colors/accents, spacing, components, focus and navigation patterns with Tutor Dashboard. Role-specific layouts are allowed within one design system. | **CONFIRMED design direction**. |
+| OD-002 Horizon | No maximum advance horizon, working hours, weekday, holiday or minute-grid rule is selected. | **OPEN**; resolve before Part F. |
+| #15 ↔ #16 data foundation | Use a separately scoped shared Booking data-foundation Issue/PR (route B); record owner, reviewer, dependency links and exact accepted schema SHA. | **SELECTED; NOT CREATED**. Part F STOP GATE remains. |
+| NFR-S1-09 accessibility | Plan keyboard, focus, announcements and responsive checks; collect actual evidence in Part F. | **TEST PLAN ACCEPTED**; no WCAG 2.2 AA or 44px conformance claim. |
+
+### Conditional Tutor public-display-name gate
+
+- **Proposed source:** an explicit public display name supplied/maintained by the Tutor; never derive it from `User.email`, login credentials or a guessed profile field.
+- **Proposed field/type:** nullable `User.tutorDisplayName` (`String?` / PostgreSQL `TEXT`), used only for Tutor accounts. This is a candidate contract, not an approved schema change.
+- **Data owner and permission:** the Tutor is the source/data owner and must explicitly opt in to customer-facing display. The product/stakeholder owner must record approval for publication; @Chxtamos owns this feature contract and @Tanaboonnnnn is the peer reviewer. Record the actual approving stakeholder and consent rule before migration.
+- **Migration/seed:** only a separate reviewed forward-only migration after the data gate is accepted; no default, no backfill from email, and existing Tutors remain `NULL`. Seed only clearly test-only synthetic values in isolated test fixtures; never present fixture names as real Tutor identity.
+- **API/UI allowlist:** until the gate is cleared, omit `tutorDisplayName` and show `tutorRef`. After approval, add only the approved nullable field to the response allowlist and render it only when present; never add email, phone or other profile fields.
+- **Privacy evidence:** planned AVA-18 verifies no name is inferred from email, no unapproved field is returned, and—only after approval—the approved display field is the sole additional Tutor identity field. AVA-05 continues to inspect the full response allowlist.
 
 ## 6. Acceptance and traceability
 
 | Source | F-S1-03 outcome | Planned STS |
 |---|---|---|
-| FR-S1-08 / AC-S1-15 | Customer identifies a specific Tutor and Slot start/end without private third-party data | AVA-01, AVA-05 |
-| FR-S1-09 / AC-S1-16 | Anything shown as bookable is current, unoccupied, outside Q05 cutoff and does not overlap this Customer's Active Bookings | AVA-02, AVA-03, AVA-15 |
+| FR-S1-08 / AC-S1-15 | Customer identifies a specific Tutor using approved display name after its gate, otherwise opaque reference, plus Slot start/end | AVA-01, AVA-05, AVA-18 |
+| FR-S1-09 / AC-S1-16 | Anything shown as bookable is current, unoccupied, outside Q05 cutoff and non-overlapping for this Customer | AVA-02, AVA-03, AVA-15, AVA-16, AVA-17 |
 | AC-S1-17 | Stale offer is revalidated by #16; no false Booking success | AVA-11 |
 | AC-S1-18 / BR-S1-12 | Bangkok time meaning is independent of device locale | AVA-04 |
-| BR-S1-06/07/08/09/10/11/15/17/20/21 | Distinct Tutor offers, Slot occupancy, Q05/future-time eligibility, Customer-specific non-overlap, role and privacy | AVA-02/03/05/06/07/15 |
+| BR-S1-06/07/08/09/10/11/15/17/20/21 | Distinct Tutor offers, Slot occupancy, Q05/future-time eligibility, Customer-specific non-overlap and adjacency, role and privacy | AVA-02/03/05/06/07/15/16/17 |
 | FR-S1-18 | Failed/unauthorized reads communicate non-success without private disclosure or false availability | AVA-05/06/10 |
 | NFR-S1-01/08 | Deny anonymous/wrong role; no secret or private Booking leakage | AVA-05/06/12 |
 | NFR-S1-07/12 | Reproducible evidence, stable IDs and reviewed PR | Part F ledger/PR |
-| NFR-S1-09/10 | Proposed keyboard/p95 targets only | AVA-13/14 if approved |
+| NFR-S1-09 | Keyboard, focus, announcements and responsive behavior are planned for manual/browser verification | AVA-13 |
+| NFR-S1-10 | Record p95 and workload evidence; ≤2.0s is non-blocking and not an approved threshold | AVA-14 |
+| OD-AV-08 | Customer and Tutor screens share NutTiew brand, typography, spacing, colors/accents, components, focus and navigation patterns with role-specific layouts | AVA-19 |
 
 Whole-product trace anchors: FR-008/009, NFR-007/009/010, VAL-006/009/033/036, VC-S1-13/TEST-S1-13, VC-S1-15/TEST-S1-15, VC-S1-22/TEST-S1-22 and VC-S1-36/TEST-S1-36. These are planned links, not test results.
 
@@ -92,17 +108,21 @@ Whole-product trace anchors: FR-008/009, NFR-007/009/010, VAL-006/009/033/036, V
 ### Part E
 - [ ] Five cross-linked documents exist: Feature SDS, UI spec, API spec, data spec and STS.
 - [ ] FR-S1-08/09 and AC-S1-15..18 map to explicit rules, response fields, UI states and tests.
-- [ ] Display policy, Tutor reference, list behavior, T_view, timezone and errors are explicitly accepted/rejected by peer review; proposals are not mislabeled as stakeholder approval.
+- [ ] PR #32 peer decisions are recorded with explicit CONFIRMED / CONDITIONAL / OPEN / STOP GATE states; no engineering choice is mislabeled as stakeholder business approval.
+- [ ] Customer-specific bookable-only predicate includes same-Customer cross-Tutor overlap and half-open adjacency; owner comes only from the live Session.
+- [ ] Empty success response always contains DB `meta.evaluatedAt` and `Cache-Control: no-store`; query returns one metadata row even when there are no offers.
+- [ ] Tutor public display name remains behind its source/consent/schema/migration/allowlist gate; no email-derived or invented production name is exposed.
 - [ ] Response allowlist excludes Customer identity/Booking data, credentials, Session fields and unrestricted Tutor fields.
-- [ ] #15/#16 Booking-schema sequencing gap is resolved or retained as a hard Part F stop gate; no fake occupancy flag is added.
+- [ ] Shared data-foundation route B is recorded with proposed owner/reviewer/dependencies; exact Issue/PR and schema SHA remain pending, so Part F is blocked until accepted. No fake occupancy flag is added.
 - [ ] Markdown links/structure and git diff --check pass.
 - [ ] PR contains only the five F-S1-03 Markdown files, targets sprint1, links #15 and requests @Tanaboonnnnn.
 - [ ] PR stays open for independent human review; no self-approval or self-merge.
 
 ### Part F — separate implementation PR
-- [ ] Start from updated sprint1 after Part E acceptance and Booking-schema gate resolution.
+- [ ] Start from updated sprint1 after Part E acceptance and the separately reviewed/merged shared Booking data foundation; record its exact schema SHA.
 - [ ] Implement Customer-only UI → Express API → PostgreSQL read projection from real Slot and Booking rows.
-- [ ] Verify occupied exclusion, Q05 boundary, exact allowlist, Bangkok rendering, auth/role denial, empty/error/retry and session-change privacy.
+- [ ] Verify occupied exclusion, Customer-specific cross-Tutor overlap and adjacency, Q05 boundary, approved Tutor-name allowlist gate, Bangkok rendering, auth/role denial, empty/error/retry and session-change privacy.
+- [ ] Run keyboard/focus/announcement/responsive checks and record evidence; do not claim WCAG 2.2 AA or a 44px target pass without the corresponding assessment.
 - [ ] Record real commands/results, DB/migration, source SHA and hosted CI.
 - [ ] Open separate code-only PR into sprint1 and obtain peer review.
 
