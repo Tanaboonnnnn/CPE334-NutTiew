@@ -19,7 +19,7 @@ An authenticated Customer requests one selected Slot. The server derives Custome
 1. Customer selects an offer in #15; selection is transient UI state, not a reservation.
 2. Customer confirms one selected Slot; the request contains only `slotId`.
 3. API authenticates a live Customer Session and derives owner from `principal.userId`.
-4. Transaction discovers the actual Tutor, acquires all affected User and Slot locks in UUID order, then locks and revalidates the authenticated Customer's current Session on the same connection. It rechecks Session validity after the final lock wait and before replay or INSERT.
+4. Transaction discovers the actual Tutor, acquires all affected User rows in ascending UUID order and then all affected Slot rows in ascending UUID order, locks and revalidates the authenticated Customer's current Session on the same connection, and only then reads/replays or inserts Booking.
 5. New row is inserted through the shared #33 guard; Q05 is decided using DB `T_elig` after the Slot lock.
 6. Only after COMMIT does API return 201. A repeated same-Customer/same-Slot request returns 200 and the original Booking ID without another INSERT.
 7. Invalid, occupied, overlapping, too-soon, unauthorized or failed attempts never produce false success or partial Booking.

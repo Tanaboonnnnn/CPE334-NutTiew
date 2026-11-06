@@ -46,8 +46,8 @@ The Session binding is a non-credential response/request consistency value, not 
 | Submitting | POST in flight | Disable repeated activation; show progress; retain exact `slotId` |
 | New success | 201 after COMMIT | Show “จองสำเร็จ”; display returned Booking ID and confirmed time |
 | Replay success | 200 same-pair replay | Show same Booking ID and indicate booking already exists; no new local item |
-| Conflict | 409 occupied Slot / Customer overlap | No success; explain selected time is unavailable; refresh #15 |
-| Not eligible | 422 Q05/past/non-eligible Slot | No success; explain offer can no longer be booked; refresh |
+| Conflict | 409 occupied Slot / non-Offered Slot / Customer overlap | No success; explain selected time is unavailable; refresh #15 |
+| Not eligible | 422 Q05 minimum-notice cutoff (59:59 or less) | No success; explain offer can no longer be booked; refresh |
 | Unknown outcome | Network loss, timeout or `503 BOOKING_OUTCOME_UNKNOWN` | Do not assert success/failure; preserve same `slotId`; offer **ส่งคำขอเดิมอีกครั้ง** |
 | Service unavailable | 503 known no-commit result | Safe error; retain selection for explicit retry |
 | Session changed | Logout, login, account switch, or Session A → Session B (including two Sessions for the same User) | Increment auth/session epoch; clear private summary, selected Slot, pending intent, CSRF token and binding; ignore any late response whose captured epoch/binding differs. Never render its Booking ID/details in the new Session. |
