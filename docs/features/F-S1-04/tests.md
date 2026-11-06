@@ -6,7 +6,7 @@
 
 Sources: [Feature SDS](specification.md), [UI](ui-spec.md), [API](api-spec.md), [data](data-spec.md), [transaction contract](transaction-spec.md), [Sprint 1 requirements](../../requirements.md), [System SDS](../../system-sds.md) and [BDF STS](../../foundations/booking-data/tests.md).
 
-Part F requires disposable PostgreSQL at target major version/exact #33 schema SHA; synthetic Customer A/B and Tutor A/B; real future Offered Slots; at least two independent DB sessions; explicit barriers and observer query; controlled DB clock/request arrival/fault injection/lost HTTP response. Capture `pg_backend_pid()` and `pg_blocking_pids`. Random `Promise.all()`, sleep-only race or disabled UI button is insufficient. Inspect final committed rows from a fresh connection.
+Part F requires disposable PostgreSQL at target major version/exact #33 schema SHA; synthetic Customer A/B and Tutor A/B; Session A/B (including two Sessions for the same User); real future Offered Slots; at least two independent DB sessions; explicit barriers and observer query; controlled DB clock/request arrival/fault injection/lost HTTP response; browser auth/session-epoch control for late-response cases. Capture `pg_backend_pid()` and `pg_blocking_pids`. Random `Promise.all()`, sleep-only race or disabled UI button is insufficient. Inspect final committed rows from a fresh connection.
 
 All cases below are **PLANNED / NOT RUN**.
 
@@ -35,10 +35,14 @@ All cases below are **PLANNED / NOT RUN**.
 | BOOK-19 | BDF-23; System SDS §7.3; VC/TEST-S1-39 | Force unexpected unique/exclusion index wait after trigger `T_elig`; instrument PIDs/blockers/trigger time. | Prove no stale-time INSERT can commit, or show full abort/retry with fresh `T_elig`. Otherwise BLOCKED/FAIL. |
 | BOOK-20 | NFR-S1-01/08; VC/TEST-S1-23/24 | Inspect full success/error JSON for anonymous, wrong-role, occupied foreign Slot, forged fields and DB errors. | No Customer/Tutor private identity, SQL/stack, credentials, Session/CSRF data or another Booking ID leaks. |
 | BOOK-21 | NFR-S1-03/11; VC/TEST-S1-27/33 | Restart app against same DB after success; reopen views after rejected attempt when #17 is integrated. | Committed Booking remains; rejected attempt creates no phantom row/occupancy. |
-| BOOK-22 | Transaction contract §2; BDF-23 | Instrument User and Slot locks for both UUID orderings and concurrent cross-Tutor requests. | Actual acquisition follows User UUID ascending → Slot UUID ascending; no out-of-order lock acquisition. |
+| BOOK-22 | Transaction contract §2; BDF-23 | Instrument User, Slot and current Session locks for both UUID orderings and concurrent cross-Tutor requests. | Actual acquisition follows User UUID ascending → Slot UUID ascending → current Customer Session auth sub-lock → Booking; domain order remains User → Slot → Booking; no out-of-order acquisition. |
 | BOOK-23 | Transaction contract §6.1 | Force three retryable transaction aborts. | Three total attempts maximum; final 503 `TRANSACTION_RETRY_EXHAUSTED`; all attempts rolled back. |
 | BOOK-24 | Transaction contract §§2/6 | Change/remove discovered lock-set member between pre-read and locked re-read in isolated fixture. | Abort without acquiring an earlier-order lock late; rediscover/restart whole transaction or safe non-success after budget. |
-| BOOK-25 | BDF-23; #33 Part F trigger contract | Verify stable INSERT rejection SQLSTATE/constraint identifiers for non-Offered Slot and Q05 failure. | #16 maps reviewed trigger outcomes to safe 409/422; no raw DB diagnostics. Missing mapping is BLOCKED. |
+| BOOK-25 | BDF-23; #33 Part F trigger contract | Independently trigger a non-${t}Offered${t} Slot rejection and a Q05 failure at ${t}T_elig${t}; inspect PostgreSQL SQLSTATE and constraint diagnostics. | Non-Offered is exactly ${t}P0B01 / booking_slot_not_offered${t} → 409 ${t}SLOT_UNAVAILABLE${t}; Q05 is exactly ${t}P0B02 / booking_q05_min_notice${t} → 422 ${t}BOOKING_NOT_ELIGIBLE${t}. No raw DB diagnostics; any missing/mismatched identifier is BLOCKED. |
+| BOOK-26 | BR-S1-13; OD-005-A/B; VC/TEST-S1-23 | Pass HTTP auth, hold the Customer User row in DB session A, start Booking POST in session B and confirm it waits on the User lock. While it waits, revoke that exact Session through logout and commit; then release the User lock. | The Session lock acquired after the wait observes revocation or the stale SERIALIZABLE attempt aborts/retries; fresh attempt returns 401. No 201, no 200 replay, no Booking row and no private replay data. |
+| BOOK-27 | BR-S1-13; OD-005-A/B; VC/TEST-S1-23 | Hold selected Slot row in DB session A. Start Booking POST, verify it has acquired User lock and is waiting on Slot; in separate runs, either revoke the Session and commit or allow its ${t}expiresAt${t} to pass; then release Slot. | Session is locked/revalidated only after the Slot wait; revoked/expired Session returns 401 (or stale snapshot forces full retry then 401). No Booking INSERT, no 200 replay and no private data. |
+| BOOK-28 | OD-005-C; VC/TEST-S1-23/24 | Attempt POST with missing CSRF, wrong CSRF, Session A token with Session B cookie (including Session B for the same User), missing/mismatched expected binding, foreign Origin, and ${t}Sec-Fetch-Site: cross-site${t}. | Reject with 403 ${t}CSRF_DENIED${t}/${t}SESSION_BINDING_MISMATCH${t}/${t}ORIGIN_DENIED${t} as applicable (401 for invalid Session); no mutation and no private Booking data. |
+| BOOK-29 | OD-005-B/C; VC/TEST-S1-23/24 | Start a POST under Session A and delay its response; logout A or switch to Session B (same User and different User), then deliver A's late response. Also send A's captured expected binding with B's cookie. | UI auth/session epoch discards A's late response and never displays its Booking ID/details under B. Stale A binding with B cookie is rejected before mutation. If A had already committed before logout, do not claim rollback; only the stale response is suppressed. |
 
 ## 3. Required existing-anchor coverage
 
@@ -51,15 +55,15 @@ All cases below are **PLANNED / NOT RUN**.
 | VC/TEST-S1-20 | BOOK-05 |
 | VC/TEST-S1-21 | BOOK-06 |
 | VC/TEST-S1-22 | BOOK-07 |
-| VC/TEST-S1-23 | BOOK-08, BOOK-20 |
-| VC/TEST-S1-24 | BOOK-09, BOOK-20 |
+| VC/TEST-S1-23 | BOOK-08, BOOK-20, BOOK-26..29 |
+| VC/TEST-S1-24 | BOOK-09, BOOK-20, BOOK-28..29 |
 | VC/TEST-S1-25 | BOOK-10 |
 | VC/TEST-S1-26 | BOOK-11 |
 | VC/TEST-S1-27 | BOOK-12, BOOK-21 |
 | VC/TEST-S1-33 | BOOK-12, BOOK-21 |
 | VC/TEST-S1-38 | BOOK-13..16 |
 | VC/TEST-S1-39 | BOOK-17, BOOK-19 |
-| AC-S1-19..29 | BOOK-01..16 and BOOK-20 |
+| AC-S1-19..29 | BOOK-01..16, BOOK-20 and BOOK-26..29 |
 | AC-S1-35 | BOOK-17, BOOK-19 |
 
 Existing AC/VC/TEST IDs remain authoritative; BOOK IDs are F-S1-04 STS IDs, not replacements.
@@ -77,7 +81,8 @@ Existing AC/VC/TEST IDs remain authoritative; BOOK IDs are F-S1-04 STS IDs, not 
 - [ ] Confirm endpoint ownership, auth/role/CSRF, request allowlist and safe errors.
 - [ ] Confirm Natural-key OD-013 scope, replay precedence and 201/200 behavior.
 - [ ] Confirm canonical #33 mapping and no duplicated schema/trigger.
-- [ ] Confirm User → Slot → Booking order, SERIALIZABLE and stale-snapshot handling.
+- [ ] Confirm User → Slot → Session(auth sub-lock) → Booking acquisition, SERIALIZABLE snapshot behavior and post-lock-wait Session revalidation.
+- [ ] Confirm Auth CSRF acquisition, Session binding, cross-origin rejection and late-response suppression across different Sessions for the same User.
 - [ ] Confirm retry classification, three-attempt bound, constraint reconciliation and unknown COMMIT behavior.
 - [ ] Challenge no-post-guard-contention strategy against actual #33 trigger/constraints; retain BDF-23 as hard gate.
 - [ ] Confirm AC-S1-19..29/35 and VC/TEST-S1-16..27/33/38/39 coverage.

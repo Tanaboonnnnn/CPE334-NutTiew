@@ -20,26 +20,31 @@ For every attempt, acquire locks in this exact order:
 |---|---|---|
 | 1 | Affected `User` rows, ascending UUID | Authenticated Customer and selected Slot's actual Tutor; deduplicate IDs |
 | 2 | Affected `Slot` rows, ascending UUID | Selected Slot |
-| 3 | Existing `Booking` rows, ascending UUID | No existing Booking is mutated by this INSERT-only operation. Read conflict predicates after User/Slot locks; no nonexistent Booking row can be locked. |
+| 3 | Current Customer `Session` row | `principal.sessionId`, matched to `principal.userId`; lock only this authenticated Session after **all** User and Slot waits and before any Booking read/lock |
+| 4 | Existing `Booking` rows, ascending UUID | No existing Booking is mutated by this INSERT-only operation. Read conflict predicates after User/Slot/Session checks; no nonexistent Booking row can be locked. |
 
-Use deterministic ordered locking or explicit per-ID locks whose acquisition order is verified; do not rely on incidental query-plan order. After User locks, revalidate Customer `role='Customer'`/`isActive=true` and Tutor `role='Tutor'`/`isActive=true`. After Slot lock, re-read persisted `tutorId`, lifecycle and interval; confirm discovered Tutor is unchanged. If lock set/assignment differs, abort and restart from fresh discovery; never add an earlier-order User lock while holding a later-order Slot lock.
+The System SDS **domain** lock hierarchy remains User → Slot → Booking. The current Customer Session row is a subordinate authentication lock after the User and Slot phases but before any Booking access; it does not reverse the domain order. No transaction may lock Session and then request a User, Slot or Booking lock. The existing logout path updates only its Session row and does not acquire User/Slot locks: if logout commits while Booking is waiting for either User or Slot, the later Session lock/revalidation observes revocation or the stale SERIALIZABLE attempt aborts and retries with a fresh snapshot. If Booking obtains the Session lock first, logout waits and is serialized after the Booking transaction. Hold the Session lock through COMMIT/ROLLBACK.
 
-Live Session provides authenticated principal. Request body cannot choose Customer, Tutor or Booking ownership. Locked Slot row, not discovery pre-read or client data, supplies interval and Tutor association.
+Use deterministic ordered locking or explicit per-ID locks whose acquisition order is verified; do not rely on incidental query-plan order. After User locks, revalidate Customer `role='Customer'`/`isActive=true` and Tutor `role='Tutor'`/`isActive=true`. If the lock set/assignment differs, abort and restart from fresh discovery; never add an earlier-order User or Slot lock while holding a later-order Session/Booking lock.
+
+The Session is an existing Auth record, not a Booking data addition. The principal and `sessionId` come from the HTTP guard; never accept either from the request body. The locked Slot row, not discovery pre-read or client data, supplies interval and Tutor association.
 
 ## 3. Ordered transaction algorithm
 
-1. **HTTP boundary:** require live Session, active Customer role, allowed Origin and valid Session-bound CSRF. Strictly parse one UUID `slotId`; reject extra body keys/query parameters.
-2. **Discovery:** read selected Slot ID/Tutor ID without locks only to discover User lock set. Missing Slot → 404.
+1. **HTTP boundary:** require live Session, active Customer role, allowed Origin, Session-bound CSRF and a matching `X-NutTiew-Expected-Session-Binding`. This is preliminary authentication; it does not replace transactional revalidation. Strictly parse one UUID `slotId`; reject extra body keys/query parameters.
+2. **Discovery:** read selected Slot ID/Tutor ID without locks only to discover the User lock set. Missing Slot → 404.
 3. **Begin:** check out one DB connection and start a fresh SERIALIZABLE transaction.
-4. **Lock Users:** lock Customer and actual Tutor User rows in ascending UUID order. Revalidate both roles and active flags.
-5. **Lock Slot:** lock selected Slot row; re-read/compare Tutor ID, lifecycle and interval. Persisted locked state is authoritative.
-6. **Natural-key replay first:** query `Booking` for exact `(customerId=principal.userId, currentSlotId=slotId, status='Booked')`. If found and interval matches locked Slot, COMMIT the read-only transaction and return 200 with that Booking ID. Do this **before** occupied-Slot rejection and before new-booking Q05.
-7. **New-claim conflicts:** if any other `Booked` row occupies Slot, return 409 `SLOT_UNAVAILABLE`. If Customer has a different `Booked` interval with positive overlap (`existing.startsAt < slot.endsAt AND slot.startsAt < existing.endsAt`), return 409 `CUSTOMER_OVERLAP`. Exact adjacency is allowed.
-8. **Guarded INSERT:** insert one row with server/DB-generated ID, authenticated Customer ID, locked Slot ID, persisted Slot interval and status `Booked`. #33 `booking_guard_s1()` locks/re-reads Slot (already held), then samples DB `clock_timestamp()` as authoritative `T_elig`; enforce `startsAt - T_elig >= interval '60 minutes'`. Exact 60:00 passes; 59:59 fails. Do not substitute application time, PostgreSQL transaction-start `now()`, HTTP arrival, #15 `T_view` or commit time.
-9. **Commit:** COMMIT on same connection. Return 201 with persisted Booking ID only after COMMIT acknowledgement.
-10. **Release:** on error, ROLLBACK when connection is usable, release it and classify per §6. No external side effect runs inside transaction.
+4. **Lock Users:** lock Customer and actual Tutor User rows in ascending UUID order. Revalidate Customer `role='Customer'`/`isActive=true` and Tutor `role='Tutor'`/`isActive=true`.
+5. **Lock Slot:** lock the selected Slot row; re-read/compare Tutor ID, lifecycle and interval. Persisted locked state is authoritative.
+6. **Lock current Session after the relevant waits:** on the same connection, lock `principal.sessionId` with `SELECT ... FROM "Session" WHERE id = principal.sessionId AND userId = principal.userId FOR UPDATE`. Do this only after all affected User and Slot locks have been acquired. If the row is absent or its version changed since the SERIALIZABLE snapshot, abort/retry the whole transaction; never continue using the HTTP middleware's earlier Session snapshot.
+7. **Revalidate Session with DB time:** after the Session row lock is acquired, execute a fresh same-connection check requiring `revokedAt IS NULL AND expiresAt > clock_timestamp()`. If no live matching row exists, ROLLBACK and return 401 `UNAUTHENTICATED`; do not read/replay Booking data. This catches revocation during User/Slot waits and expiry during any preceding wait. Keep the Session lock through transaction end so a concurrent logout is serialized before or after the Booking, never halfway through its authorization decision.
+8. **Natural-key replay first:** query `Booking` for exact `(customerId=principal.userId, currentSlotId=slotId, status='Booked')`. If found and interval matches locked Slot, COMMIT the read-only transaction and return 200 with that Booking ID. Do this **before** occupied-Slot rejection and before new-booking Q05.
+9. **New-claim conflicts:** if any other `Booked` row occupies Slot, return 409 `SLOT_UNAVAILABLE`. If Customer has a different `Booked` interval with positive overlap (`existing.startsAt < slot.endsAt AND slot.startsAt < existing.endsAt`), return 409 `CUSTOMER_OVERLAP`. Exact adjacency is allowed.
+10. **Guarded INSERT:** insert one row with server/DB-generated ID, authenticated Customer ID, locked Slot ID, persisted Slot interval and status `Booked`. #33 `booking_guard_s1()` locks/re-reads Slot (already held), then samples DB `clock_timestamp()` as authoritative `T_elig`; enforce `startsAt - T_elig >= interval '60 minutes'`. Exact 60:00 passes; 59:59 fails. Do not substitute application time, PostgreSQL transaction-start `now()`, HTTP arrival, #15 `T_view` or commit time.
+11. **Commit:** COMMIT on the same connection. Return 201 with persisted Booking ID only after COMMIT acknowledgement.
+12. **Release:** on error, ROLLBACK when connection is usable, release it and classify per §6. No external side effect runs inside transaction.
 
-Same-pair replay is checked before new-claim eligibility. It returns the original committed record, does not INSERT and does not need new `T_elig`. Every new INSERT must pass the DB trigger.
+Same-pair replay is checked only after live Session revalidation and all relevant User/Slot lock waits. It returns the original committed record, does not INSERT and does not need new `T_elig`. Every new INSERT must pass the DB trigger.
 
 ## 4. Natural-key replay and uncertain COMMIT
 
@@ -109,7 +114,9 @@ This fresh read is reconciliation, not a second mutation attempt.
 
 ### 6.3 Other failures
 
-- Q05/non-Offered trigger rejection: rollback and map stable #33 INSERT rejection to 422 `BOOKING_NOT_ELIGIBLE`. #33 Part F must publish precise SQLSTATE/constraint identifier. BDF-D11's `0A000` is for forbidden UPDATE/DELETE/TRUNCATE, not Q05.
+- Non-Offered Slot: rollback and map #33 trigger diagnostic `P0B01` / `booking_slot_not_offered` to 409 `SLOT_UNAVAILABLE`.
+- Q05 failure: rollback and map #33 trigger diagnostic `P0B02` / `booking_q05_min_notice` to 422 `BOOKING_NOT_ELIGIBLE`.
+- #33 Part F owns and must implement/publish both stable SQLSTATE/constraint pairs. Unknown guard diagnostics fail closed as 500 `INTERNAL_ERROR`; never guess a Q05 failure. BDF-D11's `0A000` is reserved for forbidden UPDATE/DELETE/TRUNCATE, not INSERT eligibility.
 - Known DB failure before COMMIT/confirmed rollback: safe 503 `SERVICE_UNAVAILABLE`.
 - Ambiguous COMMIT acknowledgement: 503 `BOOKING_OUTCOME_UNKNOWN` if possible; client repeats exact request.
 - Unexpected `0A000` on INSERT-only endpoint or unmapped integrity failure: rollback, safe 500 and non-sensitive diagnostics.

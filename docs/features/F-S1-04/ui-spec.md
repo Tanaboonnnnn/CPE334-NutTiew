@@ -22,20 +22,24 @@ Keep Tutor label/reference and Bangkok appointment date/time clear. No fake prof
 
 ## 2. Journey and content
 
-1. Require live `/api/v1/auth/me` identity with role `Customer`.
-2. Customer selects a Slot in #15. Selection is transient state, **not** a Booking.
-3. Confirmation summary shows only Tutor display name if #15's data gate permits it (otherwise opaque Tutor reference), Bangkok date and 24-hour start/end.
-4. Primary action: **ยืนยันการจอง**. Send only `slotId`; never send `customerId`, `tutorId`, Booking ID, status, interval or cutoff time.
-5. Show confirmed state only after valid 201 or natural-key replay 200.
-6. Do not add a private Booking list/detail route; #17 owns protected retrieval.
+1. Call `GET /api/v1/auth/me` with the existing HttpOnly Session cookie. Require role `Customer`; capture the response's `X-NutTiew-Session-Binding` value with the identity.
+2. Call `GET /api/v1/auth/csrf` with the same cookie and obtain the stable Session-bound HMAC token. Keep it in memory only and associate it with the captured Session binding. This read-only GET may omit `Origin` under the Auth contract, but explicit `Sec-Fetch-Site: cross-site` is rejected. If the binding changes between these calls, discard the token and restart identity/CSRF bootstrap.
+3. Customer selects a Slot in #15. Selection is transient state, **not** a Booking.
+4. Confirmation summary shows only Tutor display name if #15's data gate permits it (otherwise opaque Tutor reference), Bangkok date and 24-hour start/end.
+5. Primary action: **ยืนยันการจอง**. Send only `slotId` in JSON, plus `X-CSRF-Token` and the captured `X-NutTiew-Expected-Session-Binding`; apply the existing canonical Origin/Referer and Fetch Metadata rules. Never send `customerId`, `tutorId`, Booking ID, status, interval or cutoff time.
+6. Capture the current in-memory auth/session epoch, binding and `slotId` when POST starts. Apply a response only if all still match the current auth context; otherwise discard it without displaying the old Booking ID or details.
+7. Show confirmed state only after valid 201 or natural-key replay 200 for the still-current Session.
+8. Do not add a private Booking list/detail route; #17 owns protected retrieval.
 
-The UI must not say the Slot is reserved during review or while POST is pending.
+The Session binding is a non-credential response/request consistency value, not authorization and not a replacement for the HttpOnly cookie or CSRF token.
 
 ## 3. UI states
 
 | State | Trigger | Required behavior |
 |---|---|---|
 | Session loading | `/auth/me` pending | Hide private selection details; show progress |
+| CSRF loading | `/auth/csrf` pending for the captured Session binding | Keep confirmation disabled; retain token only in memory |
+| CSRF/session mismatch | Binding changes between `/auth/me` and `/auth/csrf` or POST returns `SESSION_BINDING_MISMATCH` | Discard token/selection tied to old binding; refresh identity and CSRF before a new confirmation |
 | Signed out | `/auth/me` returns 401 | Clear selection/pending state; show Auth |
 | Wrong role | Principal is not Customer | Deny flow; do not submit |
 | Ready | Customer verified and #15 offer selected | Show summary and one enabled confirm action |
@@ -46,7 +50,7 @@ The UI must not say the Slot is reserved during review or while POST is pending.
 | Not eligible | 422 Q05/past/non-eligible Slot | No success; explain offer can no longer be booked; refresh |
 | Unknown outcome | Network loss, timeout or `503 BOOKING_OUTCOME_UNKNOWN` | Do not assert success/failure; preserve same `slotId`; offer **ส่งคำขอเดิมอีกครั้ง** |
 | Service unavailable | 503 known no-commit result | Safe error; retain selection for explicit retry |
-| Session changed | Logout/account switch/binding mismatch | Immediately clear private summary and pending state; ignore late old-session response |
+| Session changed | Logout, login, account switch, or Session A → Session B (including two Sessions for the same User) | Increment auth/session epoch; clear private summary, selected Slot, pending intent, CSRF token and binding; ignore any late response whose captured epoch/binding differs. Never render its Booking ID/details in the new Session. |
 
 ## 4. Natural-key retry interaction
 
@@ -56,7 +60,7 @@ The UI must not say the Slot is reserved during review or while POST is pending.
 - Same-pair existing `Booked` row returns 200 and original Booking ID; never generate a new ID locally.
 - A different Slot is a distinct request and must pass all normal eligibility/overlap rules.
 - If page closes and in-memory selection is lost, this contract does not invent a client key or server registry. Once #17's protected own-Booking read is integrated, it provides the normal post-refresh recovery view; #16 alone does not claim cross-reload recovery.
-- Clearing UI state on logout/account switch is a privacy boundary, not proof that an already-sent request rolled back.
+- Clearing UI state on logout/account switch is a privacy boundary, not proof that an already-sent request rolled back. If the old request committed before logout, the commit is not undone; its late response is still discarded after the auth/session epoch changes. If a stale binding from Session A is sent with Session B's cookie, the API rejects it before mutation.
 
 ## 5. Accessibility and interaction
 
@@ -76,7 +80,7 @@ Never render Customer ID/email/phone, Session/CSRF data, credentials, another Cu
 | AC-S1-19/20/21 | Confirm only from server's committed/eligibility outcome |
 | AC-S1-22/23/24 | Safe conflict/adjacency outcome; no third-party disclosure |
 | AC-S1-25 and AC-S1-26 | Truthful under concurrent outcomes; disabled button is not race safety |
-| AC-S1-27/33 | No phantom success after stale selection or persistence failure |
+| AC-S1-27 / VC/TEST-S1-33 | No phantom success after stale selection or persistence failure |
 | AC-S1-28 | No owner/Tutor fields sent from client |
 | AC-S1-29 / VC-S1-38 | Same-Slot retry reconciles to original Booking ID |
 | AC-S1-35 / VC-S1-39 | Pre-cutoff click cannot override post-wait Q05 rejection |

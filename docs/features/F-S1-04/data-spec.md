@@ -53,7 +53,7 @@ AND status = 'Booked'
 
 Rules:
 
-1. Query this pair after transaction acquires ordered User and Slot locks.
+1. Query this pair only after the transaction has acquired ordered User and Slot locks, locked/revalidated the current Customer Session, and rechecked Session validity after the final lock wait.
 2. Check it **before** occupied-Slot rejection and before a new-booking Q05 check. A matching committed `Booked` row is already successful: return 200 and original ID without INSERT or new `T_elig`.
 3. The pair is not a new composite UNIQUE constraint, column, Idempotency-Key, registry, fingerprint or TTL.
 4. Only `Booked` qualifies. A future `Cancelled` row is not a replay; S2 rebooking semantics need their own contract.
@@ -67,6 +67,7 @@ The existing Booking row is the only durable replay record; retrying same reques
 - F-S1-04 creates a Booking only. #15 availability remains read-only; #17 owns protected Customer list/detail and Tutor schedule Booking reads.
 - Do not add `Slot.isBooked`, duplicate Tutor identity, Booking registry or second occupancy source.
 - Create DTO contains only Booking ID, Slot ID, copied UTC interval, `Booked` status and request ID. Exclude Customer/Tutor IDs, profiles, contacts, credentials, Session/CSRF values and arbitrary ORM fields.
+- Reuse only the existing Auth Session fields `id`, `userId`, `revokedAt` and `expiresAt` for transactional live-session revalidation. No Session column, Booking field, migration or second authentication schema is added by #16 Part E.
 - Conflict responses must not reveal identity or Booking ID of Customer occupying a Slot.
 - No retention/deletion behavior is added; BDF-D12 append-only/runtime-role rules apply.
 
