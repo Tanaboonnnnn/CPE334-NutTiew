@@ -5,6 +5,11 @@ import { Pool } from 'pg';
 import { config as loadEnv } from 'dotenv';
 loadEnv({path:'.env'});
 const pool=new Pool({connectionString:process.env.DATABASE_URL});const marker=randomBytes(6).toString('hex');const email=`browser-${marker}@example.test`,password='BrowserPassword#1234';
+// Isolate repeated local runs from an earlier run's DB-backed IP quota.
+test.beforeEach(async({page})=>{
+ const h=randomBytes(12).toString('hex');
+ await page.setExtraHTTPHeaders({'X-Forwarded-For':'2001:db8:'+h.slice(0,4)+':'+h.slice(4,8)+':'+h.slice(8,12)+'::8'});
+});
 test.beforeAll(async()=>{await pool.query('INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3)',[email,await argon2.hash(password),'Customer']);});
 test.afterAll(async()=>{await pool.query('DELETE FROM "User" WHERE "email"=$1',[email]);await pool.end();});
 for(const width of [320,375,768,1280]){
