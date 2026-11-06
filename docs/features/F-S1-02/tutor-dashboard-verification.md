@@ -8,12 +8,18 @@ this new implementation branch was created. The old combined PR #29 remains
 a Draft reference only and is **not** a substitute for this independent
 Part F peer review.
 
-**Implementation commit tested:** `baa18de07964efd637a4d936a688dfe2d3812629`
-(Tutor UI, tests and browser screenshots). Database/API migrations, routes,
-constraints and original Part E contract were **not modified**. This evidence
-file is an additional, non-functional documentation commit after that
-tested implementation. Record the final PR HEAD and CI status in the PR
-review description; do not infer hosted CI approval from local runs.
+**Latest tested implementation commit:** `d048e341196a85ddac647d29c660214988cb411c`
+(PR #31 P2 security and non-text contrast correction). The earlier UI
+implementation was committed at `baa18de07964efd637a4d936a688dfe2d3812629`.
+**No DB migrations, Slot DTO properties, schema or business rules changed.**
+The security fix **does** narrowly modify two existing authenticated read
+routes to attach a non-credential, hashed per-session response header, and
+the existing authenticated POST route to reject an optional mismatched
+expected-session header before any write. This is a backward-compatible
+principal-binding guard, **not an added public Slot DTO identity field**.
+The original peer-approved Part E contract documents are unchanged.
+This evidence/screenshots update follows the tested code commit. Confirm
+the final PR HEAD and hosted CI on GitHub separately before asserting them.
 
 ## Local verification (real executed commands)
 
@@ -28,9 +34,9 @@ test-only `.env` was used locally; no secrets are tracked.
 | `npm run typecheck` | **PASS** (API and Web TypeScript) |
 | `npm run build` | **PASS** (API compilation and Vite production Web bundle) |
 | `npm run test:db -w @nuttiew/api -- --maxWorkers=2` | **PASS 43/43** DB Integration, 10 test files |
-| `npm run test:e2e -- --reporter=line` | **PASS 41/41** Microsoft Edge E2E (Auth 15, baseline Slot 7, Tutor Dashboard 19) |
+| `npm run test:e2e -- --reporter=line` | **PASS 46/46** Microsoft Edge E2E (Auth 15, baseline Slot 7, Tutor Dashboard 24) |
 
-**109/109 passing assertions across the three executed test suites.**
+**114/114 passing tests across the three executed test suites.**
 Do not confuse this with a statement of complete WCAG conformance or
 an entire Sprint 1 release. In particular, DB concurrency remained
 **unchanged** by this UI PR: the observed Race A ran with **A first and
@@ -61,6 +67,64 @@ least-privilege checks were included in the 43 DB tests.
   This UI work does **not** claim the server rolls back an earlier
   committed write.
 
+### PR #31 peer re-review: two P2 fixes (2026-11-06, RED → GREEN)
+
+**P2-1 — Cross-tab account/session binding (UX-R5-LOGOUT-01/02):**
+
+- **RED:** a deterministic two-tab Edge E2E captured a real T1
+  `/api/v1/auth/me` 200, held its browser delivery, then authenticated
+  T2 in another tab (replacing the same-origin HttpOnly cookie) before
+  allowing the first tab to request the full own-list. Old code wrongly
+  restored T1 identity while the subsequent GET used T2's session
+  and could render T2 Slots below T1. The new test **failed** on the
+  old code because the T1 session-check guard disappeared.
+- **GREEN:** `/auth/me` and successful `GET /tutor/slots` now carry
+  `X-NutTiew-Session-Binding`, an SHA-256 digest of the authenticated
+  user ID plus server-side Session UUID, **not a bearer credential**.
+  The client checks equality on every authorized own-list response,
+  including initial load, normal refresh, uncertain POST reconciliation
+  and post-Logout Session recovery. A missing/mismatched header fails
+  closed with `SESSION_MISMATCH` without painting wrong-owner data.
+  All actual Slot DTO fields
+  and their shape remain unchanged.
+- Login verifies the newly authenticated principal and obtains its
+  server-issued binding before mounting the private Tutor Dashboard.
+  Login/Logout events notify other same-origin tabs through browser
+  storage events so they immediately suspend the stale UI and writes;
+  stale request generations are ignored and mounted Slot fetches are
+  aborted on unmount. When another tab starts Logout but CSRF is still
+  held, a second E2E proves the first tab hides its private Slot data.
+- **Wrong-account mutation regression:** the Tutor Slot POST accepts an
+  optional `X-NutTiew-Expected-Session-Binding`. A mismatched value is
+  rejected **403**, before creating any Slot; another real two-tab E2E
+  verifies **zero T2 rows** when a stale T1 Create form tries to submit
+  under T2's newly selected session. Legacy clients without the optional
+  header retain the original authenticated/CSRF-protected API behavior.
+
+**P2-2 — Critical non-text control contrast (UX-R4):**
+
+- **RED:** the two targeted computed-style Edge tests failed on the
+  original control borders, notably form input **1.71:1** and
+  GET-retry control **1.79:1** against white (below 3:1). An initial
+  test-helper parsing issue and one browser navigation timeout were
+  corrected/retried; those were not falsely counted as app regressions.
+- **GREEN:** CSS `--tutor-control-border: #66778a` is **4.59:1**
+  against white and **4.13:1** against hover `#eff3f9`; it is used
+  by the form inputs, date picker, Calendar Prev/Next/Today and Retry.
+  A disabled Calendar control retains an opaque visible boundary.
+  Real-browser E2E measures default, hover, visible keyboard focus,
+  disabled and invalid/error states using computed CSS colors and
+  a WCAG 2.2 sRGB contrast formula; the keyboard focus outline
+  is separately checked. The existing approved orange CTA design
+  remains unchanged.
+
+**Executed regression after both fixes:** Unit **25/25**, real
+PostgreSQL DB/Race A **43/43**, Edge E2E **46/46**, Typecheck and
+Production Build **PASS**. All five new Edge tests (the two-tab held
+GET, mismatched POST 403, cross-tab pending Logout signal, non-text
+controls and Retry) passed within the **full 46-test suite**. No
+manual WCAG 2.2 AA conformance signoff was performed.
+
 ## Reviewed UX contract traceability
 
 | ID | Verified evidence |
@@ -69,17 +133,17 @@ least-privilege checks were included in the 43 DB tests.
 | UX-R2 | Real PostgreSQL Slot blocks at Bangkok 13:17, 13:59, and 23:30→00:30 across midnight; scrollable 00:00–24:00 timeline; UTC transport unchanged |
 | UX-R3 | Client-side Prev/Next/Today/date selection sends **no new API query/filter**; full persisted own-list remains complete and Overview count independent of Calendar viewport |
 | UX-R4 | Browser viewport tests 320, 375, 620, 621, 768, 1060, 1061, 1280; no horizontal document overflow, ≤620 mobile agenda, 621–1060 two-day and ≥1061 three-day Calendar, keyboard/focus and touch target checks |
-| UX-R4 CTA | Computed fill `#F47736`, dark foreground `#172137` and border `#D96123` on header/create buttons; keyboard focus `#AA4519` 3px outline and 3px offset; CSS token pairing verified in Edge |
+| UX-R4 CTA + controls | Computed fill `#F47736`, dark foreground `#172137` and border `#D96123` on header/create buttons; keyboard focus `#AA4519` 3px outline and 3px offset; **other critical control boundaries** (input, calendar buttons, date picker, retry) now computed and checked `>=3:1` in default/hover/focus/disabled/error states |
 | UX-R5-GET-01/02 | Initial GET 503 → failed retry 503 never claims empty/zero; authenticated GET 200 restores all genuine Slot rows or a genuinely empty schedule |
-| UX-R5-LOGOUT-01/02 | Immediate private identity/Slot hide and POST guard; uncertain 503 retry/check; same-Tutor `/auth/me` 200 plus own GET 200 before recovery; different identity, GET 503 and /me 401 safety |
+| UX-R5-LOGOUT-01/02 | Immediate private identity/Slot hide and POST guard; uncertain 503 retry/check; same-Tutor `/auth/me` 200 plus **same-session-bound** own GET 200 before recovery; cross-tab held T1/T2 GET never mixes owners, wrong-session create 403 with no DB insert, cross-tab Logout signal hides private UI; different identity, GET 503 and /me 401 safety |
 | UX-R6 | Real DB-backed Edge captures of desktop/tablet/mobile/creation/error states (links below); original Customer Auth presentation retained |
 
 ### Real browser screenshots
 
-The screenshots were captured by Playwright **against the actual app and
-disposable PostgreSQL-backed API**, then copied from `test-results` with
-matching SHA-256 hashes; no stock/demo appointment objects were inserted
-for the screenshots.
+The screenshots were **recaptured after the P2 security/contrast fix**
+by Playwright against the real app and disposable PostgreSQL-backed
+API, then copied from `test-results` with **9/9 matching SHA-256
+hashes**. No stock/demo appointment objects were inserted.
 
 | Scenario | Screenshot |
 |---|---|
@@ -101,7 +165,9 @@ for the screenshots.
   conformance. A reviewer must separately record actual manual
   keyboard/reflow/contrast findings, review date and implementation SHA.
 - **Production/GCP/deployment privilege verification: NOT RUN** and
-  not required in the Tutor Dashboard UI-only follow-up.
+  not required in the Tutor Dashboard follow-up. The two guarded API
+  response headers/optional expected-session request header need no
+  migration or additional browser-exposed personal data.
 - **Instructor/stakeholder 24/7 policy approval: NOT ASSERTED.**
   Original owner-selected Option A permits any minute with no invented
   work-hours/horizon rule; calendar ticks do not constrain create times.
@@ -109,7 +175,7 @@ for the screenshots.
   exclusive Booking [#16](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/16),
   protected Booking retrieval [#17](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/17)
   and Deliverable 1 release/PDF [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18)
-  remain separate tasks. No Student/revenue/booking data or new
-  API/schema was invented here.
+  remain separate tasks. No Student/revenue/booking data, new API
+  **endpoint**, Slot DTO owner fields or DB schema was invented here.
 - **Peer approval and merge of this Part F code PR: PENDING** until
   @Chxtamos independently reviews the actual new PR HEAD.
