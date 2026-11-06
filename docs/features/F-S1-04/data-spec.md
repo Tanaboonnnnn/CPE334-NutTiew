@@ -58,7 +58,7 @@ Rules:
 3. The pair is not a new composite UNIQUE constraint, column, Idempotency-Key, registry, fingerprint or TTL.
 4. Only `Booked` qualifies. A future `Cancelled` row is not a replay; S2 rebooking semantics need their own contract.
 5. If no matching row exists, apply Slot occupancy, Customer overlap and guarded INSERT checks. Another Customer's occupied Slot or a different overlapping Slot for this Customer is a conflict.
-6. After unique/exclusion error, rollback and perform one fresh exact-pair read. Return 200 only if same Customer/Slot `Booked` row exists; otherwise 409.
+6. After unique/exclusion error, ROLLBACK and discard the failed snapshot; on a fresh connection begin a READ COMMITTED reconciliation transaction, lock/revalidate the exact authenticated Session with `FOR UPDATE` and DB `clock_timestamp()` before any Booking read. Missing/revoked/expired Session returns 401 with no Booking DTO. Only a live Session may read the exact pair: return 200 for a committed same-pair `Booked` row with matching interval; otherwise return safe 409. If Session validation is unavailable, return 503 and fail closed.
 
 The existing Booking row is the only durable replay record; retrying same request creates no duplicate active row/history.
 

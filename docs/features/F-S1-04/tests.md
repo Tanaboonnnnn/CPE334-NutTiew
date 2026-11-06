@@ -43,6 +43,7 @@ All cases below are **PLANNED / NOT RUN**.
 | BOOK-27 | BR-S1-13; OD-005-A/B; VC/TEST-S1-23 | Hold selected Slot row in DB session A. Start Booking POST, verify it has acquired User lock and is waiting on Slot; in separate runs, either revoke the Session and commit or allow its `expiresAt` to pass; then release Slot. | Session is locked/revalidated only after the Slot wait; revoked/expired Session returns 401 (or stale snapshot forces full retry then 401). No Booking INSERT, no 200 replay and no private data. |
 | BOOK-28 | OD-005-C; VC/TEST-S1-23/24 | Attempt POST with missing CSRF, wrong CSRF, Session A token with Session B cookie (including Session B for the same User), missing/mismatched expected binding, foreign Origin, and `Sec-Fetch-Site: cross-site`. | Reject with 403 `CSRF_DENIED`/`SESSION_BINDING_MISMATCH`/`ORIGIN_DENIED` as applicable (401 for invalid Session); no mutation and no private Booking data. |
 | BOOK-29 | OD-005-B/C; VC/TEST-S1-23/24 | Start a POST under Session A and delay its response; logout A or switch to Session B (same User and different User), then deliver A's late response. Also send A's captured expected binding with B's cookie. | UI auth/session epoch discards A's late response and never displays its Booking ID/details under B. Stale A binding with B cookie is rejected before mutation. If A had already committed before logout, do not claim rollback; only the stale response is suppressed. |
+| BOOK-30 | BR-S1-13; AC-S1-29; OD-013; VC/TEST-S1-23/38; Transaction contract §6.2 | Cause a same-pair request to reach `23505`/`23P01`; pause after the failed SERIALIZABLE transaction rolls back but before reconciliation. Revoke or expire that exact Session and commit before releasing the barrier. Run a control case with the Session still live. | Invalid Session: fresh READ COMMITTED connection locks/rechecks Session before any Booking read and returns 401 `UNAUTHENTICATED` with no Booking ID/DTO; committed rows remain unchanged. Live control: returns 200 with the original Booking ID and exactly one committed row. If DB validation is unavailable, return 503 rather than skipping the check. |
 
 ## 3. Required existing-anchor coverage
 
@@ -55,15 +56,15 @@ All cases below are **PLANNED / NOT RUN**.
 | VC/TEST-S1-20 | BOOK-05 |
 | VC/TEST-S1-21 | BOOK-06 |
 | VC/TEST-S1-22 | BOOK-07 |
-| VC/TEST-S1-23 | BOOK-08, BOOK-20, BOOK-26..29 |
+| VC/TEST-S1-23 | BOOK-08, BOOK-20, BOOK-26..30 |
 | VC/TEST-S1-24 | BOOK-09, BOOK-20, BOOK-28..29 |
 | VC/TEST-S1-25 | BOOK-10 |
 | VC/TEST-S1-26 | BOOK-11 |
 | VC/TEST-S1-27 | BOOK-12, BOOK-21 |
 | VC/TEST-S1-33 | BOOK-12, BOOK-21 |
-| VC/TEST-S1-38 | BOOK-13..16 |
+| VC/TEST-S1-38 | BOOK-13..16, BOOK-30 |
 | VC/TEST-S1-39 | BOOK-17, BOOK-19 |
-| AC-S1-19..29 | BOOK-01..16, BOOK-20 and BOOK-26..29 |
+| AC-S1-19..29 | BOOK-01..16, BOOK-20 and BOOK-26..30 |
 | AC-S1-35 | BOOK-17, BOOK-19 |
 
 Existing AC/VC/TEST IDs remain authoritative; BOOK IDs are F-S1-04 STS IDs, not replacements.
@@ -81,7 +82,7 @@ Existing AC/VC/TEST IDs remain authoritative; BOOK IDs are F-S1-04 STS IDs, not 
 - [ ] Confirm endpoint ownership, auth/role/CSRF, request allowlist and safe errors.
 - [ ] Confirm Natural-key OD-013 scope, replay precedence and 201/200 behavior.
 - [ ] Confirm canonical #33 mapping and no duplicated schema/trigger.
-- [ ] Confirm User → Slot → Session(auth sub-lock) → Booking acquisition, SERIALIZABLE snapshot behavior and post-lock-wait Session revalidation.
+- [ ] Confirm User → Slot → Session(auth sub-lock) → Booking acquisition, SERIALIZABLE snapshot behavior, post-lock-wait Session revalidation, and fresh post-ROLLBACK Session validation before reconciliation read/200.
 - [ ] Confirm Auth CSRF acquisition, Session binding, cross-origin rejection and late-response suppression across different Sessions for the same User.
 - [ ] Confirm retry classification, three-attempt bound, constraint reconciliation and unknown COMMIT behavior.
 - [ ] Challenge no-post-guard-contention strategy against actual #33 trigger/constraints; retain BDF-23 as hard gate.

@@ -25,6 +25,8 @@ For every attempt, acquire locks in this exact order:
 
 The System SDS **domain** lock hierarchy remains User → Slot → Booking. The current Customer Session row is a subordinate authentication lock after the User and Slot phases but before any Booking access; it does not reverse the domain order. No transaction may lock Session and then request a User, Slot or Booking lock. The existing logout path updates only its Session row and does not acquire User/Slot locks: if logout commits while Booking is waiting for either User or Slot, the later Session lock/revalidation observes revocation or the stale SERIALIZABLE attempt aborts and retries with a fresh snapshot. If Booking obtains the Session lock first, logout waits and is serialized after the Booking transaction. Hold the Session lock through COMMIT/ROLLBACK.
 
+Post-rollback reconciliation is a separate non-mutating authorization/read transaction: it locks only the current Session row and then performs a plain MVCC Booking read (no Booking row lock). It acquires no User or Slot locks, so Session → Booking read cannot invert the User → Slot → Booking domain lock order. It must never initiate another Booking mutation.
+
 Use deterministic ordered locking or explicit per-ID locks whose acquisition order is verified; do not rely on incidental query-plan order. After User locks, revalidate Customer `role='Customer'`/`isActive=true` and Tutor `role='Tutor'`/`isActive=true`. If the lock set/assignment differs, abort and restart from fresh discovery; never add an earlier-order User or Slot lock while holding a later-order Session/Booking lock.
 
 The Session is an existing Auth record, not a Booking data addition. The principal and `sessionId` come from the HTTP guard; never accept either from the request body. The locked Slot row, not discovery pre-read or client data, supplies interval and Tutor association.
@@ -65,7 +67,7 @@ Only replay identity:
 
 A broken connection/timeout around COMMIT does not prove rollback. Server must not claim 201 or silently start a second mutation in the same request. If possible, return 503 `BOOKING_OUTCOME_UNKNOWN`; otherwise client sees network failure. Client retries exact same POST body. A fresh transaction returns 200 if original row committed, or creates one row if it did not. No key registry or TTL is required.
 
-**SERIALIZABLE snapshot caveat:** second concurrent request may take its snapshot before waiting on Customer/Slot lock; lock release does not refresh that snapshot. It may not see the first transaction's newly committed row and PostgreSQL may instead raise 40001 or a unique/exclusion conflict. Do not assume post-lock SELECT sees a newer snapshot. Full retry and post-rollback exact-pair reconciliation in §6 must return 200 for same pair, not create another row or report permanent conflict.
+**SERIALIZABLE snapshot caveat:** a concurrent request may take its snapshot before waiting on Customer/Slot lock; lock release does not refresh that snapshot. It may not see the first transaction's newly committed row and PostgreSQL may instead raise 40001 or a unique/exclusion conflict. Do not assume post-lock SELECT sees a newer snapshot. Full mutation retry and post-rollback exact-pair reconciliation in §6 must return 200 for the same pair only after a fresh DB live-Session check. If that Session was revoked or expired before reconciliation, return 401 with no Booking DTO; never create another row or report a permanent conflict for a valid same-pair commit.
 
 ## 5. Race and Q05 safety / no-post-guard-contention proof
 
@@ -104,13 +106,17 @@ Policy: maximum **three total mutation attempts**, including first. Each retry s
 
 SQLSTATE `23505` and `23P01` are not blind mutation retries:
 
-1. Roll back failed transaction.
-2. Perform one fresh read for exact authenticated `customerId + slotId + status='Booked'`.
-3. If committed row exists and interval matches selected Slot, return 200 with original ID.
-4. Otherwise return 409 (`SLOT_UNAVAILABLE` for occupied Slot; `CUSTOMER_OVERLAP` for different overlapping Booking).
-5. Never spin until a genuine conflict disappears.
+1. **Rollback and discard the failed attempt:** ROLLBACK the SERIALIZABLE mutation transaction, release its User/Slot/Session locks and connection, and discard its snapshot and all Session-validity observations made in that attempt.
+2. **Start a fresh reconciliation transaction:** check out a fresh PostgreSQL connection and begin `BEGIN ISOLATION LEVEL READ COMMITTED`. This is a separate non-mutating reconciliation transaction, not another Booking mutation attempt and does not consume the three-attempt retry budget. Do not mark it SQL `READ ONLY`, because it must lock the Session row.
+3. **Revalidate the exact authenticated Session before any Booking read:** using the original request principal's `sessionId` and `userId` (never request-body values), lock that row with `SELECT ... FROM "Session" WHERE "id" = $1 AND "userId" = $2 FOR UPDATE`. A missing row or owner mismatch means ROLLBACK and 401 `UNAUTHENTICATED`. At READ COMMITTED, if this statement waits behind a logout/revocation update, it locks/returns the latest committed row rather than relying on the failed transaction's snapshot.
+4. **Check live status using database time while holding the lock:** on the same connection, after the lock has been acquired, require `revokedAt IS NULL AND expiresAt > clock_timestamp()`. If revoked or expired, ROLLBACK and return 401 `UNAUTHENTICATED` with no Booking query, ID or DTO. Hold the Session lock through the reconciliation transaction's COMMIT/ROLLBACK so concurrent logout is serialized before or after this authorization/read operation.
+5. **Only for a live Session, perform one exact-pair read:** query `customerId = principal.userId AND currentSlotId = slotId AND status = 'Booked'` on the same fresh connection. This is a plain non-locking MVCC read; acquire no User, Slot or Booking row locks and perform no mutation. Confirm the persisted interval matches the selected Slot before treating it as a replay.
+6. If the committed same-pair row exists and its interval matches, COMMIT the reconciliation transaction and return 200 with the original Booking ID.
+7. If no qualifying same-pair row exists, COMMIT the non-mutating reconciliation transaction and return the safe 409 classified from the original constraint cause (`SLOT_UNAVAILABLE` for an occupied Slot; `CUSTOMER_OVERLAP` for a different overlapping Booking). Never disclose another Customer or Booking ID.
+8. If the fresh connection or live-Session DB check is unavailable/indeterminate, return 503 `SERVICE_UNAVAILABLE`; never skip authorization, reuse the failed snapshot or return 200/409 from stale data.
+9. Never spin until a genuine conflict disappears. The reconciliation read is not a second mutation attempt and does not rerun the trigger or sample `T_elig`.
 
-This fresh read is reconciliation, not a second mutation attempt.
+The fresh Session check is mandatory for **every** post-ROLLBACK path that could return 200. A Session revoked/expired after the failed attempt but before reconciliation must receive 401, even if the exact-pair Booking row is committed. A still-live Session control case must continue to return 200 with the original ID.
 
 ### 6.3 Other failures
 
@@ -124,6 +130,6 @@ This fresh read is reconciliation, not a second mutation attempt.
 
 ## 7. Real-PostgreSQL proof gate
 
-BDF-23 is owned by #16 and runs only after #33 Part F merges with exact schema SHA. Evidence must include independent sessions/barriers for Race B/C; backend PIDs/blockers; User → Slot → Session auth-lock order and Session revalidation after waits; trigger Slot lock already held; `T_elig` after required waits; forced unexpected unique/exclusion index wait; 60:00/59:59 and HTTP-arrival-before-cutoff cases; sequential/in-flight/lost-response same-pair replay; pre-COMMIT failure injection; final rows from fresh connection; PostgreSQL version, schema SHA, SQLSTATE/constraint, commands and source commit.
+BDF-23 is owned by #16 and runs only after #33 Part F merges with exact schema SHA. Evidence must include independent sessions/barriers for Race B/C; backend PIDs/blockers; User → Slot → Session auth-lock order and Session revalidation after waits; fresh READ COMMITTED post-ROLLBACK Session-locked reconciliation before exact-pair read; trigger Slot lock already held; `T_elig` after required waits; forced unexpected unique/exclusion index wait; 60:00/59:59 and HTTP-arrival-before-cutoff cases; sequential/in-flight/lost-response same-pair replay; pre-COMMIT failure injection; final rows from fresh connection; PostgreSQL version, schema SHA, SQLSTATE/constraint, commands and source commit.
 
 BDF-23 is **PLANNED / NOT RUN** in Part E. If post-guard contention challenge fails, do not approve adapter or claim #16 Part F complete.

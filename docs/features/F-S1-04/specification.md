@@ -35,7 +35,7 @@ An authenticated Customer requests one selected Slot. The server derives Custome
 | Invariant | F-S1-04 contract |
 |---|---|
 | Ownership | `customerId = principal.userId` from live active Customer Session; never trust client owner/role. |
-| Session validity | HTTP `requireSession` is preliminary only. Lock `principal.sessionId` on the transaction connection after User and Slot lock waits; recheck `revokedAt IS NULL` and `expiresAt > clock_timestamp()` before replay/INSERT. |
+| Session validity | HTTP `requireSession` is preliminary only. Lock `principal.sessionId` on the SERIALIZABLE mutation connection after User and Slot lock waits; recheck `revokedAt IS NULL` and `expiresAt > clock_timestamp()` before replay/INSERT. After `23505`/`23P01` ROLLBACK, a fresh READ COMMITTED reconciliation connection must lock/revalidate the same Session before any Booking read/200; invalid Session returns 401 with no DTO. |
 | Tutor / Slot | `currentSlotId` is selected persisted Slot. Tutor derives through `Slot.tutorId`; Booking does not duplicate `tutorId`. |
 | Interval | Copy persisted Slot `startsAt`/`endsAt`; never accept either timestamp or duration from client. |
 | State | New Sprint 1 Booking status is `Booked`; `Past` is display-only and does not release occupancy. |
@@ -64,7 +64,7 @@ This resolves the **Booking-create portion** of SRS OD-013 for F-S1-04. OD-013 r
 - PostgreSQL **SERIALIZABLE** for every Booking mutation attempt.
 - Preserve the System SDS **domain** lock order: all affected User rows in ascending UUID order → all affected Slot rows in ascending UUID order → existing Booking rows in ascending UUID order only where needed. After all User and Slot locks, lock only the current Customer `Session` row (`principal.sessionId`) as an authentication sub-lock before any Booking read/lock; this does not reverse the domain order. Hold it through COMMIT. No path may lock Session and then request User, Slot or Booking locks. Existing F-S1-02 takes User → Session but creates a new Slot row without acquiring an existing Slot row lock, so it does not invert this row-lock order. A new Booking INSERT has no pre-existing Booking row to lock.
 - Retry the whole transaction for SQLSTATE `40001`, `40P01` or ORM-equivalent `P2034`; maximum **three total mutation attempts**, with fresh discovery/locks and fresh `T_elig` on every new INSERT attempt.
-- `23505`/`23P01` are not blind mutation retries. Roll back, perform one fresh exact-pair read; return 200 only if same Customer/Slot has a committed `Booked` row, otherwise 409.
+- `23505`/`23P01` are not blind mutation retries. Roll back and discard the failed snapshot; on a fresh READ COMMITTED connection, lock/revalidate the exact authenticated Session before any exact-pair Booking read. Invalid/missing Session → 401 with no DTO; a live Session plus committed same-pair `Booked` row → 200 original ID; otherwise safe 409. If DB validation is unavailable → 503, fail closed.
 - Revalidate the live Session on the same SERIALIZABLE connection **after all User and Slot lock waits**: lock `principal.sessionId` with `FOR UPDATE`; verify `userId = principal.userId`, `revokedAt IS NULL` and `expiresAt > clock_timestamp()` before replay/INSERT. A revocation committed during either lock wait is observed after the wait or causes `40001` and a fresh transaction; expiry during a wait fails the DB-clock check. Never return 200 replay or 201 from an invalid Session.
 - Reuse Auth OD-005-C: obtain the stable CSRF token from `GET /api/v1/auth/csrf` and bind it to `X-NutTiew-Session-Binding` from `GET /api/v1/auth/me`; require `X-NutTiew-Expected-Session-Binding` on the Booking POST. The UI must discard late responses after its auth/session epoch changes, including a different Session for the same User.
 - #33 trigger uses PostgreSQL `clock_timestamp()` after its Slot lock. Application/browser time, HTTP arrival, transaction-start `now()`, #15 `T_view` and commit time are not authoritative. Non-Offered and Q05 trigger rejections have distinct stable SQLSTATE/constraint pairs: `P0B01 / booking_slot_not_offered` and `P0B02 / booking_q05_min_notice` respectively; #33 Part F must implement and publish this dependency.
@@ -83,8 +83,8 @@ These are engineering selections pending independent @Tanaboonnnnn review and re
 | AC-S1-25 and AC-S1-26 | Race B (two Customers/one Slot) and Race C (one Customer/two overlapping Tutors) have separate barriers and final-row assertions. | BOOK-10/11 |
 | AC-S1-27 / VC-S1-33 | Stale/invalid selection and persistence failure never produce phantom success or inconsistent occupancy. | BOOK-07/08/12/21/26/27 |
 | AC-S1-28 | Customer/Tutor identity is derived from Session/Slot, not request fields. | BOOK-09 |
-| BR-S1-13 / OD-005-A/B/C | Current Session remains live after User/Slot waits; Session-bound CSRF and binding prevent stale-session mutation or late-response disclosure. | BOOK-26..29 |
-| AC-S1-29 / VC-S1-38 | Same-pair replay returns 200 and same Booking ID; unknown outcome is reconciled by retrying same request. | BOOK-13..16 |
+| BR-S1-13 / OD-005-A/B/C | Current Session remains live after User/Slot waits and is revalidated again after ROLLBACK before reconciliation; Session-bound CSRF and binding prevent stale-session mutation or late-response disclosure. | BOOK-26..30 |
+| AC-S1-29 / VC-S1-38 | Same-pair replay returns 200 and same Booking ID only for a live Session; post-ROLLBACK reconciliation returns 401 if that Session was revoked/expired. | BOOK-13..16, BOOK-30 |
 | AC-S1-35 / VC-S1-39 | Request arriving before cutoff but waiting until after cutoff is rejected by post-lock DB `T_elig`. | BOOK-17/19 |
 
 Related requirements: FR-S1-10..13, 16, 18..19; BR-S1-01, 07..13, 18..21; NFR-S1-01, 03..08, 11..12; Q01/Q02/Q05/Q28/Q29/Q30; VAL-007..011/014/030. Tests are planned / NOT RUN in Part E.
@@ -95,7 +95,7 @@ Related requirements: FR-S1-10..13, 16, 18..19; BR-S1-01, 07..13, 18..21; NFR-S1
 
 - [ ] Feature SDS, UI, API, data, transaction and STS documents are cross-linked and consistent.
 - [ ] User-approved OD-013 Sprint 1 Booking decision is recorded without closing future S2 retry decisions.
-- [ ] PostgreSQL SERIALIZABLE, User → Slot → Session(auth sub-lock) → Booking acquisition, bounded whole-transaction retry and Q05 authority are explicit; Session is revalidated after relevant lock waits.
+- [ ] PostgreSQL SERIALIZABLE, User → Slot → Session(auth sub-lock) → Booking acquisition, bounded whole-transaction retry and Q05 authority are explicit; Session is revalidated after relevant lock waits and again on a fresh READ COMMITTED connection before post-ROLLBACK reconciliation reads/200.
 - [ ] Auth CSRF is acquired through the existing endpoint, tied to the current Session binding, and stale responses are ignored after logout/account/session switch.
 - [ ] Non-Offered and Q05 trigger failures have distinct, stable #33 SQLSTATE/constraint mappings and separate STS assertions.
 - [ ] Same-pair `Booked` replay is checked before occupied/Q05 rejection; returns original ID without INSERT.
