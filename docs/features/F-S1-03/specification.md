@@ -1,16 +1,16 @@
 # F-S1-03 — Customer Availability Discovery Feature SDS (Part E)
 
-> **Part E documentation contract only.** Issue #15; provisional owner @Chxtamos; independent peer reviewer @Tanaboonnnnn. This change does not implement UI/API code, add a migration, execute tests or close the issue. Engineering choices are proposals until the peer review accepts or changes them.
+> **Part E documentation contract only.** Issue #15; provisional owner @Chxtamos; independent peer reviewer @Tanaboonnnnn. Decision states below reflect the peer-review decision record in PR #32 comment [#6683929084](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32#issuecomment-6683929084). These are engineering/design decisions, not new stakeholder business rules. This change does not implement UI/API code, add a migration, execute tests or close the issue.
 
 ## 1. Authority and scope
 
-Sources: [Sprint 1 requirements](../../requirements.md) (FR-S1-08/09/18, AC-S1-15..18, BR-S1-06/07/11/12/15/17/20/21, NFR-S1-01/07/08/09/10/12), [SRS](../../srs.md), [System SDS](../../system-sds.md), [Feature Inventory](../../features.md), [Traceability](../../traceability.md), [AGENTS.md](../../../AGENTS.md), accepted [Auth contract](../F-S1-01/specification.md) and [Tutor Slot contract](../F-S1-02/specification.md).
+Sources: [Sprint 1 requirements](../../requirements.md) (FR-S1-08/09/13/18, AC-S1-15..18, BR-S1-06/07/09/10/11/12/15/17/20/21, NFR-S1-01/07/08/09/10/12, Q28), [SRS](../../srs.md), [System SDS](../../system-sds.md), [Feature Inventory](../../features.md), [Traceability](../../traceability.md), [AGENTS.md](../../../AGENTS.md), accepted [Auth contract](../F-S1-01/specification.md) and [Tutor Slot contract](../F-S1-02/specification.md).
 
-**Outcome:** an authenticated Customer discovers a real eligible Tutor Slot, identifies the Tutor and Bangkok start/end time, and selects that offer without seeing another Customer's private Booking data.
+**Outcome:** an authenticated Customer discovers a real eligible Tutor Slot, identifies the Tutor using an approved public display name when its data gate is cleared (otherwise an opaque Tutor reference), sees Bangkok start/end time, and selects that offer without seeing another Customer's private Booking data.
 
-**In scope:** Customer-only read access to current Offered Slots; bookability projection; safe Tutor/Slot references; UTC API and Asia/Bangkok UI time; privacy allowlist; loading/empty/error/retry/session-change states; planned API, DB, browser, timezone and privacy tests.
+**In scope:** Customer-only read access to current Offered Slots; Customer-specific bookability projection; safe Tutor/Slot references; a conditional Tutor public-display-name data gate; UTC API and Asia/Bangkok UI time; privacy allowlist; loading/empty/error/retry/session-change states; planned API, DB, browser, timezone and privacy tests.
 
-**Out of scope:** Booking create/confirm/history/detail (#16/#17); Tutor Slot management/dashboard (#14); public/anonymous discovery; profile/name/email/phone, subject, rating, price, location, messaging, payments, notifications, cancellation/reschedule, recurring Slots; new Tutor hours, weekdays, holidays, maximum horizon or start-minute grid; any mutable Slot.isBooked flag or Booking schema owned by #15.
+**Out of scope:** Booking create/confirm/history/detail (#16/#17); Tutor Slot management/dashboard (#14); public/anonymous discovery; any unapproved Tutor profile/name/email/phone or Customer identity; subject, rating, price, location, messaging, payments, notifications, cancellation/reschedule, recurring Slots; new Tutor hours, weekdays, holidays, maximum horizon or start-minute grid; any mutable Slot.isBooked flag or Booking schema owned by #15.
 
 Part E is documentation only. Part F must be a separate code-only branch/PR after this contract is peer-accepted.
 
@@ -18,14 +18,11 @@ Part E is documentation only. Part F must be a separate code-only branch/PR afte
 
 Issue #13 Auth and Issue #14 Tutor Slots/Dashboard are closed. PR #31 is merged into sprint1. This branch is based on sprint1 SHA 551a9469e3d3a7e8e3ae004a382862c4f3e87e0e.
 
-**Important sequencing gap for Part F:** at this base, apps/api/prisma/schema.prisma contains User, Session, AuthAttemptBucket, AuthAttemptReservation and Slot, but no Booking model/table. apps/api/src/slots.ts explicitly notes that Booking is introduced by Issue #16 and currently projects Tutor own-list occupancy as Unoccupied. Issue #16 is open and says its implementation is blocked by #15, while #15 must exclude occupied Slots.
+**Selected sequencing route — B: a separately scoped shared data foundation.** At this base, `apps/api/prisma/schema.prisma` contains User, Session, AuthAttemptBucket, AuthAttemptReservation and Slot, but no Booking model/table. `apps/api/src/slots.ts` currently projects Tutor own-list occupancy as Unoccupied because #16 has not introduced Booking; that projection is not a Customer-availability occupancy source.
 
-This is not permission to assume every Slot remains unoccupied. The contract defines the future read relationship to active Booking rows, but does not claim it is executable against the current schema. Before Part F can prove occupied-Slot exclusion, the team must resolve how the #16 Booking schema becomes available without inventing Slot.isBooked or moving Booking ownership into #15. Proposed options for peer/team decision:
+The team selected a separate Issue/PR for the shared Booking data foundation, with schema, migration, ownership and sequencing reviewed before either feature relies on it. The minimum persisted fields needed by this contract are `id`, `customerId`, `currentSlotId`, `startsAt`, `endsAt` and `status` (`Booked`/`Cancelled`); `currentSlotId` is the occupancy relation and the persisted Booking interval is the Customer-overlap source. Booking mutation remains owned by #16 and must not move into #15.
 
-1. #16 peer-accepts its Part E data contract and supplies a reviewed minimal Booking schema/migration foundation before #15's occupancy implementation is verified; #16's Booking mutation remains gated by #15.
-2. A separately scoped and reviewed shared data-foundation change is approved before either full Part F acceptance.
-
-Neither option is approved here. Occupancy-dependent Part F checks are BLOCKED until the decision and real Booking table exist.
+**Foundation tracking (not yet created):** proposed implementation owner @Chxtamos; peer reviewer @Tanaboonnnnn; dependency links #15 and #16; exact foundation Issue/PR URL and reviewed migration/schema SHA are **TBD** until that separate work is created and accepted. This PR does not create the Issue/PR or approve a migration. Until the shared foundation is reviewed, merged and its exact SHA recorded against the Part F branch, occupancy-dependent Part F work is a hard **STOP GATE**. Do not invent `Slot.isBooked`, assume all Slots are unoccupied, or create a partial Booking schema under #15.
 
 ## 3. Actors and journey
 
@@ -40,17 +37,20 @@ Neither option is approved here. Occupancy-dependent Part F checks are BLOCKED u
 2. UI verifies GET /api/v1/auth/me and requires trusted role Customer.
 3. UI calls the Customer availability GET with the same-origin HttpOnly Session cookie.
 4. Server enforces Session and Customer role, reads eligible offers and serializes only the approved allowlist.
-5. UI displays Tutor reference and Bangkok start/end. Selecting a Slot changes transient UI state only; it is not a Booking or reservation.
+5. UI displays an approved Tutor public display name only after the separate data-approval gate; otherwise it displays the opaque Tutor reference. It also displays Bangkok start/end. Selecting a Slot changes transient UI state only; it is not a Booking or reservation.
 6. Later #16 receives only the selected Slot ID and independently rechecks offer state, occupancy, Q05 and all Booking rules in its authoritative transaction. A prior availability response is never a lock, lease or guarantee.
 
 ## 4. Eligibility and time
 
-For one read, T_view is one database-authoritative instant sampled for the availability query. Under the proposed bookable-only policy, include a Slot only when:
+For one read, `T_view` is one database-authoritative instant sampled for the availability query. Under the confirmed Customer-specific bookable-only policy, include a Slot only when:
 
 1. lifecycle is Offered;
 2. no active Booking with status Booked references that Slot;
 3. startsAt - T_view is at least 60 minutes (60:00 included; 59:59 excluded);
-4. the persisted Slot interval and Tutor ownership remain valid under the accepted Slot contract.
+4. no Active Booking owned by the authenticated Customer overlaps this Slot, even when the existing Booking belongs to a different Tutor; and
+5. the persisted Slot interval and Tutor ownership remain valid under the accepted Slot contract.
+
+**Customer-specific overlap predicate (BR-S1-09/10, Q28):** derive the owner only from `principal.userId` supplied by the live Session. Exclude a candidate Slot when an existing Booking has `customerId = principal.userId`, `status = Booked`, and its persisted interval overlaps the candidate using half-open intervals: `booking.startsAt < slot.endsAt AND slot.startsAt < booking.endsAt`. A Cancelled Booking does not conflict; exact adjacency is allowed. This is an eligibility predicate only: the query may test existence but must not return or disclose any matching Booking or Customer data. The same Customer's overlapping Booking on another Tutor must make the candidate unavailable to that Customer; another Customer's Booking must not affect this Customer's overlap predicate.
 
 T_view is an indicative read timestamp, **not** #16's transactional T_elig. Booking T_elig must be sampled by the authoritative Booking transaction after relevant contention waits, immediately before the guarded write. The availability UI must never imply a displayed Slot is reserved or guaranteed to remain bookable.
 
@@ -62,7 +62,7 @@ A Slot can become occupied or cross Q05 after T_view. If #16 later rejects a sta
 
 | ID | Proposed contract | Status |
 |---|---|---|
-| OD-AV-01 Display | **Bookable-only**: return/display only currently eligible offers. This follows the proposed default in requirements.md §14.2; it is not stakeholder approval. Alternative: show future Offered Slots with a generic unavailable state. | Owner confirmation and peer acceptance required. |
+| OD-AV-01 Display | **Bookable-only for the authenticated Customer**: return/display only offers that pass Slot occupancy, Q05 and that Customer's BR-S1-09/10 overlap checks. This follows the proposed default in requirements.md §14.2; it is not stakeholder approval. Alternative: show future Offered Slots with a generic unavailable state. | Owner confirmation and peer acceptance required. |
 | OD-AV-02 Tutor identity | Opaque Tutor UUID reference only; no name, email, phone, profile or Booking identity. UI may compact the label but must avoid collisions in the visible result set. | Proposed; peer review required. |
 | OD-AV-03 List | Full unfiltered result set; no query filters/pagination in this S1 proposal; stable order startsAt ASC, tutorRef ASC, slotId ASC. | Proposed technical choice, not a scale guarantee. OD-002 remains OPEN; this list proposal does not approve an unlimited advance horizon. |
 | OD-AV-04 Clock | One database T_view per read; include evaluatedAt in response metadata. | Proposed; does not replace T_elig. |
@@ -76,10 +76,10 @@ A Slot can become occupied or cross Q05 after T_view. If #16 later rejects a sta
 | Source | F-S1-03 outcome | Planned STS |
 |---|---|---|
 | FR-S1-08 / AC-S1-15 | Customer identifies a specific Tutor and Slot start/end without private third-party data | AVA-01, AVA-05 |
-| FR-S1-09 / AC-S1-16 | Anything shown as bookable is current, unoccupied and outside Q05 cutoff | AVA-02, AVA-03 |
+| FR-S1-09 / AC-S1-16 | Anything shown as bookable is current, unoccupied, outside Q05 cutoff and does not overlap this Customer's Active Bookings | AVA-02, AVA-03, AVA-15 |
 | AC-S1-17 | Stale offer is revalidated by #16; no false Booking success | AVA-11 |
 | AC-S1-18 / BR-S1-12 | Bangkok time meaning is independent of device locale | AVA-04 |
-| BR-S1-06/07/11/15/17/20/21 | Distinct Tutor offers, Q05/future-time eligibility, Customer role and privacy | AVA-02/03/05/06/07 |
+| BR-S1-06/07/08/09/10/11/15/17/20/21 | Distinct Tutor offers, Slot occupancy, Q05/future-time eligibility, Customer-specific non-overlap, role and privacy | AVA-02/03/05/06/07/15 |
 | FR-S1-18 | Failed/unauthorized reads communicate non-success without private disclosure or false availability | AVA-05/06/10 |
 | NFR-S1-01/08 | Deny anonymous/wrong role; no secret or private Booking leakage | AVA-05/06/12 |
 | NFR-S1-07/12 | Reproducible evidence, stable IDs and reviewed PR | Part F ledger/PR |

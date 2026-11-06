@@ -16,7 +16,7 @@
 
 | Method/path | Query | Success | Enforcement |
 |---|---|---|---|
-| GET /api/v1/customer/availability | No query parameters in this S1 proposal | 200 safe projection; data: [] is a valid confirmed-empty result | Live Session, Customer role, read-time eligibility, allowlist, no-store |
+| GET /api/v1/customer/availability | No query parameters in this S1 proposal | 200 safe projection; `data: []` is a valid confirmed-empty result and still includes `meta.evaluatedAt` | Live Session, Customer role, Customer-specific read-time eligibility, allowlist, no-store |
 
 Unknown query parameters (customerId, tutorId, from, to, page, cursor, limit or anything else) return 400 INVALID_INPUT under this no-filter/no-pagination proposal. Any future filter/pagination requires a reviewed contract amendment; do not infer a maximum horizon/date window.
 
@@ -41,6 +41,18 @@ Unknown query parameters (customerId, tutorId, from, to, page, cursor, limit or 
 
 Values are illustrative. evaluatedAt is database T_view. Every row is bookable at that evaluation instant only; it is not a reservation or guarantee that a later Booking succeeds.
 
+An empty successful response has the same envelope and metadata, with `data: []` and a non-null RFC 3339 UTC `meta.evaluatedAt`. The endpoint sets `Cache-Control: no-store` for populated and empty 200 responses (and for errors). The timestamp comes from the same database statement/read evaluation as the offer list; it is not omitted or generated from the application/browser clock when there are no offers.
+
+~~~json
+{
+  "data": [],
+  "meta": {
+    "requestId": "opaque-request-id",
+    "evaluatedAt": "2026-11-08T04:30:00.000Z"
+  }
+}
+~~~
+
 ### Exact response allowlist
 
 | Field | Type | Meaning |
@@ -61,7 +73,7 @@ If peer review rejects bookable-only and accepts unavailable entries, revise bef
 
 Proposed order: startsAt ASC, tutorRef ASC, slotId ASC. No client-selected order. This draft returns the eligible list without filters or pagination; OD-002 (maximum advance horizon) remains OPEN. The absence of a cap in this draft is not an approved unlimited-horizon policy. Resolve OD-002 and revise the query contract before Part F; this is not a guarantee for unlimited data volume.
 
-Sample T_view once using the database clock. Under bookable-only, a row must be lifecycle Offered, have no active Booked row for its Slot ID, and satisfy startsAt - T_view >= 60 minutes. Exactly 60:00 is included; 59:59 is excluded. Never use browser time or HTTP arrival time. T_view is not #16 T_elig; #16 repeats the authoritative check after contention waits.
+Sample T_view once using the database clock. Under bookable-only for the authenticated Customer, a row must be lifecycle Offered, have no active Booked row for its Slot ID, satisfy startsAt - T_view >= 60 minutes, and have no overlapping Active Booking owned by `principal.userId`. The owner is derived from the live Session; it is never accepted from a query parameter, header or body. For the Customer-overlap check, only `status = Booked` rows with `customerId = principal.userId` participate, using persisted Booking interval fields and the half-open predicate `booking.startsAt < slot.endsAt AND slot.startsAt < booking.endsAt`. Cancelled rows do not conflict and adjacent intervals are allowed. This predicate checks existence only and never returns Booking details. Exactly 60:00 is included; 59:59 is excluded. Never use browser time or HTTP arrival time. T_view is not #16 T_elig; #16 repeats the authoritative checks after contention waits.
 
 ## 4. Safe errors
 
@@ -81,6 +93,6 @@ No POST, Booking mutation, reservation hold, Booking confirmation or idempotency
 
 ## 6. Implementation dependency and verification status
 
-The current sprint1 schema has no Booking model. The NOT EXISTS predicate against active Booked rows is a **logical contract**, not executable against the current schema. Do not ship as “all Slots are unoccupied” or add Slot.isBooked. Resolve the shared Booking schema/#16 sequencing gate in [Feature SDS §2](specification.md) before Part F claims occupied-Slot correctness.
+The current sprint1 schema has no Booking model. The Slot-occupancy and Customer-overlap `NOT EXISTS` predicates against active Booked rows are **logical contracts**, not executable against the current schema. Do not ship as “all Slots are unoccupied” or add Slot.isBooked. Resolve the shared Booking schema/#16 sequencing gate in [Feature SDS §2](specification.md) before Part F claims occupied-Slot or Customer-overlap correctness.
 
 This document defines a proposed endpoint only. No route, query, API test, browser test or performance result is claimed to exist or pass.

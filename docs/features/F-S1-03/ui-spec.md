@@ -27,7 +27,7 @@ Selecting an offer stores slotId in transient UI state only. It does not POST, r
 
 ### Display policy OD-AV-01
 
-**Proposed default: bookable-only.** Show only offers the API evaluated as bookable at meta.evaluatedAt. This follows the proposal in requirements.md §14.2 but remains pending owner confirmation and peer review.
+**Proposed default: bookable-only for the authenticated Customer.** Show only offers the API evaluated as bookable at meta.evaluatedAt, including the absence of an overlapping Active Booking owned by that Customer. This follows the proposal in requirements.md §14.2 but remains pending owner confirmation and peer review.
 
 If rejected, the alternative is to show future Offered Slots with a generic ไม่พร้อมให้จอง state. Never distinguish Occupied from Too soon, reveal a Customer/Booking ID/reason, or allow selecting an unavailable offer. Do not mix policies.
 
@@ -71,14 +71,14 @@ Preserve the same chronological offer set and field visibility at every viewport
 
 ## 6. Privacy and content rules
 
-Show only the opaque Tutor reference and Slot date/time. Do not show/fetch Customer identity, emails/phones, Booking IDs/reasons, Tutor email, credentials/session fields or full private Tutor schedule. No fake names, subjects, ratings, prices, locations, images or availability. No Booking confirmed/Booked/Reserved state in #15.
+Show only the opaque Tutor reference and Slot date/time. The server-side overlap check may use the authenticated Customer ID but must not reveal whether a matching Active Booking exists, which Tutor owns it, or any Booking/Customer details. Do not show/fetch Customer identity, emails/phones, Booking IDs/reasons, Tutor email, credentials/session fields or full private Tutor schedule. No fake names, subjects, ratings, prices, locations, images or availability. No Booking confirmed/Booked/Reserved state in #15.
 
 ## 7. Acceptance mapping
 
 | Criterion | UI requirement |
 |---|---|
 | AC-S1-15 | Selectable Tutor reference and Bangkok start/end |
-| AC-S1-16 | Occupied/inside-cutoff offers are not bookable; generic unavailable state only if alternate policy accepted |
+| AC-S1-16 | Occupied/inside-cutoff offers and offers overlapping this Customer's Active Booking are not bookable; generic unavailable state only if alternate policy accepted |
 | AC-S1-17 | Selection is not reservation; #16 revalidates and UI shows non-success |
 | AC-S1-18 | Asia/Bangkok rendering independent of device timezone |
 
