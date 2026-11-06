@@ -7,7 +7,7 @@
 Define one shared, durable PostgreSQL/Prisma Booking representation for:
 
 - [#15 — F-S1-03 Customer Availability](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15), which reads persisted Bookings to exclude occupied Slots and the authenticated Customer's overlapping appointments.
-- [#16 — F-S1-04 Exclusive Booking](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/16), which owns Booking creation, authoritative eligibility, transaction coordination, and retry semantics.
+- [#16 — F-S1-04 Exclusive Booking](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/16), which owns Booking creation and the application transaction/lock/retry protocol. The shared database guard trigger is owned by #33 Part F, not duplicated in #16.
 
 The approved Part E contract for #15 selected Route B: this shared foundation must be reviewed and merged separately before either feature implements Booking-dependent behavior. This document is the proposed contract for that review; it is not itself approval.
 
@@ -37,7 +37,7 @@ The canonical field list, relation semantics, SQL constraints, and Prisma mappin
 
 | ID | Proposed contract | Rationale / trace |
 |---|---|---|
-| BDF-D01 | `Booking.id` is an immutable UUID primary key. | Stable identity for persistence and later authorized retrieval; FR-S1-10, FR-S1-14. |
+| BDF-D01 | `Booking.id` is a server-generated UUID primary key and an **application-level immutable identity**. PostgreSQL enforces primary-key uniqueness and non-nullability, but this contract does not claim that the database rejects `UPDATE` of `Booking.id`; no ID-immutability trigger is proposed. | Stable identity for persistence and later authorized retrieval; FR-S1-10, FR-S1-14. |
 | BDF-D02 | `customerId` is a required FK to `User.id`; delete/update is restricted. The service additionally verifies `role = Customer` and `isActive = true` from the authenticated Session. | Preserve ownership and do not trust client identity; FR-S1-04/10, BR-S1-13. |
 | BDF-D03 | `currentSlotId` is a required FK to the selected `Slot`. The current Tutor is derived from `Slot.tutorId`; Booking does not duplicate `tutorId`. | Avoid two mutable sources of Tutor ownership; System SDS §3.2. |
 | BDF-D04 | Persist `startsAt` and `endsAt` as `TIMESTAMPTZ(6)` snapshots copied from the selected Slot, never accepted from the client. A composite FK `(currentSlotId, startsAt, endsAt) → Slot(id, startsAt, endsAt)` enforces that the snapshot matches the immutable Slot. | Required by System SDS §3.3 and #15 data-spec; prevents a Booking interval drifting away from its Slot. |
@@ -47,8 +47,9 @@ The canonical field list, relation semantics, SQL constraints, and Prisma mappin
 | BDF-D08 | PostgreSQL partial unique and exclusion constraints are the final integrity boundary for active Slot exclusivity and Customer overlap. | FR-S1-12/13, BR-S1-08/09/19, NFR-S1-04. |
 | BDF-D09 | Add a forward-only migration; current baseline has no Booking rows, so no Booking backfill is required. Existing Auth/Slot data and constraints must remain unchanged. | Safe migration from the verified `sprint1` baseline. |
 | BDF-D10 | Store `createdAt` and `updatedAt` as `TIMESTAMPTZ(6)`. `createdAt` is DB-defaulted; Prisma `@updatedAt` maintains `updatedAt` for application updates. These are metadata, not booking eligibility clocks. | Consistent with the System SDS entity model; Q05 continues to use its separate authoritative `T_elig`. |
+| BDF-D11 | **#33 Part F owns the versioned PostgreSQL Booking `BEFORE INSERT/UPDATE` guard trigger** as part of the shared Booking migration. It enforces the Offered-Slot guard and samples DB `clock_timestamp()` for Q05 on a new Booked INSERT after the trigger's Slot lock. **#16 owns the application transaction adapter**, including the System SDS User → Slot → Booking lock order, Serializable transaction and no-post-guard-contention proof or whole-transaction retry. The trigger is not implemented again in #16. | System SDS §§3.3, 7.1 and 7.3; BR-S1-07/13/18/19; AC-S1-25/26/35; VC/TEST-S1-25/26/39. |
 
-All BDF-D01..D10 entries are **proposals awaiting review**, not stakeholder decisions or accepted implementation facts. A reviewer-requested change must be reflected in these documents before any migration is authored.
+All BDF-D01..D11 entries are **proposals awaiting human review**, not stakeholder decisions or accepted implementation facts. BDF-D11 resolves the former either/or ownership question with one explicit proposed owner and sequence; it must be accepted by both consuming feature owners before any migration is authored.
 
 ## 4. Integrity and responsibility boundaries
 
@@ -69,7 +70,9 @@ The database must reject:
 - #16 derives `customerId` from the live authenticated Session, reads the selected Slot and its actual Tutor from PostgreSQL, copies the persisted Slot interval, and sets the initial status to `Booked`. Client-supplied Customer/Tutor IDs, status, interval, or cutoff timestamps are not authoritative.
 - The database FK does not enforce `User.role` or `isActive`; #16 must validate those within its agreed transaction/locking protocol.
 - The unique and exclusion constraints protect committed state even when concurrent requests arrive through separate API processes. Application error mapping must treat constraint/serialization conflicts as non-success and must never report a Booking before commit.
-- The System SDS §3.3/§7.3 Booking trigger and Q05 `T_elig` requirements remain normative. #16 Part E must explicitly reconcile the trigger/lock order and prove the no-post-guard-contention or full-transaction retry strategy. This foundation does **not** claim that the unique/exclusion indexes alone enforce Q05.
+- **#33 Part F owns the database trigger artifact.** Its forward-only migration must install the immediate Booking `BEFORE INSERT/UPDATE OF status, currentSlotId, startsAt, endsAt` guard required by System SDS §3.3. For a resulting `Booked` row, the trigger locks and re-reads the referenced Slot and rejects a missing or non-`Offered` Slot. For a new `Booked` INSERT, it samples PostgreSQL `clock_timestamp()` only after acquiring that Slot lock and enforces Q05 (`startsAt - T_elig >= 60 minutes`). The composite FK remains the final interval-snapshot equality constraint. No Booking API or application service is added to #33.
+- **#16 owns application transaction coordination, not a second copy of the trigger.** Its Part E contract must specify the System SDS global lock order: all affected User rows (Customer and selected Slot's actual Tutor) in ascending UUID order, then all affected Slot rows in ascending UUID order, then existing Booking rows in ascending UUID order; use Serializable isolation as specified. The service must acquire the Slot lock before the guarded INSERT so the trigger re-locks an already-held row. #16 must prove no conflict-capable unique/exclusion wait occurs after `T_elig`; if it cannot prove that invariant, it must abort/retry the entire transaction and sample a fresh DB clock. The trigger and indexes are database backstops, not substitutes for the application lock protocol.
+- `Booking.id` immutability is an application-level invariant only: #16 generates it server-side and no update operation may accept a replacement ID. The PostgreSQL primary key alone is not described as an immutability guard. No database ID trigger or DB negative test is part of this contract.
 - #15 is read-only: it consumes `status = Booked`, `currentSlotId`, and the persisted interval for availability predicates. It must not create/update Booking records or add `Slot.isBooked`.
 
 ### 4.3 Explicit exclusions
@@ -78,29 +81,31 @@ No Booking HTTP route/controller/service, UI, private Booking retrieval, cancell
 
 ## 5. Migration and compatibility plan
 
-Part F of #33 may begin only after the Part E contract is accepted by both consuming feature owners.
+Part F of #33 may begin only after the Part E contract is accepted by both consuming feature owners **and** the #16 Part E transaction contract has been reviewed so the trigger and application use one agreed lock protocol.
 
-1. Start from the then-current remote `sprint1`; re-check the schema/migration baseline and do not assume this branch's base is still current.
-2. Add a new timestamped Prisma migration and matching Prisma model/relations. Do not rewrite or regenerate the existing Auth/Slot migrations.
-3. Confirm `btree_gist` is installed and usable by the migration role on the actual target PostgreSQL version. The current Slot migration already installs it; any repeated extension statement must be idempotent and must not drop the extension.
-4. Add the Slot composite unique key, Booking table, restrictive foreign keys, checks, lookup indexes, partial unique index, and Customer-range exclusion as agreed in [data-spec.md](data-spec.md).
-5. No Booking backfill is needed on the verified baseline because no Booking table or rows exist. Do not fabricate production records or migrate test fixtures into a shared database.
-6. Apply migrations to both a fresh disposable database and a disposable database created from the exact current `sprint1` migration chain. Confirm existing Auth/Slot rows and constraints remain intact.
-7. Run real PostgreSQL tests from [tests.md](tests.md), including synchronized concurrent transactions and inspection of final committed rows. Record PostgreSQL version, extension version/availability, exact commands, source SHA, and PASS/FAIL/SKIP/BLOCKED results.
-8. After the implementation PR is reviewed and merged into `sprint1`, record the exact merged schema commit SHA in Issues #15 and #16. A feature branch must use that accepted SHA before implementing Booking-dependent behavior.
+1. Accept this Part E contract with both #15 and #16 feature owners.
+2. Complete and peer-review #16 Part E's application transaction contract, including the §7.1 User → Slot → Booking lock order, Serializable behavior, retry semantics and the real-DB no-post-guard-contention proof strategy. This is a design dependency, not permission to implement the Booking API early.
+3. Start from the then-current remote `sprint1`; re-check the schema/migration baseline. Add a new timestamped Prisma migration and matching model/relations; do not rewrite or regenerate existing Auth/Slot migrations.
+4. In that **#33 Part F migration**, create the shared Booking table/constraints and the immediate Booking guard trigger described in BDF-D11 and [data-spec.md §7](data-spec.md#7-booking-trigger-ownership-and-sprint-1-guard). Do not create a duplicate trigger migration in #16.
+5. Confirm `btree_gist` is installed and usable by the migration role on the actual target PostgreSQL version. The current Slot migration already installs it; any repeated extension statement must be idempotent and must not drop the extension.
+6. Run the real-PostgreSQL proof gates in [tests.md](tests.md), including direct-SQL trigger tests, Q05 boundary and post-lock wait tests, synchronized race tests, fresh/upgrade migration tests, and inspection of final committed rows. Record PostgreSQL version, extension version/availability, exact commands, source SHA, and PASS/FAIL/SKIP/BLOCKED results.
+7. Review and merge the #33 Part F migration into `sprint1`; record its exact merged schema SHA in Issues #15 and #16. Only then may #15/#16 implement Booking-dependent application behavior against that accepted SHA.
+8. The complementary Slot lifecycle trigger for `Offered → Withdrawn` / no reactivation is a separate Sprint 2 migration and **must exist before any Sprint 2 withdrawal workflow is enabled**; it is not part of this Sprint 1 Booking foundation.
 
 ## 6. Peer-review checklist and open integration gate
 
 The required reviewer @Tanaboonnnnn is also the provisional owner of #16, so this review must explicitly confirm that the shared fields/constraints satisfy both #15 and #16. Please review:
 
-- [ ] BDF-D01..D10: field list, status semantics, interval snapshot, timestamps and no duplicated Tutor ownership.
+- [ ] BDF-D01..D11: field list, status semantics, interval snapshot, timestamps, ID-immutability boundary, trigger ownership and no duplicated Tutor ownership.
 - [ ] Both FK delete/update policies and the composite Slot-window FK.
 - [ ] Partial unique index and GiST exclusion semantics, including concurrent writes and adjacent intervals.
 - [ ] `btree_gist` availability/permissions on the actual target PostgreSQL deployment.
-- [ ] Whether the System SDS Booking trigger/Q05 `T_elig` protocol remains in #16's transaction implementation or requires an agreed database-migration artifact in #33; do not silently omit or duplicate it.
+- [ ] BDF-D11: #33 Part F owns the single Booking guard trigger; #16 owns the application lock/transaction/retry adapter. Confirm the exact merge sequence and that no duplicate trigger is planned.
+- [ ] #16 Part E records the System SDS User → Slot → Booking lock order and no-post-guard-contention / whole-transaction retry strategy before #33 Part F migration implementation.
+- [ ] #33 Part F real-PostgreSQL proof gates cover direct SQL, Offered state, Q05 60:00/59:59, post-lock cutoff crossing and final committed rows; #16 proves the full application interleaving.
 - [ ] No accidental Sprint 2 workflow, API/UI, `Slot.isBooked`, or OD-013 retry decision.
 
-**Open integration gate:** exact ownership and implementation placement for the System SDS Booking trigger / Q05 no-post-guard-contention proof must be reconciled with #16 Part E before the shared migration is accepted. The normative behavior is not optional; only its reviewed implementation boundary remains to be confirmed.
+**P1 resolution proposed:** ownership is no longer left as an either/or question. #33 Part F owns and migrates the one Booking guard trigger; #16 Part E/F owns the application lock order, transaction adapter and no-post-guard-contention / full-retry proof. The order is #34 Part E acceptance → #16 Part E acceptance → #33 Part F migration and real-DB proof/merge → #15/#16 application implementation. This is still pending human acceptance; no implementation or test result is claimed here.
 
 ## 7. Traceability
 
@@ -109,13 +114,14 @@ The required reviewer @Tanaboonnnnn is also the provisional owner of #16, so thi
 | One active Booking per Slot | FR-S1-12, BR-S1-08/19, AC-S1-25, BDF-10/11 |
 | One Customer cannot overlap active intervals across Tutors | FR-S1-13, BR-S1-09/10/19, AC-S1-26, BDF-12/13/14 |
 | Slot interval snapshot and valid references | FR-S1-10/16, System SDS §3.3, BDF-05..09 |
-| Cancelled is non-occupying; Past is not a state | Q30, BR-S1-30, BDF-04/15 |
-| Real DB durability and concurrency evidence | NFR-S1-03/04/05/12, BDF-01..19 |
+| Cancelled is non-occupying; Past is not a state or completion | Q30, BR-S1-14, BR-S1-22, BDF-04/15 |
+| Real DB durability and concurrency evidence | NFR-S1-03/04/05/12, BDF-01..23 |
 | Availability read predicates | #15 AVA-02, AVA-15, AVA-16, AVA-17 after the merged schema SHA is recorded |
 
 ## 8. Part E Definition of Done
 
 - [ ] The required human peer reviewer has reviewed and accepted the common data shape and invariants for both #15 and #16.
+- [ ] BDF-D11 trigger ownership, merge order, lock-order dependency and real-PostgreSQL proof gates are explicitly accepted by both feature owners.
 - [ ] Any review changes are incorporated into the contract documents and the final accepted decisions are recorded in the PR.
 - [ ] Part F migration work remains a separate reviewed change; no migration or implementation result is claimed by this Part E PR.
 
