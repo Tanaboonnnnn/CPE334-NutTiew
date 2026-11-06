@@ -57,7 +57,7 @@ model Slot {
 }
 
 model Booking {
-  // Stable identity; BDF-D01 is application-level. Sprint 1 separately rejects all Booking UPDATEs.
+  // Stable identity; BDF-D01 is application-level. Sprint 1 separately rejects Booking UPDATE/DELETE/TRUNCATE.
   id            String   @id @default(uuid()) @db.Uuid
   customerId    String   @db.Uuid
   currentSlotId String   @db.Uuid
@@ -211,7 +211,7 @@ The #16 Part E/Part F proof must show that no conflict-capable unique/exclusion 
 
 ### 7.4 Application runtime database role boundary
 
-The deployed application runtime role must be distinct from the migration/table-owner role. It must not own `Booking`, be a superuser, inherit membership in the migration/owner role, or have DDL/trigger-management privileges. It must not have `UPDATE`, `DELETE`, or `TRUNCATE` privileges on `Booking`, and must not be able to set `session_replication_role` to bypass triggers. It retains only the read/insert privileges needed by the application. Migration credentials are used only by the migration/deployment path and are never used by API runtime processes. No routine application or administrator role is authorized to delete/truncate Sprint 1 Booking rows; any emergency maintenance is outside the application contract and requires separately authorized, audited operations.
+The deployed application runtime role must be distinct from the migration/table-owner role. It must not own `Booking`, be a superuser, inherit membership in the migration/owner role, or have DDL/trigger-management privileges. It must not have `UPDATE`, `DELETE`, or `TRUNCATE` privileges on `Booking`, and must not be able to set `session_replication_role` to bypass triggers. It retains only the read/insert privileges needed by the application. Migration credentials are used only by the migration/deployment path and are never used by API runtime processes. No application, operations, or administrator role is authorized to delete/truncate Sprint 1 Booking rows. The migration/table-owner role is for schema changes only and is not used for runtime or data-purge operations. Any future deletion, retention, or archival workflow requires a separate reviewed decision and migration; no emergency trigger-bypass exception is assumed.
 
 BDF-24 and BDF-25 test the real application runtime role's privilege denial and independently exercise the row/statement guards with a non-owner, non-bypass DML probe role. BDF-26 verifies role ownership, membership, DDL/trigger and replication-bypass boundaries. If the deployed environment cannot provide this separation, the foundation gate is BLOCKED and must not be reported PASS.
 
