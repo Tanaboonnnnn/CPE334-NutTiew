@@ -28,7 +28,8 @@ GRANT USAGE ON SCHEMA public TO nuttiew_ci_runtime, nuttiew_ci_booking_probe;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   "User", "Session", "AuthAttemptBucket", "AuthAttemptReservation"
   TO nuttiew_ci_runtime;
-GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_ci_runtime;\n\n-- Probe role can issue forbidden DML so BDF tests prove the DB trigger itself.\n-- It is not an owner and has no DDL, trigger-disable or replication bypass.\nGRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON "Booking" TO nuttiew_ci_booking_probe;
+GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_ci_runtime;
+GRANT SELECT ON "Slot" TO nuttiew_ci_booking_probe;\n\n-- Probe role can issue forbidden DML so BDF tests prove the DB trigger itself.\n-- It is not an owner and has no DDL, trigger-disable or replication bypass.\nGRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON "Booking" TO nuttiew_ci_booking_probe;
 SQL
 
 # Real API and all normal HTTP tests now run as non-owner, so disabling Slot
