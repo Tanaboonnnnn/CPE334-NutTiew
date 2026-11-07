@@ -381,9 +381,10 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
         const result = await pending;
         expect(result.outcome).toBe('ERROR');
         if (result.outcome === 'ERROR') expect(result.error).toMatchObject({ code:'P0B02', constraint:'booking_q05_min_notice' });
-        const evidence = await waiter.query<{ value: string }>("SELECT current_setting('nuttiew.booking_t_elig', true) AS value");
-        expect(evidence.rows[0].value).toBeTruthy();
-        const eligibility = new Date(evidence.rows[0].value);
+        const diagnostic = result.outcome === 'ERROR' ? result.error.message : '';
+        const observed = diagnostic.match(/T_elig=([^\\s]+)/);
+        expect(observed).not.toBeNull();
+        const eligibility = new Date(observed![1]);
         expect(eligibility.getTime()).toBeGreaterThanOrEqual(cutoff.getTime());
         console.info('BDF22_EVIDENCE',JSON.stringify({
           holderPid,waiterPid,blockers:blockers.rows[0].blockers,
