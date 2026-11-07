@@ -40,13 +40,8 @@ CREATE UNIQUE INDEX booking_one_active_per_slot
   ON "Booking" ("currentSlotId")
   WHERE "status" = 'Booked';
 
--- Half-open [start,end) ranges allow exact adjacency.
-CREATE INDEX "Booking_booked_customer_window_gist_idx"
-  ON "Booking" USING gist (
-    "customerId",
-    tstzrange("startsAt", "endsAt", '[)')
-  )
-  WHERE "status" = 'Booked';
+-- Half-open [start,end) ranges allow exact adjacency; the exclusion
+-- constraint owns the required GiST index, so no duplicate index is added.
 
 ALTER TABLE "Booking"
   ADD CONSTRAINT booked_customer_no_overlap
