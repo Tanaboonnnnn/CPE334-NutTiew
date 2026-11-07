@@ -23,8 +23,8 @@ fi
 # authenticated and least-privilege DB connections.
 psql "$DATABASE_URL" --set ON_ERROR_STOP=1 <<'SQL'
 CREATE ROLE nuttiew_ci_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;\nCREATE ROLE nuttiew_ci_booking_probe LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
-GRANT CONNECT ON DATABASE nuttiew_ci TO nuttiew_ci_runtime;
-GRANT USAGE ON SCHEMA public TO nuttiew_ci_runtime;
+GRANT CONNECT ON DATABASE nuttiew_ci TO nuttiew_ci_runtime, nuttiew_ci_booking_probe;
+GRANT USAGE ON SCHEMA public TO nuttiew_ci_runtime, nuttiew_ci_booking_probe;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   "User", "Session", "AuthAttemptBucket", "AuthAttemptReservation"
   TO nuttiew_ci_runtime;
