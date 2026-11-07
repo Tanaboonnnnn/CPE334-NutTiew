@@ -275,11 +275,13 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
   });
 
   it('BDF-19 Prisma-facing relations and SQL-only partial/exclusion objects agree', async () => {
-    const r = await owner.query<{ definition: string }>(
-      `SELECT pg_get_indexdef(indexrelid) AS definition FROM pg_index
-       WHERE indrelid='"Booking"'::regclass`,
+    const r = await owner.query<{ definition: string; predicate: string | null }>(
+      `SELECT pg_get_indexdef(i.indexrelid) AS definition,
+              pg_get_expr(i.indpred,i.indrelid) AS predicate
+       FROM pg_index i WHERE i.indrelid='"Booking"'::regclass`,
     );
-    expect(r.rows.some(x => x.definition.includes('WHERE ("status" = \'Booked\')'))).toBe(true);
+    expect(r.rows.some(x => x.definition.includes('booking_one_active_per_slot')
+      && x.predicate?.includes('Booked'))).toBe(true);
     const fk = await owner.query(
       `SELECT conname FROM pg_constraint WHERE conrelid='"Booking"'::regclass AND contype='f'`,
     );
