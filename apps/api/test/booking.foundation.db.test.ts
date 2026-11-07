@@ -98,7 +98,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     ]);
   });
 
-  it('BDF-04 persists Booked and Cancelled; elapsed time does not rewrite status', async () => {
+  it('BDF-04 persists Booked and Cancelled as distinct stored statuses', async () => {
     const a = await fixture();
     const booked = await insertBooking(a);
     const b = await fixture(new Date(a.endsAt.getTime() + 2 * 60 * 60_000));
