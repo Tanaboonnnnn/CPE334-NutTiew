@@ -51,7 +51,7 @@ describe('API database runtime credential boundary', () => {
       'DATABASE_URL_APP=postgresql://runtime-from-root@localhost/db',
       'AUTH_CSRF_HMAC_KEY='+'a'.repeat(64),
       '',
-    ].join('\\n'));
+    ].join('\n'));
     try {
       loadRootEnv(envPath);
       expect(process.env.DATABASE_URL_APP).toBe('postgresql://runtime-from-root@localhost/db');
