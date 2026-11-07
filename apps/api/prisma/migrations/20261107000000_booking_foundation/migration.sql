@@ -52,7 +52,7 @@ ALTER TABLE "Booking"
   WHERE ("status" = 'Booked');
 
 -- One database-owned guard: #16 owns the application transaction adapter only.
-CREATE FUNCTION booking_guard_s1() RETURNS trigger
+CREATE FUNCTION public.booking_guard_s1() RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
@@ -109,10 +109,12 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.booking_guard_s1() FROM PUBLIC;
+
 CREATE TRIGGER booking_s1_row_guard
   BEFORE INSERT OR UPDATE OR DELETE ON "Booking"
-  FOR EACH ROW EXECUTE FUNCTION booking_guard_s1();
+  FOR EACH ROW EXECUTE FUNCTION public.booking_guard_s1();
 
 CREATE TRIGGER booking_s1_truncate_guard
   BEFORE TRUNCATE ON "Booking"
-  FOR EACH STATEMENT EXECUTE FUNCTION booking_guard_s1();
+  FOR EACH STATEMENT EXECUTE FUNCTION public.booking_guard_s1();
