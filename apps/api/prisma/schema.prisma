@@ -14,6 +14,7 @@ model User {
  updatedAt DateTime @updatedAt @db.Timestamptz(6)
  sessions Session[]
  slots Slot[]
+ customerBookings Booking[] @relation("BookingCustomer")
 }
 model Slot {
  id String @id @default(uuid()) @db.Uuid
@@ -24,6 +25,8 @@ model Slot {
  lifecycle String @default("Offered")
  createdAt DateTime @default(now()) @db.Timestamptz(6)
  withdrawnAt DateTime? @db.Timestamptz(6)
+ bookings Booking[] @relation("BookingCurrentSlot")
+ @@unique([id, startsAt, endsAt], map: "slot_id_window_unique")
  @@index([tutorId, startsAt, id])
 }
 model Session {
@@ -57,4 +60,21 @@ model AuthAttemptReservation {
  createdAt DateTime @default(now()) @db.Timestamptz(6)
  settledAt DateTime? @db.Timestamptz(6)
  @@index([state,leaseUntil])
+}
+
+model Booking {
+ id String @id @default(uuid()) @db.Uuid
+ customerId String @db.Uuid
+ currentSlotId String @db.Uuid
+ startsAt DateTime @db.Timestamptz(6)
+ endsAt DateTime @db.Timestamptz(6)
+ status String @default("Booked")
+ createdAt DateTime @default(now()) @db.Timestamptz(6)
+ updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+ customer User @relation("BookingCustomer", fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "booking_customer_fk")
+ currentSlot Slot @relation("BookingCurrentSlot", fields: [currentSlotId, startsAt, endsAt], references: [id, startsAt, endsAt], onDelete: Restrict, onUpdate: Restrict, map: "booking_current_slot_window_fk")
+
+ @@index([customerId], map: "Booking_customerId_idx")
+ @@index([currentSlotId], map: "Booking_currentSlotId_idx")
 }
