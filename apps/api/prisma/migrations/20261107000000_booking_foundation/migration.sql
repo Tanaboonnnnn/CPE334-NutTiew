@@ -56,7 +56,7 @@ CREATE FUNCTION public.booking_guard_s1() RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $$
 DECLARE
   slot_lifecycle TEXT;
   slot_starts_at TIMESTAMPTZ(6);
