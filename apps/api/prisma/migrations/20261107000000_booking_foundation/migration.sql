@@ -94,14 +94,16 @@ BEGIN
 
     IF slot_lifecycle IS DISTINCT FROM 'Offered' THEN
       RAISE EXCEPTION 'Booking requires an Offered Slot'
-        USING ERRCODE = '23514', CONSTRAINT = 'booking_slot_offered_guard';
+        USING ERRCODE = 'P0B01', CONSTRAINT = 'booking_slot_not_offered';
     END IF;
 
     -- Sample the authoritative DB wall clock only after the Slot lock wait.
     eligibility_time := clock_timestamp();
+    -- Session-level evidence survives a rejected INSERT for BDF-22 diagnostics.
+    PERFORM set_config('nuttiew.booking_t_elig', eligibility_time::text, false);
     IF slot_starts_at - eligibility_time < INTERVAL '60 minutes' THEN
       RAISE EXCEPTION 'Booking is outside the Sprint 1 eligibility window'
-        USING ERRCODE = '23514', CONSTRAINT = 'booking_q05_guard';
+        USING ERRCODE = 'P0B02', CONSTRAINT = 'booking_q05_min_notice';
     END IF;
   END IF;
 
