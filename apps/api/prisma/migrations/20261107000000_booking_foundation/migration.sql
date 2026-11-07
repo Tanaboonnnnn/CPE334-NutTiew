@@ -109,7 +109,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.booking_guard_s1() FROM PUBLIC;
+-- Trigger execution remains available to DML roles; a trigger-returning function
+-- cannot be invoked as an ordinary SQL function, and runtime roles lack DDL.
 
 CREATE TRIGGER booking_s1_row_guard
   BEFORE INSERT OR UPDATE OR DELETE ON "Booking"
