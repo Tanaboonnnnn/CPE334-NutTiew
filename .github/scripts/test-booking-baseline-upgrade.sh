@@ -29,11 +29,14 @@ VALUES ('10000000-0000-4000-8000-000000000003',
         '10000000-0000-4000-8000-000000000001',
         decode(repeat('11',32),'hex'), decode(repeat('22',32),'hex'),
         clock_timestamp()+interval '8 hours');
+WITH slot_start AS (
+  SELECT clock_timestamp()+interval '3 hours' AS starts_at
+)
 INSERT INTO "Slot" ("id","tutorId","startsAt","endsAt")
-VALUES ('10000000-0000-4000-8000-000000000004',
-        '10000000-0000-4000-8000-000000000002',
-        clock_timestamp()+interval '3 hours',
-        clock_timestamp()+interval '4 hours');
+SELECT '10000000-0000-4000-8000-000000000004',
+       '10000000-0000-4000-8000-000000000002',
+       starts_at, starts_at+interval '60 minutes'
+FROM slot_start;
 SQL
 
 psql "$upgrade_url" --set ON_ERROR_STOP=1 --file=apps/api/prisma/migrations/20261107000000_booking_foundation/migration.sql
