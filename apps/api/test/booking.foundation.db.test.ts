@@ -249,7 +249,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     const f = await fixture();
     await insertBooking(f);
     await expect(owner.query('DELETE FROM "User" WHERE "id"=$1',[f.customerId]))
-      .rejects.toMatchObject({ code:'23503', constraint:'booking_customer_fk' });
+      .rejects.toMatchObject({ code:'23001', constraint:'booking_customer_fk' });
     await expect(owner.query('UPDATE "User" SET "id"=$2 WHERE "id"=$1',[f.customerId,randomUUID()]))
       .rejects.toMatchObject({ code:'23001', constraint:'booking_customer_fk' });
     await expect(owner.query('DELETE FROM "Slot" WHERE "id"=$1',[f.slotId]))
