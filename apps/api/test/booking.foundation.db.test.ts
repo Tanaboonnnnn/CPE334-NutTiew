@@ -367,7 +367,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
         const pending = waiter.query(
           'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt") VALUES($1,$2,$3,$4)',
           [f.customerId,f.slotId,f.startsAt,f.endsAt],
-        ).then(() => ({ outcome:'COMMITTED' as const })).catch((e: { code: string; constraint?: string }) => ({ outcome:'ERROR' as const, error:e }));
+        ).then(() => ({ outcome:'COMMITTED' as const })).catch((e: { code: string; constraint?: string; message: string }) => ({ outcome:'ERROR' as const, error:e }));
         await blockedBy(waiterPid,holderPid);
         const blockers = await owner.query<{ blockers: number[] }>('SELECT pg_blocking_pids($1) AS blockers',[waiterPid]);
         expect(blockers.rows[0].blockers).toContain(holderPid);
