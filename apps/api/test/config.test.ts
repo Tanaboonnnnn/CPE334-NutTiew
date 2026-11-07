@@ -39,7 +39,7 @@ describe('API database runtime credential boundary', () => {
     delete process.env.AUTH_CSRF_HMAC_KEY;
     const root = mkdtempSync(join(tmpdir(),'nuttiew-root-env-'));
     const envPath = join(root,'.env');
-    writeFileSync(envPath,'DATABASE_URL_APP=postgresql://runtime-from-root@localhost/db\\nAUTH_CSRF_HMAC_KEY='+'a'.repeat(64)+'\\n');
+    writeFileSync(envPath,['DATABASE_URL_APP=postgresql://runtime-from-root@localhost/db','AUTH_CSRF_HMAC_KEY='+'a'.repeat(64),''].join('\\n'));
     try {
       const { loadRootEnv } = await import('../src/config.js');
       loadRootEnv(envPath);
