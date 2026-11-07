@@ -58,7 +58,6 @@ AS $$
 DECLARE
   slot_lifecycle TEXT;
   slot_starts_at TIMESTAMPTZ(6);
-  slot_ends_at TIMESTAMPTZ(6);
   eligibility_time TIMESTAMPTZ(6);
 BEGIN
   -- The same function is registered for row DML and statement TRUNCATE.
@@ -80,26 +79,20 @@ BEGIN
 
   -- Cancelled fixtures are permitted for shared-state tests, but do not occupy.
   IF NEW."status" = 'Booked' THEN
-    SELECT s."lifecycle", s."startsAt", s."endsAt"
-      INTO slot_lifecycle, slot_starts_at, slot_ends_at
+    SELECT s."lifecycle", s."startsAt"
+      INTO slot_lifecycle, slot_starts_at
       FROM "Slot" AS s
       WHERE s."id" = NEW."currentSlotId"
       FOR UPDATE;
 
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'Booking requires an existing Offered Slot'
-        USING ERRCODE = '23514', CONSTRAINT = 'booking_slot_offered_guard';
+      -- Let the named composite FK report a missing Slot (BDF-08).
+      RETURN NEW;
     END IF;
 
     IF slot_lifecycle IS DISTINCT FROM 'Offered' THEN
       RAISE EXCEPTION 'Booking requires an Offered Slot'
         USING ERRCODE = '23514', CONSTRAINT = 'booking_slot_offered_guard';
-    END IF;
-
-    IF slot_starts_at IS DISTINCT FROM NEW."startsAt"
-       OR slot_ends_at IS DISTINCT FROM NEW."endsAt" THEN
-      RAISE EXCEPTION 'Booking interval must match the selected Slot'
-        USING ERRCODE = '23514', CONSTRAINT = 'booking_slot_window_guard';
     END IF;
 
     -- Sample the authoritative DB wall clock only after the Slot lock wait.
