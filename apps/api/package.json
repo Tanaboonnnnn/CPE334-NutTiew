@@ -1,6 +1,38 @@
 {
-  "name": "@nuttiew/api", "version": "0.1.0", "private": true, "type": "module",
-  "scripts": {"dev":"tsx watch src/server.ts", "build":"tsc -p tsconfig.json", "typecheck":"tsc -p tsconfig.json --noEmit", "test":"vitest run test/security.test.ts test/client-ip.test.ts test/slot-time.test.ts", "test:db":"vitest run test/auth.db.test.ts test/auth.extended.db.test.ts test/guards.db.test.ts test/auth.boundary.db.test.ts test/auth.barrier.db.test.ts test/auth.crash.db.test.ts test/auth.http-clock.db.test.ts test/slots.db.test.ts test/slots.race.db.test.ts test/slots.restart.db.test.ts test/booking.foundation.db.test.ts", "db:generate":"prisma generate", "db:migrate":"prisma migrate deploy", "db:seed":"tsx prisma/seed.ts"},
-  "dependencies": {"@prisma/client":"^7.10.0", "@prisma/adapter-pg":"^7.10.0", "argon2":"^0.45.0", "cookie-parser":"^1.4.7", "express":"^5.2.0", "pg":"^8.16.0", "zod":"^4.0.0"},
-  "devDependencies": {"dotenv":"^17.2.0", "@types/cookie-parser":"^1.4.10", "@types/express":"^5.0.0", "@types/node":"^24.0.0", "@types/pg":"^8.15.0", "@types/supertest":"^6.0.0", "prisma":"^7.10.0", "supertest":"^7.1.0", "tsx":"^4.20.0", "typescript":"~5.9.3", "vitest":"^4.0.0"}
+  "name": "@nuttiew/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run test/security.test.ts test/client-ip.test.ts test/slot-time.test.ts test/config.test.ts",
+    "test:db": "vitest run test/auth.db.test.ts test/auth.extended.db.test.ts test/guards.db.test.ts test/auth.boundary.db.test.ts test/auth.barrier.db.test.ts test/auth.crash.db.test.ts test/auth.http-clock.db.test.ts test/slots.db.test.ts test/slots.race.db.test.ts test/slots.restart.db.test.ts test/booking.foundation.db.test.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.0",
+    "argon2": "^0.45.0",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.0",
+    "pg": "^8.16.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "dotenv": "^17.2.0",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "@types/supertest": "^6.0.0",
+    "prisma": "^7.10.0",
+    "supertest": "^7.1.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.0"
+  }
 }
