@@ -78,16 +78,16 @@ npm and Microsoft Edge for the existing Playwright configuration.
    GRANT SELECT, INSERT, UPDATE, DELETE ON
      "User", "Session", "AuthAttemptBucket", "AuthAttemptReservation"
      TO nuttiew_runtime;
-   GRANT SELECT, INSERT ON "Slot" TO nuttiew_runtime;
+   GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_runtime;
    ```
 
-   Do **not** grant UPDATE/DELETE/TRUNCATE on `Slot`, table ownership,
-   superuser/DDL rights or permission to disable triggers. The code falls
-   back to `DATABASE_URL` when `DATABASE_URL_APP` is absent for local
-   compatibility; **that fallback is not a claim of least-privilege
-   deployment**. Manage actual role passwords via private environment
-   variables, not Git. Production/cloud installation of `btree_gist` and
-   runtime grants must be independently validated on the target service.
+   Do **not** grant UPDATE/DELETE/TRUNCATE on `Slot` or `Booking`, table
+   ownership, superuser/DDL rights or permission to disable triggers. The API
+   runtime fails closed when `DATABASE_URL_APP` is absent or equals
+   `DATABASE_URL`; it never falls back to the migration/admin credential.
+   Manage actual role passwords via private environment variables, not Git.
+   Production/cloud installation of `btree_gist` and runtime grants must be
+   independently validated on the target service.
 
 5. Run `npm run dev` (or start API and web separately) and authenticate with
    a Tutor test account; Customer and anonymous users cannot see this view.
