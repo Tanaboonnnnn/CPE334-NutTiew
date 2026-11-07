@@ -58,7 +58,9 @@ Rules:
 3. The pair is not a new composite UNIQUE constraint, column, Idempotency-Key, registry, fingerprint or TTL.
 4. Only `Booked` qualifies. A future `Cancelled` row is not a replay; S2 rebooking semantics need their own contract.
 5. If no matching row exists, apply Slot occupancy, Customer overlap and guarded INSERT checks. Another Customer's occupied Slot or a different overlapping Slot for this Customer is a conflict.
-6. After unique/exclusion error, ROLLBACK and discard the failed snapshot; on a fresh connection begin a READ COMMITTED reconciliation transaction, lock/revalidate the exact authenticated Session with `FOR UPDATE` and DB `clock_timestamp()` before any Booking read. Missing/revoked/expired Session returns 401 with no Booking DTO. Only a live Session may read the exact pair: return 200 for a committed same-pair `Booked` row with matching interval; otherwise return safe 409. If Session validation is unavailable, return 503 and fail closed.
+6. Only the exact structured tuples `23505 / booking_one_active_per_slot` and `23P01 / booked_customer_no_overlap` are recognized as Booking business conflicts. Capture SQLSTATE and constraint metadata; never parse error text. Any unknown/missing/mismatched tuple (including a different `23505`) rolls back and returns safe 500 `INTERNAL_ERROR` without entering replay reconciliation.
+7. For a recognized tuple, ROLLBACK and discard the failed snapshot; on a fresh connection begin a READ COMMITTED reconciliation transaction. Lock the current User row for the original `principal.userId` first and revalidate latest `isActive`/role: missing or inactive → 401; active but no longer Customer → 403. Only then lock the exact authenticated Session (`principal.sessionId` + `principal.userId`) with `FOR UPDATE` and check `revokedAt IS NULL` and `expiresAt > clock_timestamp()`; missing/revoked/expired → 401. Do not read Session/Booking after failed User authorization, or Booking after failed Session authorization.
+8. Only an active Customer with a live Session may read the exact pair: return 200 for a committed same-pair `Booked` row with matching interval; otherwise return safe 409 mapped only from the recognized original tuple (`SLOT_UNAVAILABLE` for `23505 / booking_one_active_per_slot`; `CUSTOMER_OVERLAP` for `23P01 / booked_customer_no_overlap`). This fresh transaction takes no Slot/Booking row locks and performs no mutation. If User/Session validation is unavailable, return 503 and fail closed.
 
 The existing Booking row is the only durable replay record; retrying same request creates no duplicate active row/history.
 
@@ -67,10 +69,10 @@ The existing Booking row is the only durable replay record; retrying same reques
 - F-S1-04 creates a Booking only. #15 availability remains read-only; #17 owns protected Customer list/detail and Tutor schedule Booking reads.
 - Do not add `Slot.isBooked`, duplicate Tutor identity, Booking registry or second occupancy source.
 - Create DTO contains only Booking ID, Slot ID, copied UTC interval, `Booked` status and request ID. Exclude Customer/Tutor IDs, profiles, contacts, credentials, Session/CSRF values and arbitrary ORM fields.
-- Reuse only the existing Auth Session fields `id`, `userId`, `revokedAt` and `expiresAt` for transactional live-session revalidation. No Session column, Booking field, migration or second authentication schema is added by #16 Part E.
+- Reuse only existing Auth fields for post-rollback revalidation: `User.id`, `User.role`, `User.isActive`, then `Session.id`, `Session.userId`, `Session.revokedAt` and `Session.expiresAt`. Read/lock the User before Session on the fresh READ COMMITTED connection. No User/Session column, Booking field, migration or second authentication schema is added by #16 Part E.
 - Conflict responses must not reveal identity or Booking ID of Customer occupying a Slot.
 - No retention/deletion behavior is added; BDF-D12 append-only/runtime-role rules apply.
 
 ## 6. Verification boundary
 
-BDF-01..26 remain planned in merged #33 Part E. #33 Part F must run pre-merge BDF-01..22 and BDF-24..26. #16 Part F runs BDF-23 only after exact #33 schema SHA is merged. No Booking schema, query, migration or database result is claimed here.
+BDF-01..26 remain planned in merged #33 Part E. #33 Part F must run pre-merge BDF-01..22 and BDF-24..26. #16 Part F runs BDF-23 only after exact #33 schema SHA is merged. The exact unique/exclusion constraint identifiers above must be verified against #33 Part F before implementation; a mismatch blocks this adapter rather than widening the allowlist. No Booking schema, query, migration or database result is claimed here.
