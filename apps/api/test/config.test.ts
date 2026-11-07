@@ -31,7 +31,7 @@ describe('API database runtime credential boundary', () => {
   it('rejects DATABASE_URL_APP falling back to the migration/admin credential', () => {
     process.env.DATABASE_URL = 'postgresql://migration-owner@localhost/db';
     process.env.DATABASE_URL_APP = process.env.DATABASE_URL;
-    expect(() => createPool()).toThrow(/must not use the migration\\/admin credential/);
+    expect(() => createPool()).toThrow(new RegExp('must not use the migration/admin credential'));
   });
 
   it('creates the API pool only from an explicit separate runtime credential', async () => {
