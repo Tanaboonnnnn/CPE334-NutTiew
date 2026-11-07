@@ -307,14 +307,22 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       [f.customerId,withdrawn.rows[0].id,f.startsAt,f.endsAt],
     )).rejects.toMatchObject({ code:'23514', constraint:'booking_slot_offered_guard' });
     const cancelled = await insertBooking(f,'Cancelled');
-    for (const sql of [
-      'UPDATE "Booking" SET "status"=\'Booked\' WHERE "id"=$1',
-      'UPDATE "Booking" SET "status"=\'Cancelled\' WHERE "id"=$1',
-      'UPDATE "Booking" SET "currentSlotId"=$2 WHERE "id"=$1',
-      'DELETE FROM "Booking" WHERE "id"=$1',
-    ]) {
-      await expect(probe!.query(sql,sql.includes('$2')?[cancelled.rows[0].id,withdrawn.rows[0].id]:[cancelled.rows[0].id]))
-        .rejects.toMatchObject({ code:'0A000' });
+    const another = await fixture(future(240));
+    const booked = await insertBooking(another);
+    const otherCustomer = await user('Customer');
+    const mutations: Array<[string, unknown[]]> = [
+      ['UPDATE "Booking" SET "status"=\\'Booked\\' WHERE "id"=$1',[cancelled.rows[0].id]],
+      ['UPDATE "Booking" SET "status"=\\'Cancelled\\' WHERE "id"=$1',[booked.rows[0].id]],
+      ['UPDATE "Booking" SET "currentSlotId"=$2 WHERE "id"=$1',[booked.rows[0].id,withdrawn.rows[0].id]],
+      ['UPDATE "Booking" SET "customerId"=$2 WHERE "id"=$1',[booked.rows[0].id,otherCustomer]],
+      ['UPDATE "Booking" SET "id"=gen_random_uuid() WHERE "id"=$1',[booked.rows[0].id]],
+      ['UPDATE "Booking" SET "startsAt"="startsAt"+interval \\'1 minute\\' WHERE "id"=$1',[booked.rows[0].id]],
+      ['UPDATE "Booking" SET "updatedAt"=clock_timestamp() WHERE "id"=$1',[booked.rows[0].id]],
+      ['DELETE FROM "Booking" WHERE "id"=$1',[cancelled.rows[0].id]],
+      ['DELETE FROM "Booking" WHERE "id"=$1',[booked.rows[0].id]],
+    ];
+    for (const [sql,params] of mutations) {
+      await expect(probe!.query(sql,params)).rejects.toMatchObject({ code:'0A000' });
     }
   });
 
