@@ -311,12 +311,12 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     const booked = await insertBooking(another);
     const otherCustomer = await user('Customer');
     const mutations: Array<[string, unknown[]]> = [
-      ['UPDATE "Booking" SET "status"=\\'Booked\\' WHERE "id"=$1',[cancelled.rows[0].id]],
-      ['UPDATE "Booking" SET "status"=\\'Cancelled\\' WHERE "id"=$1',[booked.rows[0].id]],
+      ['UPDATE "Booking" SET "status"=\'Booked\' WHERE "id"=$1',[cancelled.rows[0].id]],
+      ['UPDATE "Booking" SET "status"=\'Cancelled\' WHERE "id"=$1',[booked.rows[0].id]],
       ['UPDATE "Booking" SET "currentSlotId"=$2 WHERE "id"=$1',[booked.rows[0].id,withdrawn.rows[0].id]],
       ['UPDATE "Booking" SET "customerId"=$2 WHERE "id"=$1',[booked.rows[0].id,otherCustomer]],
       ['UPDATE "Booking" SET "id"=gen_random_uuid() WHERE "id"=$1',[booked.rows[0].id]],
-      ['UPDATE "Booking" SET "startsAt"="startsAt"+interval \\'1 minute\\' WHERE "id"=$1',[booked.rows[0].id]],
+      ['UPDATE "Booking" SET "startsAt"="startsAt"+interval \'1 minute\' WHERE "id"=$1',[booked.rows[0].id]],
       ['UPDATE "Booking" SET "updatedAt"=clock_timestamp() WHERE "id"=$1',[booked.rows[0].id]],
       ['DELETE FROM "Booking" WHERE "id"=$1',[cancelled.rows[0].id]],
       ['DELETE FROM "Booking" WHERE "id"=$1',[booked.rows[0].id]],
