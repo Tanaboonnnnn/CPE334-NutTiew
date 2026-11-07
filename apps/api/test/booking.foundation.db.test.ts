@@ -311,7 +311,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     await expect(probe!.query(
       'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt") VALUES($1,$2,$3,$4)',
       [f.customerId,withdrawn.rows[0].id,f.startsAt,f.endsAt],
-    )).rejects.toMatchObject({ code:'23514', constraint:'booking_slot_offered_guard' });
+    )).rejects.toMatchObject({ code:'P0B01', constraint:'booking_slot_not_offered' });
     const cancelled = await insertBooking(f,'Cancelled');
     const another = await fixture(future(240));
     const booked = await insertBooking(another);
@@ -344,11 +344,11 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     await insertBooking(pass);
     const fail = await fixture(future(59));
     await expect(insertBooking(fail)).rejects.toMatchObject({
-      code:'23514', constraint:'booking_q05_guard',
+      code:'P0B02', constraint:'booking_q05_min_notice',
     });
   });
 
-  it('BDF-22 waits for Slot lock, then samples fresh clock and rejects after cutoff', async () => {
+  it('BDF-22 proves DB clock crosses Q05 while waiting and records trigger T_elig', async () => {
     const start = future(60.04);
     const f = await fixture(start);
     const holder = await owner.connect();
@@ -356,19 +356,40 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       await holder.query('BEGIN');
       await holder.query('SELECT "id" FROM "Slot" WHERE "id"=$1 FOR UPDATE',[f.slotId]);
       const holderPid = await pid(holder);
+      const cutoffResult = await owner.query<{ dbNow: Date; cutoff: Date }>(
+        "SELECT clock_timestamp() AS \"dbNow\", $1::timestamptz - interval '60 minutes' AS cutoff",[f.startsAt],
+      );
+      const cutoff = cutoffResult.rows[0].cutoff;
+      expect(cutoffResult.rows[0].dbNow.getTime()).toBeLessThan(cutoff.getTime());
       const waiter = await probe!.connect();
       try {
         const waiterPid = await pid(waiter);
         const pending = waiter.query(
           'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt") VALUES($1,$2,$3,$4)',
           [f.customerId,f.slotId,f.startsAt,f.endsAt],
-        ).then(() => 'COMMITTED').catch((e: { code: string; constraint?: string }) => e);
+        ).then(() => ({ outcome:'COMMITTED' as const })).catch((e: { code: string; constraint?: string }) => ({ outcome:'ERROR' as const, error:e }));
         await blockedBy(waiterPid,holderPid);
-        await new Promise(resolve => setTimeout(resolve,3_000));
+        const blockers = await owner.query<{ blockers: number[] }>('SELECT pg_blocking_pids($1) AS blockers',[waiterPid]);
+        expect(blockers.rows[0].blockers).toContain(holderPid);
+        let dbNow = cutoffResult.rows[0].dbNow;
+        while (dbNow.getTime() < cutoff.getTime()) {
+          await new Promise(resolve => setTimeout(resolve,50));
+          const clock = await owner.query<{ now: Date }>('SELECT clock_timestamp() AS now');
+          dbNow = clock.rows[0].now;
+        }
         await holder.query('COMMIT');
         const result = await pending;
-        expect(result).not.toBe('COMMITTED');
-        expect(result).toMatchObject({ code:'23514', constraint:'booking_q05_guard' });
+        expect(result.outcome).toBe('ERROR');
+        if (result.outcome === 'ERROR') expect(result.error).toMatchObject({ code:'P0B02', constraint:'booking_q05_min_notice' });
+        const evidence = await waiter.query<{ value: string }>("SELECT current_setting('nuttiew.booking_t_elig', true) AS value");
+        expect(evidence.rows[0].value).toBeTruthy();
+        const eligibility = new Date(evidence.rows[0].value);
+        expect(eligibility.getTime()).toBeGreaterThanOrEqual(cutoff.getTime());
+        console.info('BDF22_EVIDENCE',JSON.stringify({
+          holderPid,waiterPid,blockers:blockers.rows[0].blockers,
+          dbBefore:cutoffResult.rows[0].dbNow.toISOString(),cutoff:cutoff.toISOString(),
+          dbAfter:dbNow.toISOString(),triggerTelig:eligibility.toISOString(),
+        }));
         const rows = await owner.query('SELECT count(*)::int AS n FROM "Booking" WHERE "currentSlotId"=$1',[f.slotId]);
         expect(rows.rows[0].n).toBe(0);
       } finally { waiter.release(); }
