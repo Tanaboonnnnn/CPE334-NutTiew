@@ -22,17 +22,23 @@ fi
 # service on a disposable, GitHub-hosted runner; production must use
 # authenticated and least-privilege DB connections.
 psql "$DATABASE_URL" --set ON_ERROR_STOP=1 <<'SQL'
-CREATE ROLE nuttiew_ci_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;\nCREATE ROLE nuttiew_ci_booking_probe LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
+CREATE ROLE nuttiew_ci_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
+CREATE ROLE nuttiew_ci_booking_probe LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
 GRANT CONNECT ON DATABASE nuttiew_ci TO nuttiew_ci_runtime, nuttiew_ci_booking_probe;
 GRANT USAGE ON SCHEMA public TO nuttiew_ci_runtime, nuttiew_ci_booking_probe;
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   "User", "Session", "AuthAttemptBucket", "AuthAttemptReservation"
   TO nuttiew_ci_runtime;
 GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_ci_runtime;
-GRANT SELECT ON "Slot" TO nuttiew_ci_booking_probe;\n\n-- Probe role can issue forbidden DML so BDF tests prove the DB trigger itself.\n-- It is not an owner and has no DDL, trigger-disable or replication bypass.\nGRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON "Booking" TO nuttiew_ci_booking_probe;
+GRANT SELECT ON "Slot" TO nuttiew_ci_booking_probe;
+
+-- Probe role can issue forbidden DML so BDF tests prove the DB trigger itself.
+-- It is not an owner and has no DDL, trigger-disable or replication bypass.
+GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON "Booking" TO nuttiew_ci_booking_probe;
 SQL
 
 # Real API and all normal HTTP tests now run as non-owner, so disabling Slot
 # triggers or mutating protected rows via DDL/UPDATE/DELETE is impossible.
-echo "DATABASE_URL_APP=postgresql://nuttiew_ci_runtime@127.0.0.1:5432/nuttiew_ci" >> "$GITHUB_ENV"\necho "DATABASE_URL_BOOKING_PROBE=postgresql://nuttiew_ci_booking_probe@127.0.0.1:5432/nuttiew_ci" >> "$GITHUB_ENV"
+echo "DATABASE_URL_APP=postgresql://nuttiew_ci_runtime@127.0.0.1:5432/nuttiew_ci" >> "$GITHUB_ENV"
+echo "DATABASE_URL_BOOKING_PROBE=postgresql://nuttiew_ci_booking_probe@127.0.0.1:5432/nuttiew_ci" >> "$GITHUB_ENV"
 echo "Configured disposable PostgreSQL runtime and Booking guard-probe roles; runtime has no Booking UPDATE/DELETE/TRUNCATE, probe has DML only and no trigger/DDL bypass."
