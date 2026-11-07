@@ -90,7 +90,7 @@ All success/error responses set `Cache-Control: no-store`. Timestamps are UTC RF
 | Invalid/foreign Origin, explicit `Sec-Fetch-Site: cross-site`, missing/wrong/old-Session CSRF | 403 `ORIGIN_DENIED` / `CSRF_DENIED` | No mutation |
 | Missing or mismatched `X-NutTiew-Expected-Session-Binding` | 403 `SESSION_BINDING_MISMATCH` | No mutation; refresh identity and CSRF bootstrap |
 | Serialization/deadlock retry budget exhausted | 503 `TRANSACTION_RETRY_EXHAUSTED` | All attempts rolled back |
-| DB unavailable before mutation, during known rollback handling or during fresh Session reconciliation | 503 `SERVICE_UNAVAILABLE` | No false success; never skip live-Session validation |
+| DB unavailable before mutation, during known rollback handling or during fresh User/Session reconciliation | 503 `SERVICE_UNAVAILABLE` | No false success; never skip live-Session validation |
 | COMMIT acknowledgement lost / outcome unknown | 503 `BOOKING_OUTCOME_UNKNOWN` if possible; otherwise network failure | Do not claim rollback/success; retry same POST/`slotId` |
 | Unexpected internal failure | 500 `INTERNAL_ERROR` | No raw SQL/stack/secrets |
 
