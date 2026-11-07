@@ -6,7 +6,7 @@
 
 - Same-origin JSON under existing Express `/api/v1`; reuse live-session middleware, request ID, safe error envelope and `Cache-Control: no-store`.
 - Require a live active Session and `requireRole('Customer')`. Derive `customerId` only from `principal.userId`; derive actual Tutor/interval from PostgreSQL.
-- The HTTP `requireSession` check is preliminary, not sufficient for the mutation: the SERIALIZABLE transaction must lock and revalidate `principal.sessionId` after all User and Slot lock waits, before replay/INSERT. If `23505`/`23P01` causes ROLLBACK, the separate post-rollback reconciliation must also revalidate that exact Session on a fresh READ COMMITTED connection before any Booking read/200 (see [transaction contract](transaction-spec.md)).
+- The HTTP `requireSession`/role check is preliminary, not sufficient for reconciliation: the SERIALIZABLE mutation locks/revalidates Customer and Tutor Users, then the exact `principal.sessionId` after all User/Slot waits. If a recognized `23505`/`23P01` causes ROLLBACK, fresh READ COMMITTED reconciliation must lock/revalidate the current User (`isActive` and `role='Customer'`) first, then the exact Session (`userId`, `revokedAt`, DB-clock `expiresAt`), before any Booking read/200 or business 409. Missing/inactive User → 401; active non-Customer → 403; invalid Session → 401; see [transaction contract](transaction-spec.md).
 - Reuse Auth OD-005-C without a new CSRF scheme: obtain the stable token from `GET /api/v1/auth/csrf` using the same HttpOnly cookie; require `X-CSRF-Token` on POST. The CSRF token is valid only for the Session that issued it.
 - Require `X-NutTiew-Expected-Session-Binding`, captured from `X-NutTiew-Session-Binding` on `GET /api/v1/auth/me`. It must match the current `sessionBinding(userId, sessionId)`; missing or mismatched binding returns 403 `SESSION_BINDING_MISMATCH` before mutation. This is a consistency guard, not an authentication credential.
 - Unsafe POST applies the Auth canonical Origin/Referer rules and rejects explicit `Sec-Fetch-Site: cross-site`; no credentialed cross-origin CORS. The read-only `GET /api/v1/auth/csrf` may omit Origin but rejects explicit cross-site Fetch Metadata, as defined by Auth #13.
@@ -80,8 +80,8 @@ All success/error responses set `Cache-Control: no-store`. Timestamps are UTC RF
 
 | Condition | HTTP / code | Required state |
 |---|---|---|
-| Missing, expired, revoked or inactive Session | 401 `UNAUTHENTICATED` | No mutation/private data |
-| Authenticated non-Customer | 403 `FORBIDDEN` | No mutation |
+| Missing, expired, revoked Session, or missing/inactive User (including during post-ROLLBACK revalidation) | 401 `UNAUTHENTICATED` | No mutation/private data/Booking DTO |
+| Authenticated active User whose current role is not Customer (including during post-ROLLBACK revalidation) | 403 `FORBIDDEN` | No mutation/private data/Booking DTO |
 | Invalid/missing/extra request field, malformed UUID/JSON, oversized body, query parameter | 400 `INVALID_INPUT` (or shared 413) | No mutation |
 | Missing Slot | 404 `SLOT_NOT_FOUND` | No Booking/private information |
 | Slot occupied by another Customer or Slot lifecycle is not `Offered` | 409 `SLOT_UNAVAILABLE` | Existing row preserved; no owner disclosure |
@@ -103,8 +103,17 @@ All success/error responses set `Cache-Control: no-store`. Timestamps are UTC RF
 
 The SQLSTATEs are stable application-facing trigger contracts (valid five-character custom codes); the diagnostic constraint names are stable identifiers, not raw exception text. #33 owns their implementation. Unknown/unmapped trigger errors fail closed as 500 `INTERNAL_ERROR` and are never guessed to be Q05. BDF-D11's `0A000` remains reserved for forbidden UPDATE/DELETE/TRUNCATE, not INSERT eligibility.
 
-For `23505`/`23P01`, ROLLBACK and discard the failed SERIALIZABLE snapshot. On a fresh connection, begin a separate `READ COMMITTED` reconciliation transaction; lock the exact `principal.sessionId`/`principal.userId` Session row with `FOR UPDATE`, then check `revokedAt IS NULL AND expiresAt > clock_timestamp()` before any Booking read. Missing, revoked or expired Session returns 401 `UNAUTHENTICATED` with no Booking DTO. Only a still-live Session may perform one exact-pair `Booked` read: a committed same-pair row with matching interval returns 200 and its original ID; otherwise return the safe 409 for the original conflict. If DB validation is unavailable, return 503 and fail closed. Do not spin on a genuine conflict.
+Only these structured SQLSTATE/constraint pairs may enter the unique/exclusion reconciliation path; inspect driver metadata (`code` and `constraint`/`constraint_name`), never parse error text:
+
+| Exact PostgreSQL tuple | Meaning / mapping when no same-pair replay exists |
+|---|---|
+| `23505 / booking_one_active_per_slot` | 409 `SLOT_UNAVAILABLE` |
+| `23P01 / booked_customer_no_overlap` | 409 `CUSTOMER_OVERLAP` |
+
+Any missing, unknown or mismatched tuple (including another `23505`, such as a Booking primary-key violation) rolls back and fails closed as 500 `INTERNAL_ERROR`; it must not enter reconciliation, return 200 or be guessed to be a business conflict. These exact identifiers are owned by #33 Part F and must match its canonical schema. 
+
+For a recognized tuple only, ROLLBACK and discard the failed SERIALIZABLE snapshot. On a fresh connection, begin a separate `READ COMMITTED` reconciliation transaction. First lock the current `User` row for `principal.userId` with `FOR UPDATE` and revalidate its latest committed state: missing/inactive → 401 `UNAUTHENTICATED`; active but current role is not Customer → 403 `FORBIDDEN`. Do not read Session or Booking data on either failure. Then lock the exact `Session` row for `principal.sessionId` and `principal.userId` with `FOR UPDATE`, and check `revokedAt IS NULL AND expiresAt > clock_timestamp()`; missing, mismatched, revoked or expired Session → 401 `UNAUTHENTICATED`. Only an active Customer with a live Session may perform one exact-pair `Booked` read: a committed same-pair row with matching interval returns 200 and its original ID; otherwise return the safe 409 mapped from the allowlisted original tuple above. The reconciliation transaction takes no Slot or Booking row locks and performs no mutation. If User/Session DB validation is unavailable, return 503 and fail closed. Do not spin on a genuine conflict.
 
 ## 5. Boundary and review gate
 
-Only this POST is introduced. No Booking GET/list/detail, cancellation, reschedule, deletion or Slot mutation route is added. Peer review endpoint path, request allowlist, 201/200 replay semantics, cause-specific 409/422 mapping, in-transaction and post-ROLLBACK Session revalidation, Auth CSRF/session-binding reuse, DTO privacy, timestamp format and exact #33 trigger diagnostic dependency. All API cases remain PLANNED / NOT RUN in Part E.
+Only this POST is introduced. No Booking GET/list/detail, cancellation, reschedule, deletion or Slot mutation route is added. Peer review endpoint path, request allowlist, 201/200 replay semantics, cause-specific 409/422 mapping, allowlisted SQLSTATE/constraint reconciliation, in-transaction and post-ROLLBACK User/Session revalidation, Auth CSRF/session-binding reuse, DTO privacy, timestamp format and exact #33 trigger diagnostic dependency. All API cases remain PLANNED / NOT RUN in Part E.
