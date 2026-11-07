@@ -85,8 +85,10 @@ jobs:
           echo "AUTH_RATE_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - name: Generate Prisma client
         run: npm run db:generate
-      - name: Apply real Auth + Slot migrations
+      - name: Apply real Auth + Slot + Booking migrations (BDF-01)
         run: npm run db:migrate
+      - name: Exact sprint1 baseline upgrade with pre-existing rows (BDF-02)
+        run: bash .github/scripts/test-booking-baseline-upgrade.sh
       - name: Configure non-owner runtime DB role
         run: bash .github/scripts/prepare-test-db.sh
       - name: PostgreSQL integration, ownership, barrier race and restart

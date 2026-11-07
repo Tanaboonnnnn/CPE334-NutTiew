@@ -162,7 +162,8 @@ describe('F-S1-02 SLOT-10/11/16/17 — real SQL and deterministic Race A', () =>
     ]) {
       await attempt(sql, sql.includes('$2') ? [slotId, sql.includes('tutorId') ? randomUUID() : 'Withdrawn'] : [slotId], '23514', 'slot_s1_immutable');
     }
-    await attempt('TRUNCATE "Slot"', [], '23514', 'slot_s1_immutable');
+    // Booking's composite FK blocks parent TRUNCATE before Slot triggers.
+    await attempt('TRUNCATE "Slot"', [], '0A000');
     const db = await owner.query('SELECT "id","tutorId","startsAt","endsAt","lifecycle" FROM "Slot" WHERE "id"=$1', [slotId]);
     expect(db.rows).toHaveLength(1);
     expect(db.rows[0]).toMatchObject({ id: slotId, tutorId: id, lifecycle: 'Offered' });
