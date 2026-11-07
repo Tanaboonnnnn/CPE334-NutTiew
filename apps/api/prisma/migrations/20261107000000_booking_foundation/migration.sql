@@ -54,7 +54,9 @@ ALTER TABLE "Booking"
 -- One database-owned guard: #16 owns the application transaction adapter only.
 CREATE FUNCTION booking_guard_s1() RETURNS trigger
 LANGUAGE plpgsql
-AS $$
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $
 DECLARE
   slot_lifecycle TEXT;
   slot_starts_at TIMESTAMPTZ(6);
@@ -81,7 +83,7 @@ BEGIN
   IF NEW."status" = 'Booked' THEN
     SELECT s."lifecycle", s."startsAt"
       INTO slot_lifecycle, slot_starts_at
-      FROM "Slot" AS s
+      FROM public."Slot" AS s
       WHERE s."id" = NEW."currentSlotId"
       FOR UPDATE;
 
