@@ -57,10 +57,16 @@ npm and Microsoft Edge for the existing Playwright configuration.
 3. Run `npm ci`, `npm run db:generate`, `npm run db:migrate`, then
    `npm run db:seed` if you need demo accounts. The Slot migration runs **after**
    `20261104000000_auth`; do not rewrite the historical Auth migration.
-4. **Strongly recommended privilege separation:** keep `DATABASE_URL`
-   for Prisma migrations/admin test fixtures, and set optional
-   `DATABASE_URL_APP` for the Express runtime (and its test clients) with
-   a separate login role that **does not own the schema/tables**.
+4. **Required runtime privilege separation:** keep `DATABASE_URL`
+   for Prisma migrations/admin CLI and test-owner fixtures. Set
+   `DATABASE_URL_APP` in the repo-root `.env` for the Express runtime (and
+   its test clients) with a separate login role that **does not own the
+   schema/tables**. API and seed config load the repo-root `.env` by an
+   absolute path derived from the module location, so `npm run dev -w
+   @nuttiew/api` and `npm run db:seed` do not depend on shell CWD. Exported
+   environment variables take precedence over values in `.env`. Runtime
+   startup fails closed if `DATABASE_URL_APP` is missing or equals
+   `DATABASE_URL`; it never falls back to the migration/admin credential.
 
    Example grants to execute **as DB/schema owner** after both migrations,
    with a securely provisioned `nuttiew_runtime` role and database name
