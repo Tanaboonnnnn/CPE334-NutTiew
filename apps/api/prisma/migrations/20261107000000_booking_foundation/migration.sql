@@ -99,10 +99,8 @@ BEGIN
 
     -- Sample the authoritative DB wall clock only after the Slot lock wait.
     eligibility_time := clock_timestamp();
-    -- Session-level evidence survives a rejected INSERT for BDF-22 diagnostics.
-    PERFORM set_config('nuttiew.booking_t_elig', eligibility_time::text, false);
     IF slot_starts_at - eligibility_time < INTERVAL '60 minutes' THEN
-      RAISE EXCEPTION 'Booking is outside the Sprint 1 eligibility window'
+      RAISE EXCEPTION 'Booking is outside the Sprint 1 eligibility window; T_elig=%', eligibility_time
         USING ERRCODE = 'P0B02', CONSTRAINT = 'booking_q05_min_notice';
     END IF;
   END IF;
