@@ -80,11 +80,11 @@ All success/error responses set `Cache-Control: no-store`. Timestamps are UTC RF
 
 | Condition | HTTP / code | Required state |
 |---|---|---|
-| Missing, expired, revoked Session, or missing/inactive User (including during post-ROLLBACK revalidation) | 401 `UNAUTHENTICATED` | No mutation/private data/Booking DTO |
+| Missing, expired, revoked Session, exact transactional Session row absent/owner-mismatched after the HTTP guard, or missing/inactive User (including during post-ROLLBACK revalidation) | 401 `UNAUTHENTICATED` | No mutation/private data/Booking DTO; do not read/replay Booking data |
 | Authenticated active User whose current role is not Customer (including during post-ROLLBACK revalidation) | 403 `FORBIDDEN` | No mutation/private data/Booking DTO |
 | Invalid/missing/extra request field, malformed UUID/JSON, oversized body, query parameter | 400 `INVALID_INPUT` (or shared 413) | No mutation |
 | Missing Slot | 404 `SLOT_NOT_FOUND` | No Booking/private information |
-| Slot occupied by another Customer or Slot lifecycle is not `Offered` | 409 `SLOT_UNAVAILABLE` | Existing row preserved; no owner disclosure |
+| Slot occupied by another Customer, Slot lifecycle is not `Offered`, or the current Tutor is inactive/no longer role `Tutor` for a **new claim** | 409 `SLOT_UNAVAILABLE` | Existing row preserved; no new Booking; no owner/Tutor-status disclosure |
 | Customer has a different overlapping Active Booking | 409 `CUSTOMER_OVERLAP` | No conflicting row |
 | Q05 fails at DB `T_elig` (59:59 or less) | 422 `BOOKING_NOT_ELIGIBLE` | No Booking/occupancy |
 | Invalid/foreign Origin, explicit `Sec-Fetch-Site: cross-site`, missing/wrong/old-Session CSRF | 403 `ORIGIN_DENIED` / `CSRF_DENIED` | No mutation |
@@ -93,6 +93,8 @@ All success/error responses set `Cache-Control: no-store`. Timestamps are UTC RF
 | DB unavailable before mutation, during known rollback handling or during fresh User/Session reconciliation | 503 `SERVICE_UNAVAILABLE` | No false success; never skip live-Session validation |
 | COMMIT acknowledgement lost / outcome unknown | 503 `BOOKING_OUTCOME_UNKNOWN` if possible; otherwise network failure | Do not claim rollback/success; retry same POST/`slotId` |
 | Unexpected internal failure | 500 `INTERNAL_ERROR` | No raw SQL/stack/secrets |
+
+Tutor eligibility is checked only for a new INSERT, after active Customer/live-Session authorization and the exact same-pair replay lookup. A previously committed same-pair `Booked` row still returns 200 with its original ID if the Tutor was later deactivated or changed role; current Tutor ineligibility must not invalidate that replay. For a new claim, an inactive or non-`Tutor` account maps to the generic 409 `SLOT_UNAVAILABLE` without disclosing Tutor identity or account state.
 
 #33 Part F must emit these stable trigger diagnostics so #16 can map by cause without guessing or exposing raw DB errors:
 
