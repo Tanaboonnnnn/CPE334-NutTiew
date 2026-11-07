@@ -74,6 +74,10 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       'booking_current_slot_window_fk','booked_customer_no_overlap',
       'Booking_customerId_idx','Booking_currentSlotId_idx','booking_one_active_per_slot',
     ]) expect(names.has(name)).toBe(true);
+    const slotWindow = await owner.query(
+      `SELECT 1 FROM pg_constraint WHERE conrelid='"Slot"'::regclass AND conname='slot_id_window_unique'`,
+    );
+    expect(slotWindow.rowCount).toBe(1);
     const triggers = await owner.query<{ tgname: string }>(
       `SELECT tgname FROM pg_trigger WHERE tgrelid='"Booking"'::regclass AND NOT tgisinternal ORDER BY tgname`,
     );
