@@ -6,7 +6,7 @@
 
 Sources: [Feature SDS](specification.md), [UI](ui-spec.md), [API](api-spec.md), [data](data-spec.md), [transaction contract](transaction-spec.md), [Sprint 1 requirements](../../requirements.md), [System SDS](../../system-sds.md) and [BDF STS](../../foundations/booking-data/tests.md).
 
-Part F requires disposable PostgreSQL at target major version/exact #33 schema SHA; synthetic Customer A/B and Tutor A/B; Session A/B (including two Sessions for the same User); real future Offered Slots; at least two independent DB sessions; explicit barriers and observer query; controlled DB clock/request arrival/fault injection/lost HTTP response; browser auth/session-epoch control for late-response cases. Capture `pg_backend_pid()` and `pg_blocking_pids`. Random `Promise.all()`, sleep-only race or disabled UI button is insufficient. Inspect final committed rows from a fresh connection.
+Part F requires disposable PostgreSQL at target major version/exact #33 schema SHA; synthetic active/inactive Customer and role-change User fixtures, Customer A/B and Tutor A/B; Session A/B (including two Sessions for the same User); real future Offered Slots; at least two independent DB sessions; explicit barriers and observer query; controlled DB clock/request arrival/fault injection/lost HTTP response; browser auth/session-epoch control for late-response cases. For post-ROLLBACK authorization races, provide independent User deactivation/role-change and Session revocation transactions and observe lock acquisition order. Capture `pg_backend_pid()` and `pg_blocking_pids`. Random `Promise.all()`, sleep-only race or disabled UI button is insufficient. Inspect final committed rows from a fresh connection.
 
 All cases below are **PLANNED / NOT RUN**.
 
@@ -43,7 +43,8 @@ All cases below are **PLANNED / NOT RUN**.
 | BOOK-27 | BR-S1-13; OD-005-A/B; VC/TEST-S1-23 | Hold selected Slot row in DB session A. Start Booking POST, verify it has acquired User lock and is waiting on Slot; in separate runs, either revoke the Session and commit or allow its `expiresAt` to pass; then release Slot. | Session is locked/revalidated only after the Slot wait; revoked/expired Session returns 401 (or stale snapshot forces full retry then 401). No Booking INSERT, no 200 replay and no private data. |
 | BOOK-28 | OD-005-C; VC/TEST-S1-23/24 | Attempt POST with missing CSRF, wrong CSRF, Session A token with Session B cookie (including Session B for the same User), missing/mismatched expected binding, foreign Origin, and `Sec-Fetch-Site: cross-site`. | Reject with 403 `CSRF_DENIED`/`SESSION_BINDING_MISMATCH`/`ORIGIN_DENIED` as applicable (401 for invalid Session); no mutation and no private Booking data. |
 | BOOK-29 | OD-005-B/C; VC/TEST-S1-23/24 | Start a POST under Session A and delay its response; logout A or switch to Session B (same User and different User), then deliver A's late response. Also send A's captured expected binding with B's cookie. | UI auth/session epoch discards A's late response and never displays its Booking ID/details under B. Stale A binding with B cookie is rejected before mutation. If A had already committed before logout, do not claim rollback; only the stale response is suppressed. |
-| BOOK-30 | BR-S1-13; AC-S1-29; OD-013; VC/TEST-S1-23/38; Transaction contract §6.2 | Cause a same-pair request to reach `23505`/`23P01`; pause after the failed SERIALIZABLE transaction rolls back but before reconciliation. In separate runs, either revoke that exact Session and commit, or hold the barrier until the DB clock passes its `expiresAt`; then release the barrier. Run a control case with the Session still live. | Invalid Session: fresh READ COMMITTED connection locks/rechecks Session before any Booking read and returns 401 `UNAUTHENTICATED` with no Booking ID/DTO; committed rows remain unchanged. Live control: returns 200 with the original Booking ID and exactly one committed row. If DB validation is unavailable, return 503 rather than skipping the check. |
+| BOOK-30 | BR-S1-13; AC-S1-29; OD-013; VC/TEST-S1-23/38; Transaction contract §6.2 | Cause a recognized same-pair `23505 / booking_one_active_per_slot` or `23P01 / booked_customer_no_overlap`; pause after the failed SERIALIZABLE transaction rolls back but before reconciliation. In separate synchronized runs, (a) deactivate the Customer User and commit, (b) change its role from Customer and commit, (c) revoke the exact Session and commit, or (d) hold the barrier until DB clock passes Session `expiresAt`; then release. Also run a live active-Customer/live-Session control. | Reconciliation first locks/revalidates the latest User row: missing/inactive → 401 `UNAUTHENTICATED`; active non-Customer → 403 `FORBIDDEN`; neither reads Session/Booking or returns a DTO. If User remains an active Customer, it locks/revalidates exact Session: revoked/expired → 401 with no Booking read/ID/DTO. Live control returns 200 with original Booking ID and exactly one committed row. Final rows remain unchanged in all rejection cases. If User/Session DB validation is unavailable, return 503; never skip a check. | 
+| BOOK-31 | Transaction contract §6.2; #33 BDF-D05/D06; AC-S1-22/23; VC/TEST-S1-19/20 | Inject structured PostgreSQL errors for (a) `23505 / booking_one_active_per_slot`, (b) `23P01 / booked_customer_no_overlap`, and negative controls (c) `23505` on a different constraint such as Booking primary key, (d) `23P01` with a different/unknown constraint identifier, and (e) missing constraint metadata. | Only (a)/(b) enter reconciliation. If no exact-pair replay is found, map (a) to 409 `SLOT_UNAVAILABLE` and (b) to 409 `CUSTOMER_OVERLAP`. Negative controls roll back and return safe 500 `INTERNAL_ERROR` without any User/Session/Booking reconciliation read or Booking DTO; never parse error text or infer a business conflict from SQLSTATE alone. Capture structured SQLSTATE/constraint metadata and verify committed rows are unchanged. |
 
 ## 3. Required existing-anchor coverage
 
@@ -56,15 +57,15 @@ All cases below are **PLANNED / NOT RUN**.
 | VC/TEST-S1-20 | BOOK-05 |
 | VC/TEST-S1-21 | BOOK-06 |
 | VC/TEST-S1-22 | BOOK-07 |
-| VC/TEST-S1-23 | BOOK-08, BOOK-20, BOOK-26..30 |
+| VC/TEST-S1-23 | BOOK-08, BOOK-20, BOOK-26..31 |
 | VC/TEST-S1-24 | BOOK-09, BOOK-20, BOOK-28..29 |
 | VC/TEST-S1-25 | BOOK-10 |
 | VC/TEST-S1-26 | BOOK-11 |
 | VC/TEST-S1-27 | BOOK-12, BOOK-21 |
 | VC/TEST-S1-33 | BOOK-12, BOOK-21 |
-| VC/TEST-S1-38 | BOOK-13..16, BOOK-30 |
+| VC/TEST-S1-38 | BOOK-13..16, BOOK-30..31 |
 | VC/TEST-S1-39 | BOOK-17, BOOK-19 |
-| AC-S1-19..29 | BOOK-01..16, BOOK-20 and BOOK-26..30 |
+| AC-S1-19..29 | BOOK-01..16, BOOK-20 and BOOK-26..31 |
 | AC-S1-35 | BOOK-17, BOOK-19 |
 
 Existing AC/VC/TEST IDs remain authoritative; BOOK IDs are F-S1-04 STS IDs, not replacements.
@@ -82,9 +83,9 @@ Existing AC/VC/TEST IDs remain authoritative; BOOK IDs are F-S1-04 STS IDs, not 
 - [ ] Confirm endpoint ownership, auth/role/CSRF, request allowlist and safe errors.
 - [ ] Confirm Natural-key OD-013 scope, replay precedence and 201/200 behavior.
 - [ ] Confirm canonical #33 mapping and no duplicated schema/trigger.
-- [ ] Confirm User → Slot → Session(auth sub-lock) → Booking acquisition, SERIALIZABLE snapshot behavior, post-lock-wait Session revalidation, and fresh post-ROLLBACK Session validation before reconciliation read/200.
+- [ ] Confirm User → Slot → Session(auth sub-lock) → Booking acquisition, SERIALIZABLE snapshot behavior, post-lock-wait User/Session revalidation, and fresh post-ROLLBACK User-then-Session authorization validation before reconciliation read/200/409.
 - [ ] Confirm Auth CSRF acquisition, Session binding, cross-origin rejection and late-response suppression across different Sessions for the same User.
-- [ ] Confirm retry classification, three-attempt bound, constraint reconciliation and unknown COMMIT behavior.
+- [ ] Confirm retry classification, three-attempt bound, exact SQLSTATE/constraint allowlist (including negative controls), safe unknown-constraint failure and unknown COMMIT behavior.
 - [ ] Challenge no-post-guard-contention strategy against actual #33 trigger/constraints; retain BDF-23 as hard gate.
 - [ ] Confirm AC-S1-19..29/35 and VC/TEST-S1-16..27/33/38/39 coverage.
 - [ ] Confirm no code, migration, executable tests or S2 workflow is in this Part E PR.
