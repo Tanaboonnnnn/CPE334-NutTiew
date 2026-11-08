@@ -1,6 +1,6 @@
 # F-S1-04 — Part F verification ledger (Issue #16)
 
-**Code commit:** `98c31f2d1d58377e776ac47e548b9ebeb8f7f139` (with earlier commits `3704eeb29c019801d2587098ab5622dc5be3f444`, `ecb289a74813f4830d169ca3a8871dc01565b769`, and `222b5d3812883877bd229db1be6e945641b12c15`)
+**Code commit:** `2e59b89e0bcc86617baacddc89ccc182a9c2c9ed` (with earlier commits `087c1dbf2312ef625d4080cb61c977ab20ec8cde`, `98c31f2d1d58377e776ac47e548b9ebeb8f7f139`, `3704eeb29c019801d2587098ab5622dc5be3f444`, `ecb289a74813f4830d169ca3a8871dc01565b769`, and `222b5d3812883877bd229db1be6e945641b12c15`)
 **Branch:** `feature/16-exclusive-booking` based on merged `sprint1` `0e212bf96beef73050e02bce5e63a926ba15d59d` (which includes Issue [#33](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/33) Part F PR [#36](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/36) merged at `f124760e4c4cd5dce8a450d7f4c4478672fc1ff9` / source head `aecd983fa4d55dae46e8b6c4843c6aa892d36e69`, Issue [#16](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/16) Part E PR [#35](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/35), and Issue [#15](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15) Part F PR [#37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37)).
 **Merged #33 schema SHA:** `f124760e4c4cd5dce8a450d7f4c4478672fc1ff9` (`apps/api/prisma/migrations/20261107000000_booking_foundation/migration.sql`).
 **Scope:** Part F implementation of the reviewed Part E Customer Exclusive Booking contract (`F-S1-04`) and post-merge joint integration gate `BDF-23`.
