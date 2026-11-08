@@ -1,5 +1,6 @@
 # F-S1-04 — Part F verification ledger (Issue #16)
 
+**Code commit:** `222b5d3812883877bd229db1be6e945641b12c15`
 **Branch:** `feature/16-exclusive-booking` based on merged `sprint1` `0e212bf0ff50fd423a55f5ab155bb937691b8608` (which includes Issue [#33](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/33) Part F PR [#36](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/36) merged at `f124760e4c4cd5dce8a450d7f4c4478672fc1ff9` / source head `aecd983fa4d55dae46e8b6c4843c6aa892d36e69`, Issue [#16](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/16) Part E PR [#35](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/35), and Issue [#15](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15) Part F PR [#37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37)).
 **Merged #33 schema SHA:** `f124760e4c4cd5dce8a450d7f4c4478672fc1ff9` (`apps/api/prisma/migrations/20261107000000_booking_foundation/migration.sql`).
 **Scope:** Part F implementation of the reviewed Part E Customer Exclusive Booking contract (`F-S1-04`) and post-merge joint integration gate `BDF-23`.
