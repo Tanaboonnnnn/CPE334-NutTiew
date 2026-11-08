@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import { TutorAvailability } from './tutor-slots.js';
+import { CustomerAvailability } from './customer-availability.js';
 
 type User = { id: string; role: 'Customer' | 'Tutor' };
 type TutorSessionPhase = 'active' | 'logout-pending' | 'logout-uncertain' | 'rechecking';
@@ -107,12 +108,16 @@ function App() {
   }, [user]);
 
   useEffect(() => {
+    if (tutorPhase !== 'active') guardHeadingRef.current?.focus();
+  }, [tutorPhase]);
+
+  useEffect(() => {
     let active = true;
     const current = ++version.current;
     request('me')
       .then(result => {
         if (active && version.current === current) {
-          if (result.user?.role === 'Tutor' && !result.sessionBinding) {
+          if ((result.user?.role === 'Tutor' || result.user?.role === 'Customer') && !result.sessionBinding) {
             throw new Error('SESSION_BINDING_MISSING');
           }
           setSessionBinding(result.sessionBinding ?? null);
@@ -131,10 +136,6 @@ function App() {
       });
     return () => { active = false; };
   }, []);
-
-  useEffect(() => {
-    if (tutorPhase !== 'active') guardHeadingRef.current?.focus();
-  }, [tutorPhase]);
 
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -156,7 +157,7 @@ function App() {
       // together after the cookie is committed. Never trust login-form state.
       const verified = await request('me');
       if (verified.user?.id !== result.user?.id || verified.user?.role !== result.user?.role ||
-          (verified.user?.role === 'Tutor' && !verified.sessionBinding)) {
+          ((verified.user?.role === 'Tutor' || verified.user?.role === 'Customer') && !verified.sessionBinding)) {
         throw new Error('IDENTITY_CHANGED');
       }
       if (version.current === current) {
@@ -236,14 +237,14 @@ function App() {
     if (busyRef.current || tutorPhase !== 'logout-uncertain' || !suspendedTutorId.current) return;
     busyRef.current = true;
     const current = ++version.current;
-    const expectedTutor = suspendedTutorId.current;
+    const expectedTutorId = suspendedTutorId.current;
     setTutorPhase('rechecking');
     setBusy(true);
     setError('');
     try {
       const result = await request('me');
       const currentUser = result?.user as User | undefined;
-      if (!currentUser || currentUser.role !== 'Tutor' || currentUser.id !== expectedTutor) {
+      if (!currentUser || currentUser.role !== 'Tutor' || currentUser.id !== expectedTutorId) {
         throw new Error('IDENTITY_CHANGED');
       }
       if (!result.sessionBinding) throw new Error('SESSION_BINDING_MISSING');
@@ -253,7 +254,7 @@ function App() {
         tutorActionsAllowed.current = true;
         setSessionBinding(result.sessionBinding);
         setUser(currentUser);
-        setTutorPhase('active'); // fresh TutorAvailability remounts and does its own GET
+        setTutorPhase('active'); // fresh workspace remounts and does its own GET
         setError('');
       }
     } catch (cause) {
@@ -292,33 +293,63 @@ function App() {
   if (!loading && user?.role === 'Tutor') {
     if (tutorPhase !== 'active') {
       const pending = busy || tutorPhase === 'logout-pending' || tutorPhase === 'rechecking';
-      return <main className="dashboard-root tutor-session-screen">
-        <section className="tutor-session-guard" aria-labelledby="session-guard-heading">
-          <p className="session-guard-brand">NutTiew</p>
-          <h1 id="session-guard-heading" tabIndex={-1} ref={guardHeadingRef}>ตรวจสอบสถานะเซสชัน</h1>
-          {pending && <p role="status">กำลังตรวจสอบคำขอและความปลอดภัยของเซสชัน…</p>}
-          {!pending && <p role="alert">{error || 'ยังไม่สามารถยืนยันการออกจากระบบได้'}</p>}
-          <p>ข้อมูลตารางเวลาและบัญชีถูกซ่อนไว้จนกว่าจะยืนยันตัวตนกับเซิร์ฟเวอร์อีกครั้ง</p>
-          {!pending && <div className="session-guard-actions">
-            <button type="button" onClick={() => void logout()} disabled={busy}>ลองออกจากระบบอีกครั้ง</button>
-            <button type="button" onClick={() => void recheckSession()} disabled={busy}>ตรวจสอบเซสชัน</button>
-          </div>}
-        </section>
-      </main>;
+      return (
+        <main className="dashboard-root tutor-session-screen">
+          <section className="tutor-session-guard" aria-labelledby="session-guard-heading">
+            <p className="session-guard-brand">NutTiew</p>
+            <h1 id="session-guard-heading" tabIndex={-1} ref={guardHeadingRef}>
+              ตรวจสอบสถานะเซสชัน
+            </h1>
+            {pending && <p role="status">กำลังตรวจสอบคำขอและความปลอดภัยของเซสชัน…</p>}
+            {!pending && <p role="alert">{error || 'ยังไม่สามารถยืนยันการออกจากระบบได้'}</p>}
+            <p>ข้อมูลตารางเวลาและบัญชีถูกซ่อนไว้จนกว่าจะยืนยันตัวตนกับเซิร์ฟเวอร์อีกครั้ง</p>
+            {!pending && (
+              <div className="session-guard-actions">
+                <button type="button" onClick={() => void logout()} disabled={busy}>
+                  ลองออกจากระบบอีกครั้ง
+                </button>
+                <button type="button" onClick={() => void recheckSession()} disabled={busy}>
+                  ตรวจสอบเซสชัน
+                </button>
+              </div>
+            )}
+          </section>
+        </main>
+      );
     }
     if (!sessionBinding) return null; // No private surface without a server-issued binding.
-    return <main className="dashboard-root">
-      <TutorAvailability
-        key={sessionBinding}
-        accountId={user.id}
-        sessionBinding={sessionBinding}
-        onLogout={logout}
-        logoutBusy={busy}
-        logoutError={error}
-        canMutate={() => tutorActionsAllowed.current}
-        onUnauthorized={sessionExpired}
-      />
-    </main>;
+    return (
+      <main className="dashboard-root">
+        <TutorAvailability
+          key={sessionBinding}
+          accountId={user.id}
+          sessionBinding={sessionBinding}
+          onLogout={logout}
+          logoutBusy={busy}
+          logoutError={error}
+          canMutate={() => tutorActionsAllowed.current}
+          onUnauthorized={sessionExpired}
+        />
+      </main>
+    );
+  }
+
+  if (!loading && user?.role === 'Customer') {
+    if (!sessionBinding) return null; // No private surface without a server-issued binding.
+    return (
+      <main className="dashboard-root">
+        <CustomerAvailability
+          key={sessionBinding}
+          accountId={user.id}
+          sessionBinding={sessionBinding}
+          onLogout={logout}
+          logoutBusy={busy}
+          logoutError={error}
+          onClearLogoutError={() => setError('')}
+          onUnauthorized={sessionExpired}
+        />
+      </main>
+    );
   }
 
   return <main><section className="panel">
