@@ -442,7 +442,7 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
       const surface = document.querySelector('.availability-surface')!;
       const offerHours = document.querySelector('.offer-hours')!;
       const tutorRefText = document.querySelector('.offer-tutor-ref')!;
-      const primaryBtn = document.querySelector('.offer-select-button')!;
+      const primaryBtn = document.querySelector('.offer-select-button[aria-pressed="false"]')!;
       const refreshBtn = document.querySelector('.availability-refresh-button')!;
 
       return {

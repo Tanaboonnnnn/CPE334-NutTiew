@@ -62,4 +62,13 @@ Source setup: [implementation.md](implementation.md).
 - **`AVA-11` (end-to-end stale selection rejection during Booking confirmation): BLOCKED on Issue [#16](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/16) Part F.** Issue `#15` is strictly a read-only availability discovery slice and must not create a Booking mutation endpoint.
 - **`AVA-18` positive `tutorDisplayName` path: BLOCKED on `OD-AV-02` data-approval gate.** Until Tutor opt-in consent, stakeholder publication approval, and a separate forward-only migration adding `User.tutorDisplayName` are approved, `tutorRef` UUID is the sole Tutor identifier.
 - **Manual human WCAG 2.2 AA audit: NOT RUN.** Automated Playwright checks verify computed contrast samples, keyboard `Tab`/`Enter` selection, `3px solid #AA4519` focus outline, `>= 44×44` CSS px target boxes, and `320/375/768/1280` CSS px reflow without horizontal overflow, but do not replace a manual human accessibility sign-off.
-- **Peer review and merge:** Awaiting independent human review by `@Tanaboonnnnn` on the Issue `#15` Part F PR targeting `sprint1`.
+- **Peer review and merge:** Awaiting independent human review by `@Tanaboonnnnn` on the Issue `#15` Part F PR [#37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37) targeting `sprint1`.
+
+## GitHub Actions CI diagnosis and test-selector fix (LOOP 5)
+
+Initial hosted CI run [#42495839211](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42495839211) at `09dcebcfc6e8e21a5a4f246aaa512f163fdeb402` completed with **2/3 jobs PASS**:
+
+- **Unit / types / build:** **SUCCESS** (25s).
+- **PostgreSQL 18 / Auth / Slot / Race A:** **SUCCESS** (41s) on PostgreSQL 18.6 — all 12 PostgreSQL integration files (including `booking.foundation.db.test.ts` `BDF-01..26` and `availability.db.test.ts` `AVA-01..10, 14..18`) passed cleanly.
+- **Microsoft Edge / Auth / Tutor UI E2E:** **FAILURE, 51/52 passed**. In `e2e/availability.spec.ts` (`AVA-13/19`), after pressing `Enter` to select `slotMorningAId` (`aria-pressed="true"`), `document.querySelector('.offer-select-button')` on a fresh CI database matched that newly selected first row (`background: rgb(255, 216, 194)`, `border: rgb(164, 62, 20)`) instead of an unselected primary CTA button (`rgb(244, 119, 54)`).
+- **Surgical fix (`e2e/availability.spec.ts` only):** Changed the token probe selector from `.offer-select-button` to `.offer-select-button[aria-pressed="false"]` so `AVA-19` compares unselected primary CTA tokens consistently on both fresh and pre-populated databases. No application code or CSS changed.
