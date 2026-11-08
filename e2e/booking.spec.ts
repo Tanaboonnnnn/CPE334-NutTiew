@@ -289,7 +289,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
 
-    // 2. BOOK-28 (Case A: Session A -> Session B where Session B is STILL VALID):
+    // 2. BOOK-28 (Case A: Synthetic header-mismatch UI test):
     //    When the post-CSRF GET /api/v1/auth/me returns a changed binding ('session-b-valid-binding'),
     //    the UI must discard the old token/state and restart identity/CSRF bootstrap (/auth/me -> /auth/csrf -> /auth/me)
     //    under Session B WITHOUT kicking the user to the login screen!
@@ -347,7 +347,55 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await page.unroute('**/api/v1/customer/availability');
     await page.unroute('**/api/v1/auth/me');
 
-    // 3. BOOK-28 (Case B: Binding mismatch followed by invalid Session 401 on re-bootstrap -> transitions to Login screen):
+    // 3. BOOK-28 (Case B1: Indeterminate re-bootstrap failure — SESSION_BINDING_MISMATCH followed by /auth/me 503):
+    //    Must hold the user in the Customer Session Guard screen (heading "ตรวจสอบสถานะเซสชัน", alert,
+    //    and retry action "ตรวจสอบเซสชันอีกครั้ง") WITHOUT kicking the customer to the Login screen.
+    //    Then clicking "ตรวจสอบเซสชันอีกครั้ง" with /auth/me recovering to 200 restores the Availability screen!
+    let meFail503Once = true;
+    await page.route('**/api/v1/customer/bookings', async route => {
+      await route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        headers: { 'Cache-Control': 'no-store' },
+        body: JSON.stringify({
+          error: { code: 'SESSION_BINDING_MISMATCH', message: 'Session binding mismatch' },
+          requestId: 'mismatch-then-503',
+        }),
+      });
+    });
+    await page.route('**/api/v1/auth/me', async route => {
+      if (meFail503Once) {
+        meFail503Once = false;
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify({
+            error: { code: 'SERVICE_UNAVAILABLE', message: 'Auth service temporarily unavailable' },
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.locator('#selected-offer-summary').getByRole('button', { name: 'ยืนยันการจอง' }).click();
+
+    // Verify guarded state: heading "ตรวจสอบสถานะเซสชัน", retry button present, NO login form shown!
+    await expect(page.getByRole('heading', { name: 'ตรวจสอบสถานะเซสชัน' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'ตรวจสอบเซสชันอีกครั้ง' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toHaveCount(0);
+
+    // Click "ตรวจสอบเซสชันอีกครั้ง" -> /auth/me recovers to 200, returning to Availability screen!
+    await page.getByRole('button', { name: 'ตรวจสอบเซสชันอีกครั้ง' }).click();
+    await expect(page.getByRole('heading', { name: 'เลือกช่วงเวลาติว' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'ตรวจสอบสถานะเซสชัน' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toHaveCount(0);
+
+    await page.unroute('**/api/v1/customer/bookings');
+    await page.unroute('**/api/v1/auth/me');
+
+    // 4. BOOK-28 (Case B2: Binding mismatch followed by invalid Session 401 on re-bootstrap -> transitions to Login screen):
     await page.route('**/api/v1/customer/bookings', async route => {
       await route.fulfill({
         status: 403,
@@ -370,13 +418,16 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
       });
     });
 
+    const offerForB2 = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
+    await expect(offerForB2).toBeVisible();
+    await offerForB2.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
     await page.locator('#selected-offer-summary').getByRole('button', { name: 'ยืนยันการจอง' }).click();
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
 
     await page.unroute('**/api/v1/customer/bookings');
     await page.unroute('**/api/v1/auth/me');
 
-    // 4. BOOK-29: Start a Booking POST under Session A, hold its 201 response, logout / switch session, then release A's late 201 -> never displayed!
+    // 5. BOOK-29: Start a Booking POST under Session A, hold its 201 response, logout / switch session, then release A's late 201 -> never displayed!
     await signIn(page, customer1Email, false);
     const offerLate = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
     await expect(offerLate).toBeVisible();

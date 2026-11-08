@@ -269,7 +269,31 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
   });
 
   it('BOOK-02 / BOOK-03 / BOOK-25 enforces Q05 60:00 pass, 59:59 fail (P0B02 / booking_q05_min_notice -> 422), and non-Offered Slot (P0B01 / booking_slot_not_offered -> 409)', async () => {
-    // 1. Exact 60:00 arithmetic & live >60m pass on Tutor Low (BOOK-02)
+    // 1. Exact 60:00 boundary arithmetic check & live >60m pass on Tutor Low (BOOK-02)
+    const exactArithmetic = await ownerPool.query<{ allowed: boolean; tooLate: boolean }>(
+      `SELECT ($1::timestamptz - $2::timestamptz >= interval '60 minutes') AS allowed,
+              ($3::timestamptz - $2::timestamptz >= interval '60 minutes') AS "tooLate"`,
+      [new Date('2030-01-01T01:00:00.000Z'), new Date('2030-01-01T00:00:00.000Z'), new Date('2030-01-01T00:59:59.999Z')],
+    );
+    expect(exactArithmetic.rows[0].allowed).toBe(true);
+    expect(exactArithmetic.rows[0].tooLate).toBe(false);
+
+    // Controlled near-boundary proof through the application adapter (BOOK-02):
+    // Prove that when a Slot's startsAt is near the 60:00 boundary such that T_elig passes the trigger,
+    // normal statement execution without abnormal index contention (statementDuration < 150ms) commits
+    // with 201 Created and does NOT get aborted by a blanket post-insert cutoff (per transaction-spec.md §3 step 11 & §5).
+    const tempCustomerNearId = await createUser(`book-c-near-${marker}@example.test`, 'Customer');
+    const tempCustomerNearAuth = await loginBundle(`book-c-near-${marker}@example.test`, tempCustomerNearId);
+    const tempTutorNear = await createUser(`book-t-near-${marker}@example.test`, 'Tutor');
+    const nowNear = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
+    const slotNearBoundary = await createSlot(
+      tempTutorNear,
+      new Date(nowNear.rows[0].now.getTime() + 60 * 60_000 + 400),
+    );
+    const nearRes = await postBooking(app, tempCustomerNearAuth, { slotId: slotNearBoundary.id });
+    expect(nearRes.status).toBe(201);
+    expect(nearRes.body.data.slotId).toBe(slotNearBoundary.id);
+
     const nowRes = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
     const slotPass = await createSlot(
       tutorLowId,
