@@ -30,6 +30,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
   "User", "Session", "AuthAttemptBucket", "AuthAttemptReservation"
   TO nuttiew_ci_runtime;
 GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_ci_runtime;
+-- PostgreSQL requires UPDATE privilege on at least one Slot column for SELECT FOR UPDATE.
+-- Slot trigger still rejects every UPDATE; this column grant exists only to acquire row locks.
+GRANT UPDATE ("id") ON "Slot" TO nuttiew_ci_runtime;
 GRANT SELECT ON "Slot" TO nuttiew_ci_booking_probe;
 
 -- Probe role can issue forbidden DML so BDF tests prove the DB trigger itself.
