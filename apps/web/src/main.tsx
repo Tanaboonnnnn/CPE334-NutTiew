@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import { TutorAvailability } from './tutor-slots.js';
+import { CustomerAvailability } from './customer-availability.js';
 
 type User = { id: string; role: 'Customer' | 'Tutor' };
 type TutorSessionPhase = 'active' | 'logout-pending' | 'logout-uncertain' | 'rechecking';
@@ -112,7 +113,7 @@ function App() {
     request('me')
       .then(result => {
         if (active && version.current === current) {
-          if (result.user?.role === 'Tutor' && !result.sessionBinding) {
+          if ((result.user?.role === 'Tutor' || result.user?.role === 'Customer') && !result.sessionBinding) {
             throw new Error('SESSION_BINDING_MISSING');
           }
           setSessionBinding(result.sessionBinding ?? null);
@@ -156,7 +157,7 @@ function App() {
       // together after the cookie is committed. Never trust login-form state.
       const verified = await request('me');
       if (verified.user?.id !== result.user?.id || verified.user?.role !== result.user?.role ||
-          (verified.user?.role === 'Tutor' && !verified.sessionBinding)) {
+          ((verified.user?.role === 'Tutor' || verified.user?.role === 'Customer') && !verified.sessionBinding)) {
         throw new Error('IDENTITY_CHANGED');
       }
       if (version.current === current) {
@@ -316,6 +317,21 @@ function App() {
         logoutBusy={busy}
         logoutError={error}
         canMutate={() => tutorActionsAllowed.current}
+        onUnauthorized={sessionExpired}
+      />
+    </main>;
+  }
+
+  if (!loading && user?.role === 'Customer') {
+    if (!sessionBinding) return null;
+    return <main className="dashboard-root">
+      <CustomerAvailability
+        key={sessionBinding}
+        accountId={user.id}
+        sessionBinding={sessionBinding}
+        onLogout={logout}
+        logoutBusy={busy}
+        logoutError={error}
         onUnauthorized={sessionExpired}
       />
     </main>;

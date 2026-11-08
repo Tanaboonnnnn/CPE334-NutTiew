@@ -2,6 +2,7 @@ import { requireSession,requireRole,getPrincipal } from './guards.js';
 import { clientIp } from './client-ip.js';
 import { parseSlotStart } from './slot-time.js';
 import { listOwnSlots, publishOwnSlot, SlotError } from './slots.js';
+import { listCustomerAvailability } from './availability.js';
 import express, { type Request, type Response, type NextFunction, type RequestHandler } from 'express';
 import cookieParser from 'cookie-parser';
 import { createHash,randomBytes,randomUUID } from 'node:crypto';
@@ -9,7 +10,7 @@ import argon2 from 'argon2';
 import type { Pool } from 'pg';
 import { admit, csrf, digest, hmac, QuotaError, randomToken, safeTokenMatch, settle, verifyPassword } from './security.js';
 
-type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword };
+type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword; availabilityClock?:()=>Date|Promise<Date> };
 const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',RATE_LIMITED:'Too many login attempts',SLOT_INVALID_TIME:'Slot must start in the future',SLOT_OVERLAP:'Slot overlaps an existing offer',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
 const code=(res:Response,status:number,error:string)=>res.status(status).json({error:{code:error,message:messages[error]??'Request failed'},requestId:res.locals.requestId??randomUUID()});
 const cookieName=(c:Config)=>c.production?'nuttiew_session':'nuttiew_session_dev';
@@ -73,6 +74,21 @@ export async function createApp(pool:Pool, config:Config) {
    const data=await publishOwnSlot(pool,{userId:principal.userId,sessionId:principal.sessionId},start);
    res.status(201).json({data,meta:{requestId:res.locals.requestId}});
   }catch(error){slotFailure(res,error);}
+ });
+ // F-S1-03 only: authenticated Customer read-only bookable availability projection.
+ const customerRole=requireRole('Customer',(res,status,error)=>{code(res,status,error);});
+ app.get('/api/v1/customer/availability',guard,customerRole,async(req,res)=>{
+  if(Object.keys(req.query).length!==0)return void code(res,400,'INVALID_INPUT');
+  const principal=getPrincipal(req);
+  if(!principal)return void code(res,401,'UNAUTHENTICATED');
+  try{
+   const tView=config.availabilityClock?await config.availabilityClock():undefined;
+   const result=await listCustomerAvailability(pool,principal.userId,tView);
+   res.setHeader('X-NutTiew-Session-Binding',sessionBinding(principal.userId,principal.sessionId));
+   res.json({data:result.data,meta:{requestId:res.locals.requestId,evaluatedAt:result.evaluatedAt}});
+  }catch{
+   code(res,503,'SERVICE_UNAVAILABLE');
+  }
  });
  app.use((err:unknown,_req:Request,res:Response,_next:NextFunction)=>{if(res.headersSent)return;const e=err as {type?:string;status?:number};code(res,e.type==='entity.too.large'?413:e.status===400?400:500,e.type==='entity.too.large'?'INVALID_INPUT':e.status===400?'INVALID_INPUT':'INTERNAL_ERROR');});
  return app;
