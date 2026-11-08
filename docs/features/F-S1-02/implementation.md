@@ -79,10 +79,18 @@ npm and Microsoft Edge for the existing Playwright configuration.
      "User", "Session", "AuthAttemptBucket", "AuthAttemptReservation"
      TO nuttiew_runtime;
    GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_runtime;
+   -- Needed for PostgreSQL SELECT ... FOR UPDATE in the #16 transaction protocol.
+   -- Slot immutable trigger still rejects every UPDATE; this is not mutation access.
+   GRANT UPDATE ("id") ON "Slot" TO nuttiew_runtime;
    ```
 
-   Do **not** grant UPDATE/DELETE/TRUNCATE on `Slot` or `Booking`, table
-   ownership, superuser/DDL rights or permission to disable triggers. The API
+   Do **not** grant table-level UPDATE on `Slot`, UPDATE on any Slot column
+   other than `id`, or UPDATE/DELETE/TRUNCATE on `Booking`. The column-scoped
+   `UPDATE ("id")` grant exists only because PostgreSQL requires UPDATE
+   privilege on at least one column for `SELECT ... FOR UPDATE`; the existing
+   `slot_s1_immutable` trigger rejects even a no-op UPDATE. Do not grant
+   Slot/Booking DELETE/TRUNCATE, table ownership, superuser/DDL rights or
+   permission to disable triggers. The API
    runtime fails closed when `DATABASE_URL_APP` is absent or equals
    `DATABASE_URL`; it never falls back to the migration/admin credential.
    Manage actual role passwords via private environment variables, not Git.
