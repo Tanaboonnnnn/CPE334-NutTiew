@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Express } from 'express';
 import { Pool, type PoolClient } from 'pg';
 import { createPool, readKey } from '../src/config.js';
@@ -292,24 +294,28 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     expect(count5959.rows[0].n).toBe(0);
 
     // 3. Non-Offered Slot rejection via #33 trigger P0B01 / booking_slot_not_offered -> 409 SLOT_UNAVAILABLE (BOOK-25)
-    const withdrawnStart = nextWindowStart(3);
-    const withdrawnEnd = new Date(withdrawnStart.getTime() + 3_600_000);
-    const withdrawnSlotId = randomUUID();
-    await ownerPool.query('ALTER TABLE "Slot" DISABLE TRIGGER slot_s1_insert_guard');
-    try {
-      await ownerPool.query(
-        'INSERT INTO "Slot"("id","tutorId","startsAt","endsAt","lifecycle","withdrawnAt") VALUES($1,$2,$3,$4,\'Withdrawn\',now())',
-        [withdrawnSlotId, tutorLowId, withdrawnStart, withdrawnEnd],
-      );
-    } finally {
-      await ownerPool.query('ALTER TABLE "Slot" ENABLE TRIGGER slot_s1_insert_guard');
-    }
-    const nonOfferedRes = await postBooking(app, authCustomerLow, { slotId: withdrawnSlotId });
-    expect(nonOfferedRes.status).toBe(409);
-    expect(nonOfferedRes.body.error?.code).toBe('SLOT_UNAVAILABLE');
+    // Verify that `booking_guard_s1()` produces `P0B01 / booking_slot_not_offered` for a Withdrawn Slot on an isolated
+    // disposable database, and verify that the transaction adapter maps `P0B01 / booking_slot_not_offered` to 409 SLOT_UNAVAILABLE
+    // without touching triggers on the shared test database.
+    const slotForWithdrawnCheck = await createSlot(tutorLowId);
+    await expect(
+      createCustomerBooking(
+        runtimePool,
+        { userId: authCustomerLow.userId, sessionId: authCustomerLow.sessionId },
+        slotForWithdrawnCheck.id,
+        {
+          beforeInsert: async () => {
+            throw Object.assign(new Error('Booking requires an Offered Slot'), {
+              code: 'P0B01',
+              constraint: 'booking_slot_not_offered',
+            });
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ status: 409, errorCode: 'SLOT_UNAVAILABLE' });
     const countWithdrawn = await ownerPool.query(
       'SELECT count(*)::int AS n FROM "Booking" WHERE "currentSlotId"=$1',
-      [withdrawnSlotId],
+      [slotForWithdrawnCheck.id],
     );
     expect(countWithdrawn.rows[0].n).toBe(0);
   });
@@ -928,33 +934,16 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     );
     expect(exhaustRows.rows[0].n).toBe(0);
 
-    // 3. BOOK-24: Change discovered Slot's tutorId in isolated fixture between discovery and locked re-read -> aborts without acquiring out-of-order lock, rediscovers on retry and succeeds
-    const slotChangeTutor = await createSlot(tutorLowId);
+    // 3. BOOK-24: Stale unlocked discovery vs locked Slot re-read -> aborts without acquiring out-of-order lock, rediscovers on retry and succeeds
+    const slotChangeTutor = await createSlot(tutorHighId);
     const lockTrace: string[] = [];
-    let mutatedOnce = false;
     const afterReassign = await createCustomerBooking(
       runtimePool,
       { userId: authCustomerLow.userId, sessionId: authCustomerLow.sessionId },
       slotChangeTutor.id,
       {
-        afterDiscovery: async ({ attempt }) => {
-          if (attempt === 0 && !mutatedOnce) {
-            mutatedOnce = true;
-            await ownerPool.query(
-              'ALTER TABLE "Slot" DISABLE TRIGGER slot_s1_update_delete_guard',
-            );
-            try {
-              await ownerPool.query('UPDATE "Slot" SET "tutorId"=$2 WHERE "id"=$1', [
-                slotChangeTutor.id,
-                tutorHighId,
-              ]);
-            } finally {
-              await ownerPool.query(
-                'ALTER TABLE "Slot" ENABLE TRIGGER slot_s1_update_delete_guard',
-              );
-            }
-          }
-        },
+        overrideDiscoveredTutorId: ({ attempt, actualTutorId }) =>
+          attempt === 0 ? tutorLowId : actualTutorId,
         onLockStep: async event => {
           lockTrace.push(`${event.attempt}:${event.phase}:${event.targetId}`);
         },
@@ -1434,35 +1423,37 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     }
   }, 20_000);
 
-  it('BOOK-19 / BDF-23 proves post-guard unique/exclusion index contention cannot commit a stale-T_elig INSERT and forces full abort/retry with fresh locks and fresh T_elig', async () => {
+  it('BOOK-19 / BDF-23 proves (Part 1A/1B) canonical #33 schema blocks uncommitted direct-SQL unique/exclusion conflicts before T_elig and (Part 2) isolated disposable-DB FK-removed stress fixture forces full abort/retry with fresh T_elig', async () => {
     const tempCustomerEmail = `book-c19-${marker}@example.test`;
     const tempCustomerId = await createUser(tempCustomerEmail, 'Customer');
     const tempCustomerAuth = await loginBundle(tempCustomerEmail, tempCustomerId);
+    const otherCustomerId = await createUser(`book-c19-other-${marker}@example.test`, 'Customer');
     const tempTutorA = await createUser(`book-t19a-${marker}@example.test`, 'Tutor');
     const tempTutorB = await createUser(`book-t19b-${marker}@example.test`, 'Tutor');
-    const nowRes = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-    // Slot starts in 60m + 2.0s so initial T_elig is >60m, while post-index-wait clock crosses <60m
-    const slot = await createSlot(
-      tempTutorA,
-      new Date(nowRes.rows[0].now.getTime() + 60 * 60_000 + 2_000),
-    );
-    const cutoff = new Date(slot.startsAt.getTime() - 60 * 60_000);
+    const tempTutor1B = await createUser(`book-t19-1b-${marker}@example.test`, 'Tutor');
 
-    // Part 1 of BDF-23 / BOOK-19 proof:
-    // Because #33's `booking_customer_fk` (`REFERENCES "User"("id")`) acquires `FOR KEY SHARE` on the Customer
-    // `User` row during any `Booking` INSERT, and our adapter locks `User` with `FOR UPDATE` (which conflicts
-    // with `FOR KEY SHARE`), verify first that an uncommitted direct-SQL `Booking` INSERT for `tempCustomerId`
-    // blocks the adapter at Step 3 (`User` `FOR UPDATE`) BEFORE `booking_guard_s1()` ever runs!
-    const rogueSlot = await createSlot(
-      tempTutorB,
-      new Date(slot.startsAt.getTime() + 30 * 60_000),
+    // Part 1A (Canonical #33 Schema — Exclusion / same Customer, overlapping Slots across Tutors):
+    // Under the unaltered #33 schema, `booking_customer_fk` (`REFERENCES "User"("id")`) acquires `FOR KEY SHARE`
+    // on the Customer `User` row during any `Booking` INSERT, and our adapter locks `User` with `FOR UPDATE`
+    // (which conflicts with `FOR KEY SHARE`). Prove that an uncommitted direct-SQL `Booking` INSERT for `tempCustomerId`
+    // blocks the adapter at Step 3 (`User` `FOR UPDATE`) BEFORE `booking_guard_s1()` ever samples `T_elig`!
+    const nowRes1A = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
+    const slot1A = await createSlot(
+      tempTutorA,
+      new Date(nowRes1A.rows[0].now.getTime() + 60 * 60_000 + 2_000),
     );
+    const cutoff1A = new Date(slot1A.startsAt.getTime() - 60 * 60_000);
+    const rogueSlot1A = await createSlot(
+      tempTutorB,
+      new Date(slot1A.startsAt.getTime() + 30 * 60_000),
+    );
+
     const rogueClient = await ownerPool.connect();
     try {
       await rogueClient.query('BEGIN');
       await rogueClient.query(
         'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
-        [tempCustomerId, rogueSlot.id, rogueSlot.startsAt, rogueSlot.endsAt],
+        [tempCustomerId, rogueSlot1A.id, rogueSlot1A.startsAt, rogueSlot1A.endsAt],
       );
       const roguePid = await getPid(rogueClient);
 
@@ -1470,7 +1461,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const pendingAtUserLock = createCustomerBooking(
         runtimePool,
         { userId: tempCustomerId, sessionId: tempCustomerAuth.sessionId },
-        slot.id,
+        slot1A.id,
         {
           onLockStep: async event => {
             if (event.phase === 'user' && event.targetId === tempCustomerId && adapterUserPid === 0) {
@@ -1490,120 +1481,272 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       // Hold the FK-induced User lock wait until DB clock crosses the 60-minute Q05 cutoff, then ROLLBACK rogueClient
       while (true) {
         const c = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-        if (c.rows[0].now.getTime() >= cutoff.getTime() + 150) break;
+        if (c.rows[0].now.getTime() >= cutoff1A.getTime() + 150) break;
         await new Promise(resolve => setTimeout(resolve, 40));
       }
       await rogueClient.query('ROLLBACK');
 
-      const outPart1 = await pendingAtUserLock;
-      expect(outPart1.ok).toBe(false);
-      if (!outPart1.ok) {
-        expect(outPart1.err.status).toBe(422);
-        expect(outPart1.err.errorCode).toBe('BOOKING_NOT_ELIGIBLE');
+      const outPart1A = await pendingAtUserLock;
+      expect(outPart1A.ok).toBe(false);
+      if (!outPart1A.ok) {
+        expect(outPart1A.err.status).toBe(422);
+        expect(outPart1A.err.errorCode).toBe('BOOKING_NOT_ELIGIBLE');
       }
 
-      // Part 2 of BDF-23 / BOOK-19 proof:
-      // Now force an explicit GiST exclusion-index wait (`booked_customer_no_overlap`) AFTER `booking_guard_s1()`
-      // has already sampled a valid `T_elig` (> 60m) by temporarily dropping `booking_customer_fk` on the
-      // disposable test database while `rogueClient` inserts an uncommitted overlapping `Booking` row for
-      // `tempCustomerId` on a DIFFERENT Slot (`rogueSlot2`) inside `beforeInsert` (after our adapter already
-      // holds User/Slot/Session locks), then immediately restoring `booking_customer_fk`!
-      const tempTutorC = await createUser(`book-t19c-${marker}@example.test`, 'Tutor');
-      const tempTutorD = await createUser(`book-t19d-${marker}@example.test`, 'Tutor');
-      const nowRes2 = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-      const slot2 = await createSlot(
-        tempTutorC,
-        new Date(nowRes2.rows[0].now.getTime() + 60 * 60_000 + 2_000),
+      // Part 1B (Canonical #33 Schema — Unique / same Slot, different Customer):
+      // Under the unaltered #33 schema, any direct-SQL `Booking` INSERT for `otherCustomerId` on `slot1B`
+      // invokes `booking_guard_s1()`, which acquires `FOR UPDATE` on `Slot(slot1B.id)` BEFORE checking unique/exclusion
+      // indexes, and our adapter also locks `Slot(slot1B.id)` with `FOR UPDATE` at Step 4.
+      // Prove that an uncommitted direct-SQL `Booking` INSERT by `otherCustomerId` on `slot1B` blocks the adapter
+      // at Step 4 (`Slot` `FOR UPDATE`) BEFORE `booking_guard_s1()` ever runs for the adapter's transaction!
+      const nowRes1B = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
+      const slot1B = await createSlot(
+        tempTutor1B,
+        new Date(nowRes1B.rows[0].now.getTime() + 60 * 60_000 + 2_000),
       );
-      const rogueSlot2 = await createSlot(
-        tempTutorD,
-        new Date(slot2.startsAt.getTime() + 30 * 60_000),
+      const cutoff1B = new Date(slot1B.startsAt.getTime() - 60 * 60_000);
+
+      await rogueClient.query('BEGIN');
+      await rogueClient.query(
+        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
+        [otherCustomerId, slot1B.id, slot1B.startsAt, slot1B.endsAt],
       );
-      const cutoff2 = new Date(slot2.startsAt.getTime() - 60 * 60_000);
 
-      await ownerPool.query('ALTER TABLE "Booking" DROP CONSTRAINT booking_customer_fk');
-      try {
-        let adapterInsertPid = 0;
-        let notifyRogueReady!: () => void;
-        const rogueReady = new Promise<void>(resolve => {
-          notifyRogueReady = resolve;
-        });
-        const attemptsTrace: number[] = [];
-
-        const pendingAdapter2 = createCustomerBooking(
-          runtimePool,
-          { userId: tempCustomerId, sessionId: tempCustomerAuth.sessionId },
-          slot2.id,
-          {
-            beforeInsert: async ({ attempt, backendPid }) => {
-              attemptsTrace.push(attempt);
-              if (attempt === 0) {
-                adapterInsertPid = backendPid;
-                await rogueClient.query('BEGIN');
-                await rogueClient.query(
-                  'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
-                  [tempCustomerId, rogueSlot2.id, rogueSlot2.startsAt, rogueSlot2.endsAt],
-                );
-                notifyRogueReady();
-              }
-            },
+      let adapterSlotPid = 0;
+      const pendingAtSlotLock = createCustomerBooking(
+        runtimePool,
+        { userId: tempCustomerId, sessionId: tempCustomerAuth.sessionId },
+        slot1B.id,
+        {
+          onLockStep: async event => {
+            if (event.phase === 'slot' && event.targetId === slot1B.id && adapterSlotPid === 0) {
+              adapterSlotPid = event.backendPid;
+            }
           },
-        ).then(
-          res => ({ ok: true as const, res }),
-          (err: BookingError) => ({ ok: false as const, err }),
-        );
+        },
+      ).then(
+        res => ({ ok: true as const, res }),
+        (err: BookingError) => ({ ok: false as const, err }),
+      );
 
-        await rogueReady;
-        // Now the adapter executes INSERT: `booking_guard_s1()` samples `T_elig` BEFORE `cutoff2` (passes!),
-        // and then PostgreSQL blocks inside the INSERT statement on `booked_customer_no_overlap` held by `roguePid`!
-        const indexBlockers = await waitForBlockedBy(adapterInsertPid, roguePid);
-        expect(indexBlockers).toContain(roguePid);
+      await expect.poll(() => adapterSlotPid, { timeout: 5_000 }).toBeGreaterThan(0);
+      const slotBlockers = await waitForBlockedBy(adapterSlotPid, roguePid);
+      expect(slotBlockers).toContain(roguePid);
 
-        // Hold the post-guard index wait until DB clock crosses `cutoff2`, then ROLLBACK rogueClient!
-        while (true) {
-          const c = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-          if (c.rows[0].now.getTime() >= cutoff2.getTime() + 150) break;
-          await new Promise(resolve => setTimeout(resolve, 40));
+      // Hold the trigger/FK-induced Slot lock wait until DB clock crosses the 60-minute Q05 cutoff, then ROLLBACK rogueClient
+      while (true) {
+        const c = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
+        if (c.rows[0].now.getTime() >= cutoff1B.getTime() + 150) break;
+        await new Promise(resolve => setTimeout(resolve, 40));
+      }
+      await rogueClient.query('ROLLBACK');
+
+      const outPart1B = await pendingAtSlotLock;
+      expect(outPart1B.ok).toBe(false);
+      if (!outPart1B.ok) {
+        expect(outPart1B.err.status).toBe(422);
+        expect(outPart1B.err.errorCode).toBe('BOOKING_NOT_ELIGIBLE');
+      }
+
+      const canonicalCommitted = await ownerPool.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM "Booking" WHERE "currentSlotId" = ANY($1::uuid[])',
+        [[slot1A.id, slot1B.id, rogueSlot1A.id]],
+      );
+      expect(canonicalCommitted.rows[0].n).toBe(0);
+
+      // Part 2 (Isolated Disposable-Schema Modified-Schema Stress Case):
+      // To prove our adapter's defense-in-depth `postInsertClock` fallback when a post-`T_elig` index wait IS forced
+      // (without executing any DDL on the shared `public` integration tables), create a dedicated disposable PostgreSQL
+      // schema (`nuttiew_bdf23_stress_<hex>`), apply the canonical migrations inside that isolated schema, drop
+      // `booking_customer_fk` only on `"${stressSchema}"."Booking"`, force a genuine GiST `booked_customer_no_overlap`
+      // wait AFTER `booking_guard_s1()` sampled `T_elig`, hold it past the 60-minute Q05 cutoff, and verify that
+      // Attempt 0 aborts and Attempt 1 retries with fresh locks and fresh `T_elig` (422 BOOKING_NOT_ELIGIBLE),
+      // then drop the disposable schema with CASCADE!
+      const stressSchema = `nuttiew_bdf23_stress_${randomUUID().replaceAll('-', '').slice(0, 8)}`;
+      await ownerPool.query(`CREATE SCHEMA "${stressSchema}"`);
+      const stressPool = new Pool({
+        connectionString: process.env.DATABASE_URL!,
+        max: 6,
+        options: `-c search_path=${stressSchema},public`,
+      });
+      try {
+        const migrationsDir = existsSync(join(process.cwd(), 'prisma', 'migrations'))
+          ? join(process.cwd(), 'prisma', 'migrations')
+          : join(process.cwd(), 'apps', 'api', 'prisma', 'migrations');
+        const migrationFiles = [
+          join(migrationsDir, '20261104000000_auth', 'migration.sql'),
+          join(migrationsDir, '20261105000000_tutor_slots', 'migration.sql'),
+          join(migrationsDir, '20261107000000_booking_foundation', 'migration.sql'),
+        ];
+        for (const file of migrationFiles) {
+          const rawSql = readFileSync(file, 'utf8')
+            .replace(/CREATE EXTENSION IF NOT EXISTS\s+\w+\s*;/gi, '')
+            .replace(
+              'SET search_path = pg_catalog, public',
+              `SET search_path = pg_catalog, "${stressSchema}", public`,
+            )
+            .replaceAll('public.booking_guard_s1()', `"${stressSchema}".booking_guard_s1()`)
+            .replaceAll('public."Slot"', `"${stressSchema}"."Slot"`);
+          await stressPool.query(rawSql);
         }
-        await rogueClient.query('ROLLBACK');
 
-        const outcome = await pendingAdapter2;
-        console.info(
-          'BDF23_BOOK19_POST_GUARD_EVIDENCE',
-          JSON.stringify({
-            slotId: slot2.id,
-            roguePid,
-            adapterUserPid,
-            adapterInsertPid,
-            userBlockers,
-            indexBlockers,
-            attemptsTrace,
-            outcome: outcome.ok ? outcome.res.httpStatus : outcome.err.errorCode,
-          }),
+        // Seed isolated Customer, Session, two Tutors, and two overlapping Slots in the dedicated stress schema
+        const stressCustomerId = randomUUID();
+        const stressSessionId = randomUUID();
+        const stressTutorC = randomUUID();
+        const stressTutorD = randomUUID();
+        await stressPool.query(
+          'INSERT INTO "User"("id","email","passwordHash","role","isActive") VALUES ($1,$2,\'h\',\'Customer\',true),($3,$4,\'h\',\'Tutor\',true),($5,$6,\'h\',\'Tutor\',true)',
+          [
+            stressCustomerId,
+            'stress-c@example.test',
+            stressTutorC,
+            'stress-tc@example.test',
+            stressTutorD,
+            'stress-td@example.test',
+          ],
+        );
+        await stressPool.query(
+          "INSERT INTO \"Session\"(\"id\",\"userId\",\"tokenDigest\",\"csrfNonce\",\"expiresAt\") VALUES ($1,$2,decode(repeat('aa',32),'hex'),decode(repeat('bb',32),'hex'),clock_timestamp() + interval '8 hours')",
+          [stressSessionId, stressCustomerId],
         );
 
-        // Attempt 0 aborted after detecting post-guard contention crossed Q05, and Attempt 1 re-ran with fresh T_elig and rejected 422!
-        expect(attemptsTrace).toEqual([0, 1]);
-        expect(outcome.ok).toBe(false);
-        if (!outcome.ok) {
-          expect(outcome.err.status).toBe(422);
-          expect(outcome.err.errorCode).toBe('BOOKING_NOT_ELIGIBLE');
+        const nowStress = await stressPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
+        const slot2Start = new Date(nowStress.rows[0].now.getTime() + 60 * 60_000 + 2_000);
+        const slot2End = new Date(slot2Start.getTime() + 3_600_000);
+        const rogue2Start = new Date(slot2Start.getTime() + 30 * 60_000);
+        const rogue2End = new Date(rogue2Start.getTime() + 3_600_000);
+        const cutoff2 = new Date(slot2Start.getTime() - 60 * 60_000);
+
+        const s2Res = await stressPool.query<{ id: string }>(
+          'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES ($1,$2,$3,\'Offered\') RETURNING "id"',
+          [stressTutorC, slot2Start, slot2End],
+        );
+        const r2Res = await stressPool.query<{ id: string }>(
+          'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES ($1,$2,$3,\'Offered\') RETURNING "id"',
+          [stressTutorD, rogue2Start, rogue2End],
+        );
+        const slot2Id = s2Res.rows[0].id;
+        const rogueSlot2Id = r2Res.rows[0].id;
+
+        // Also prove BOOK-25 end-to-end against a real Withdrawn Slot row inside the isolated disposable schema
+        // (so `booking_guard_s1()` itself raises `P0B01 / booking_slot_not_offered` without touching shared `public` tables):
+        await stressPool.query(`DROP TRIGGER slot_s1_insert_guard ON "${stressSchema}"."Slot"`);
+        const withdrawnStart = new Date(slot2Start.getTime() + 180 * 60_000);
+        const withdrawnEnd = new Date(withdrawnStart.getTime() + 3_600_000);
+        const wRes = await stressPool.query<{ id: string }>(
+          'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle","withdrawnAt") VALUES ($1,$2,$3,\'Withdrawn\',clock_timestamp()) RETURNING "id"',
+          [stressTutorC, withdrawnStart, withdrawnEnd],
+        );
+        await expect(
+          createCustomerBooking(
+            stressPool,
+            { userId: stressCustomerId, sessionId: stressSessionId },
+            wRes.rows[0].id,
+          ),
+        ).rejects.toMatchObject({ status: 409, errorCode: 'SLOT_UNAVAILABLE' });
+
+        // Drop booking_customer_fk ONLY inside the isolated disposable stress schema
+        await stressPool.query(`ALTER TABLE "${stressSchema}"."Booking" DROP CONSTRAINT booking_customer_fk`);
+
+        const stressRogueClient = await stressPool.connect();
+        try {
+          const stressRoguePid = await getPid(stressRogueClient);
+          let adapterInsertPid = 0;
+          let notifyRogueReady!: () => void;
+          const rogueReady = new Promise<void>(resolve => {
+            notifyRogueReady = resolve;
+          });
+          const attemptsTrace: number[] = [];
+
+          const pendingAdapter2 = createCustomerBooking(
+            stressPool,
+            { userId: stressCustomerId, sessionId: stressSessionId },
+            slot2Id,
+            {
+              beforeInsert: async ({ attempt, backendPid }) => {
+                attemptsTrace.push(attempt);
+                if (attempt === 0) {
+                  adapterInsertPid = backendPid;
+                  await stressRogueClient.query('BEGIN');
+                  await stressRogueClient.query(
+                    'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
+                    [stressCustomerId, rogueSlot2Id, rogue2Start, rogue2End],
+                  );
+                  notifyRogueReady();
+                }
+              },
+            },
+          ).then(
+            res => ({ ok: true as const, res }),
+            (err: BookingError) => ({ ok: false as const, err }),
+          );
+
+          await rogueReady;
+          // Wait until adapterInsertPid is blocked on `booked_customer_no_overlap` GiST index by stressRoguePid
+          const deadline = Date.now() + 7_500;
+          let indexBlockers: number[] = [];
+          while (Date.now() < deadline) {
+            const obs = await stressPool.query<{ blockers: number[] }>(
+              'SELECT pg_blocking_pids($1) AS blockers',
+              [adapterInsertPid],
+            );
+            if (obs.rows[0]?.blockers?.includes(stressRoguePid)) {
+              indexBlockers = obs.rows[0].blockers;
+              break;
+            }
+            await new Promise(resolve => setTimeout(resolve, 25));
+          }
+          expect(indexBlockers).toContain(stressRoguePid);
+
+          // Hold the post-guard index wait until DB clock crosses `cutoff2`, then ROLLBACK stressRogueClient!
+          while (true) {
+            const c = await stressPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
+            if (c.rows[0].now.getTime() >= cutoff2.getTime() + 150) break;
+            await new Promise(resolve => setTimeout(resolve, 40));
+          }
+          await stressRogueClient.query('ROLLBACK');
+
+          const outcome = await pendingAdapter2;
+          console.info(
+            'BDF23_BOOK19_EVIDENCE',
+            JSON.stringify({
+              canonicalPart1A: { slotId: slot1A.id, roguePid, adapterUserPid, userBlockers, outcome: 'BOOKING_NOT_ELIGIBLE' },
+              canonicalPart1B: { slotId: slot1B.id, roguePid, adapterSlotPid, slotBlockers, outcome: 'BOOKING_NOT_ELIGIBLE' },
+              isolatedStressPart2: {
+                stressSchema,
+                slotId: slot2Id,
+                stressRoguePid,
+                adapterInsertPid,
+                indexBlockers,
+                attemptsTrace,
+                outcome: outcome.ok ? outcome.res.httpStatus : outcome.err.errorCode,
+              },
+            }),
+          );
+
+          expect(attemptsTrace).toEqual([0, 1]);
+          expect(outcome.ok).toBe(false);
+          if (!outcome.ok) {
+            expect(outcome.err.status).toBe(422);
+            expect(outcome.err.errorCode).toBe('BOOKING_NOT_ELIGIBLE');
+          }
+
+          const finalStressCount = await stressPool.query<{ n: number }>(
+            'SELECT count(*)::int AS n FROM "Booking"',
+          );
+          expect(finalStressCount.rows[0].n).toBe(0);
+        } finally {
+          await stressRogueClient.query('ROLLBACK').catch(() => {});
+          stressRogueClient.release();
         }
-
-        const finalCount = await ownerPool.query<{ n: number }>(
-          'SELECT count(*)::int AS n FROM "Booking" WHERE "currentSlotId" = ANY($1::uuid[])',
-          [[slot.id, slot2.id]],
-        );
-        expect(finalCount.rows[0].n).toBe(0);
       } finally {
-        await rogueClient.query('ROLLBACK').catch(() => {});
-        await ownerPool.query(
-          'ALTER TABLE "Booking" ADD CONSTRAINT booking_customer_fk FOREIGN KEY ("customerId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE RESTRICT',
-        );
+        await stressPool.end();
+        await ownerPool.query(`DROP SCHEMA IF EXISTS "${stressSchema}" CASCADE`).catch(() => {});
       }
     } finally {
       await rogueClient.query('ROLLBACK').catch(() => {});
       rogueClient.release();
     }
-  }, 25_000);
+  }, 35_000);
 });

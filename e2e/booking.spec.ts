@@ -241,53 +241,142 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await expect(page.getByTestId('booking-confirmed-banner')).toHaveCount(0);
   });
 
-  test('BOOK-28 / BOOK-29 performs post-CSRF GET /auth/me binding recheck and suppresses late Booking POST response across logout or Session switch', async ({
+  test('BOOK-28 / BOOK-29 performs post-CSRF GET /auth/me binding recheck with A->B re-bootstrap recovery (when Session B is valid vs when Session is invalid), isolates Availability 200 from CSRF 503 with recovery, and suppresses late Booking POST response across logout or Session switch', async ({
     page,
   }) => {
     const slotLateId = await createOfferedSlot(tutorAId, '19:00');
+    const slotCsrfRecoverId = await createOfferedSlot(tutorBId, '21:00');
 
-    // 1. BOOK-28: Verify client performs a second GET /api/v1/auth/me after GET /api/v1/auth/csrf and aborts if binding changed
-    let csrfCalled = false;
-    let meAfterCsrfCount = 0;
+    // 1. P2 / F-S1-03 §3 + F-S1-04 §3: When GET /api/v1/customer/availability returns 200 with offers
+    //    but GET /api/v1/auth/csrf returns 503, offers MUST remain visible and selectable; only the
+    //    booking confirmation button is disabled until "เตรียมการจองอีกครั้ง" recovers CSRF!
+    let failCsrf = true;
     await page.route('**/api/v1/auth/csrf', async route => {
-      csrfCalled = true;
+      if (failCsrf) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          headers: { 'Cache-Control': 'no-store' },
+          body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE', message: 'CSRF unavailable' } }),
+        });
+        return;
+      }
       await route.continue();
+    });
+
+    await signIn(page, customer1Email);
+    // Availability 200 offers must still render despite CSRF 503!
+    const offerCsrf = page.locator(`[data-offer-slot-id="${slotCsrfRecoverId}"]`);
+    await expect(offerCsrf).toBeVisible();
+    await expect(page.locator('#availability-error')).toHaveCount(0);
+
+    // Select the offer: confirm button is disabled and CSRF preparation error + retry button are shown
+    await offerCsrf.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
+    const summaryCsrf = page.locator('#selected-offer-summary');
+    await expect(summaryCsrf).toBeVisible();
+    await expect(page.getByTestId('booking-csrf-error')).toBeVisible();
+    await expect(summaryCsrf.getByRole('button', { name: 'ยืนยันการจอง' })).toBeDisabled();
+
+    // Recover CSRF via "เตรียมการจองอีกครั้ง" -> confirm button becomes enabled and booking succeeds (201)!
+    failCsrf = false;
+    await summaryCsrf.getByRole('button', { name: 'เตรียมการจองอีกครั้ง' }).click();
+    await expect(page.getByTestId('booking-csrf-error')).toHaveCount(0);
+    await expect(summaryCsrf.getByRole('button', { name: 'ยืนยันการจอง' })).toBeEnabled();
+    await summaryCsrf.getByRole('button', { name: 'ยืนยันการจอง' }).click();
+    await expect(page.getByTestId('booking-confirmed-banner')).toBeVisible();
+
+    await page.unroute('**/api/v1/auth/csrf');
+    await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+
+    // 2. BOOK-28 (Case A: Session A -> Session B where Session B is STILL VALID):
+    //    When the post-CSRF GET /api/v1/auth/me returns a changed binding ('session-b-valid-binding'),
+    //    the UI must discard the old token/state and restart identity/CSRF bootstrap (/auth/me -> /auth/csrf -> /auth/me)
+    //    under Session B WITHOUT kicking the user to the login screen!
+    let csrfCallsCaseA = 0;
+    let meCallsWithSessionB = 0;
+    let rebootstrapStarted = false;
+
+    await page.route('**/api/v1/auth/csrf', async route => {
+      csrfCallsCaseA++;
+      await route.continue();
+    });
+    await page.route('**/api/v1/customer/availability', async route => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: {
+          ...response.headers(),
+          ...(rebootstrapStarted ? { 'x-nuttiew-session-binding': 'session-b-valid-binding' } : {}),
+        },
+      });
     });
     await page.route('**/api/v1/auth/me', async route => {
       const response = await route.fetch();
-      if (csrfCalled) {
-        meAfterCsrfCount++;
-        if (meAfterCsrfCount === 1) {
-          // Simulate Session A -> Session B change between initial /auth/me and post-CSRF /auth/me
-          await route.fulfill({
-            response,
-            headers: {
-              ...response.headers(),
-              'x-nuttiew-session-binding': 'changed-session-b-binding',
-            },
-          });
-          return;
-        }
+      if (csrfCallsCaseA >= 1) {
+        rebootstrapStarted = true;
+        meCallsWithSessionB++;
+        await route.fulfill({
+          response,
+          headers: {
+            ...response.headers(),
+            'x-nuttiew-session-binding': 'session-b-valid-binding',
+          },
+        });
+        return;
       }
       await route.fulfill({ response });
     });
 
-    const h = randomBytes(12).toString('hex');
-    await page.setExtraHTTPHeaders({
-      'X-Forwarded-For': `2001:db8:${h.slice(0, 4)}:${h.slice(4, 8)}:${h.slice(8, 12)}::d`,
-    });
-    await page.goto('/');
-    await page.getByLabel('อีเมล').fill(customer1Email);
-    await page.getByLabel('รหัสผ่าน').fill(password);
-    await page.getByRole('button', { name: 'เข้าสู่ระบบ' }).click();
-    // Because post-CSRF /auth/me returned a mismatched binding, client discarded state and returned to Auth screen without allowing POST!
-    await expect.poll(() => meAfterCsrfCount, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
-    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+    await signIn(page, customer1Email, false);
+    // Verify that post-CSRF /auth/me detected the A->B binding change, triggered re-bootstrap (csrfCallsCaseA >= 2, meCallsWithSessionB >= 3),
+    // and kept Customer 1 signed in on the Availability screen with a working confirm button!
+    await expect.poll(() => csrfCallsCaseA, { timeout: 5_000 }).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => meCallsWithSessionB, { timeout: 5_000 }).toBeGreaterThanOrEqual(3);
+    await expect(page.getByRole('heading', { name: 'เลือกช่วงเวลาติว' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toHaveCount(0);
+
+    const offerAfterRebootstrap = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
+    await expect(offerAfterRebootstrap).toBeVisible();
+    await offerAfterRebootstrap.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
+    await expect(
+      page.locator('#selected-offer-summary').getByRole('button', { name: 'ยืนยันการจอง' }),
+    ).toBeEnabled();
 
     await page.unroute('**/api/v1/auth/csrf');
+    await page.unroute('**/api/v1/customer/availability');
     await page.unroute('**/api/v1/auth/me');
 
-    // 2. BOOK-29: Start a Booking POST under Session A, hold its 201 response, logout / switch session, then release A's late 201 -> never displayed!
+    // 3. BOOK-28 (Case B: Binding mismatch followed by invalid Session 401 on re-bootstrap -> transitions to Login screen):
+    await page.route('**/api/v1/customer/bookings', async route => {
+      await route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        headers: { 'Cache-Control': 'no-store' },
+        body: JSON.stringify({
+          error: { code: 'SESSION_BINDING_MISMATCH', message: 'Session binding mismatch' },
+          requestId: 'mismatch-then-401',
+        }),
+      });
+    });
+    await page.route('**/api/v1/auth/me', async route => {
+      await route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        headers: { 'Cache-Control': 'no-store' },
+        body: JSON.stringify({
+          error: { code: 'UNAUTHENTICATED', message: 'Authentication required' },
+        }),
+      });
+    });
+
+    await page.locator('#selected-offer-summary').getByRole('button', { name: 'ยืนยันการจอง' }).click();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+
+    await page.unroute('**/api/v1/customer/bookings');
+    await page.unroute('**/api/v1/auth/me');
+
+    // 4. BOOK-29: Start a Booking POST under Session A, hold its 201 response, logout / switch session, then release A's late 201 -> never displayed!
     await signIn(page, customer1Email, false);
     const offerLate = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
     await expect(offerLate).toBeVisible();

@@ -73,6 +73,8 @@ export type BookingLockEvent = {
 };
 
 export type BookingAdapterHooks = {
+  /** Optional override for the unlocked Slot discovery query (e.g., to test stale Tutor discovery in BOOK-24 without mutating immutable Slot rows). */
+  overrideDiscoveredTutorId?: (ctx: { attempt: number; slotId: string; actualTutorId: string }) => Promise<string> | string;
   /** Called right after the unlocked Slot discovery query returns a row. */
   afterDiscovery?: (ctx: { attempt: number; slotId: string; discoveredTutorId: string }) => Promise<void> | void;
   /** Called before each explicit lock or Booking query step with the checked-out client and its backend PID. */
@@ -325,7 +327,10 @@ export async function createCustomerBooking(
     if (discoveryRes.rowCount !== 1) {
       throw new BookingError(404, 'SLOT_NOT_FOUND');
     }
-    const discoveredTutorId = discoveryRes.rows[0].tutorId;
+    const actualTutorId = discoveryRes.rows[0].tutorId;
+    const discoveredTutorId = hooks?.overrideDiscoveredTutorId
+      ? await hooks.overrideDiscoveredTutorId({ attempt, slotId, actualTutorId })
+      : actualTutorId;
 
     if (hooks?.afterDiscovery) {
       await hooks.afterDiscovery({ attempt, slotId, discoveredTutorId });

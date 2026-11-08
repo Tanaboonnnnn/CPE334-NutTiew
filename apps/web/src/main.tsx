@@ -290,6 +290,38 @@ function App() {
     setLoading(false);
   };
 
+  const rebootstrapSession = async () => {
+    const current = ++version.current;
+    setLoading(true);
+    setSessionBinding(null);
+    try {
+      const result = await request('me');
+      if (version.current !== current) return;
+      if (
+        (result.user?.role === 'Tutor' || result.user?.role === 'Customer') &&
+        !result.sessionBinding
+      ) {
+        throw new Error('SESSION_BINDING_MISSING');
+      }
+      suspendedTutorId.current = null;
+      tutorActionsAllowed.current = true;
+      setSessionBinding(result.sessionBinding ?? null);
+      setTutorPhase('active');
+      setUser(result.user as User);
+      setError('');
+    } catch {
+      if (version.current === current) {
+        suspendedTutorId.current = null;
+        tutorActionsAllowed.current = false;
+        setSessionBinding(null);
+        setUser(null);
+        setTutorPhase('active');
+      }
+    } finally {
+      if (version.current === current) setLoading(false);
+    }
+  };
+
   if (!loading && user?.role === 'Tutor') {
     if (tutorPhase !== 'active') {
       const pending = busy || tutorPhase === 'logout-pending' || tutorPhase === 'rechecking';
@@ -347,6 +379,7 @@ function App() {
           logoutError={error}
           onClearLogoutError={() => setError('')}
           onUnauthorized={sessionExpired}
+          onSessionBindingChanged={rebootstrapSession}
         />
       </main>
     );

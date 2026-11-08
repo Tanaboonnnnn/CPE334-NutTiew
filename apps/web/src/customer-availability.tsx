@@ -259,9 +259,14 @@ function isAccessDeniedOrExpired(error: unknown): boolean {
       error.message === 'FORBIDDEN' ||
       error.message === 'HTTP_403' ||
       error.message === 'SESSION_MISMATCH' ||
-      error.message === 'SESSION_BINDING_MISMATCH' ||
-      error.message === 'CSRF_DENIED' ||
       error.message === 'ORIGIN_DENIED')
+  );
+}
+
+function isSessionBindingOrCsrfMismatch(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message === 'SESSION_BINDING_MISMATCH' || error.message === 'CSRF_DENIED')
   );
 }
 
@@ -315,6 +320,7 @@ export function CustomerAvailability({
   logoutError,
   onClearLogoutError,
   onUnauthorized,
+  onSessionBindingChanged,
 }: {
   accountId: string;
   sessionBinding: string;
@@ -323,6 +329,7 @@ export function CustomerAvailability({
   logoutError: string;
   onClearLogoutError?: () => void;
   onUnauthorized: () => void;
+  onSessionBindingChanged?: () => void | Promise<void>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [offers, setOffers] = useState<CustomerAvailabilityOffer[]>([]);
@@ -336,13 +343,16 @@ export function CustomerAvailability({
   const [listError, setListError] = useState('');
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [csrfLoading, setCsrfLoading] = useState(true);
+  const [csrfError, setCsrfError] = useState('');
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [bookingBanner, setBookingBanner] = useState<BookingBannerState | null>(null);
   const [unknownOutcome, setUnknownOutcome] = useState<UnknownBookingOutcome | null>(null);
 
   const version = useRef(0);
+  const csrfVersion = useRef(0);
   const sessionEpoch = useRef(0);
   const pendingGet = useRef<AbortController | null>(null);
+  const pendingCsrf = useRef<AbortController | null>(null);
   const pendingPost = useRef<AbortController | null>(null);
   const selectedRef = useRef<string | null>(null);
   const unknownOutcomeRef = useRef<UnknownBookingOutcome | null>(null);
@@ -368,6 +378,8 @@ export function CustomerAvailability({
 
   const clearProtectedState = () => {
     sessionEpoch.current++;
+    csrfVersion.current++;
+    pendingCsrf.current?.abort();
     setOffers([]);
     setEvaluatedAt(null);
     selectedRef.current = null;
@@ -376,11 +388,79 @@ export function CustomerAvailability({
     setStaleNotice('');
     setHasConfirmedResponse(false);
     setCsrfToken(null);
+    setCsrfLoading(false);
+    setCsrfError('');
     setBookingBanner(null);
     unknownOutcomeRef.current = null;
     setUnknownOutcome(null);
     submittingRef.current = false;
     setSubmittingBooking(false);
+  };
+
+  const handleSessionBindingChanged = () => {
+    version.current++;
+    csrfVersion.current++;
+    sessionEpoch.current++;
+    pendingGet.current?.abort();
+    pendingCsrf.current?.abort();
+    pendingPost.current?.abort();
+    clearProtectedState();
+    if (onSessionBindingChanged) {
+      void onSessionBindingChanged();
+    } else {
+      onUnauthorized();
+    }
+  };
+
+  const loadCsrfBootstrap = async () => {
+    const currentCsrf = ++csrfVersion.current;
+    const capturedEpoch = sessionEpoch.current;
+    const capturedBinding = sessionBinding;
+    pendingCsrf.current?.abort();
+    const controller = new AbortController();
+    pendingCsrf.current = controller;
+    setCsrfLoading(true);
+    setCsrfError('');
+    try {
+      const verifiedToken = await bootstrapVerifiedCsrfToken(
+        controller.signal,
+        accountId,
+        capturedBinding,
+      );
+      if (
+        csrfVersion.current === currentCsrf &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding
+      ) {
+        setCsrfToken(verifiedToken);
+        setCsrfError('');
+      }
+    } catch (error) {
+      if (
+        csrfVersion.current === currentCsrf &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding
+      ) {
+        setCsrfToken(null);
+        if (isSessionBindingOrCsrfMismatch(error)) {
+          handleSessionBindingChanged();
+        } else if (isAccessDeniedOrExpired(error)) {
+          clearProtectedState();
+          onUnauthorized();
+        } else if (!controller.signal.aborted) {
+          setCsrfError('ยังไม่สามารถเตรียมโทเค็นความปลอดภัยสำหรับการจองได้ กรุณาลองโหลดโทเค็นอีกครั้งก่อนยืนยันการจอง');
+        }
+      }
+    } finally {
+      if (
+        csrfVersion.current === currentCsrf &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding
+      ) {
+        setCsrfLoading(false);
+        pendingCsrf.current = null;
+      }
+    }
   };
 
   const refresh = async (showLoading = false, preserveBanner = false) => {
@@ -389,16 +469,12 @@ export function CustomerAvailability({
     const controller = new AbortController();
     pendingGet.current = controller;
     if (showLoading) setLoading(true);
+    if (!csrfToken) {
+      void loadCsrfBootstrap();
+    }
     try {
-      const [result, verifiedCsrf] = await Promise.all([
-        fetchAvailability(controller.signal, sessionBinding),
-        csrfToken
-          ? Promise.resolve(csrfToken)
-          : bootstrapVerifiedCsrfToken(controller.signal, accountId, sessionBinding),
-      ]);
+      const result = await fetchAvailability(controller.signal, sessionBinding);
       if (version.current === current) {
-        setCsrfToken(verifiedCsrf);
-        setCsrfLoading(false);
         const previousSelected = selectedRef.current;
         const matchedOffer =
           previousSelected !== null
@@ -428,7 +504,6 @@ export function CustomerAvailability({
       }
     } catch (error) {
       if (version.current === current) {
-        setCsrfLoading(false);
         if (isAccessDeniedOrExpired(error)) {
           clearProtectedState();
           onUnauthorized();
@@ -452,8 +527,10 @@ export function CustomerAvailability({
     void refresh(true);
     return () => {
       version.current++;
+      csrfVersion.current++;
       sessionEpoch.current++;
       pendingGet.current?.abort();
+      pendingCsrf.current?.abort();
       pendingPost.current?.abort();
     };
     // Component is keyed by sessionBinding in main.tsx; remounts on session change.
@@ -462,8 +539,10 @@ export function CustomerAvailability({
 
   const handleLogout = () => {
     version.current++;
+    csrfVersion.current++;
     sessionEpoch.current++;
     pendingGet.current?.abort();
+    pendingCsrf.current?.abort();
     pendingPost.current?.abort();
     clearProtectedState();
     void onLogout();
@@ -475,7 +554,7 @@ export function CustomerAvailability({
     startsAt: string;
     endsAt: string;
   }) => {
-    if (submittingRef.current || logoutBusy) return;
+    if (submittingRef.current || logoutBusy || !csrfToken) return;
     submittingRef.current = true;
     setSubmittingBooking(true);
     setStaleNotice('');
@@ -484,30 +563,12 @@ export function CustomerAvailability({
     const capturedEpoch = sessionEpoch.current;
     const capturedBinding = sessionBinding;
     const capturedSlotId = targetOffer.slotId;
+    const activeCsrf = csrfToken;
 
     const controller = new AbortController();
     pendingPost.current = controller;
 
     try {
-      let activeCsrf = csrfToken;
-      if (!activeCsrf) {
-        setCsrfLoading(true);
-        activeCsrf = await bootstrapVerifiedCsrfToken(
-          controller.signal,
-          accountId,
-          capturedBinding,
-        );
-        if (
-          controller.signal.aborted ||
-          sessionEpoch.current !== capturedEpoch ||
-          sessionBinding !== capturedBinding
-        ) {
-          return;
-        }
-        setCsrfToken(activeCsrf);
-        setCsrfLoading(false);
-      }
-
       const result = await submitCustomerBooking(
         controller.signal,
         capturedSlotId,
@@ -542,6 +603,11 @@ export function CustomerAvailability({
         sessionEpoch.current !== capturedEpoch ||
         sessionBinding !== capturedBinding
       ) {
+        return;
+      }
+
+      if (isSessionBindingOrCsrfMismatch(error)) {
+        handleSessionBindingChanged();
         return;
       }
 
@@ -833,27 +899,59 @@ export function CustomerAvailability({
                     การเลือกช่วงเวลานี้ยังไม่ใช่การจอง และยังไม่ได้ล็อกสิทธิ์จนกว่าจะยืนยันการจองในขั้นตอนถัดไป
                   </p>
                 )}
+                {csrfError && (
+                  <p
+                    id="booking-csrf-error"
+                    data-testid="booking-csrf-error"
+                    className="selection-not-booking-note"
+                    role="alert"
+                  >
+                    {csrfError}
+                  </p>
+                )}
               </div>
               <div className="selected-summary-actions">
                 {unknownOutcome ? (
-                  <button
-                    type="button"
-                    className="confirm-booking-button"
-                    disabled={submittingBooking || csrfLoading || logoutBusy}
-                    onClick={() => void confirmSelectedBooking(activeOffer)}
-                  >
-                    {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ส่งคำขอเดิมอีกครั้ง'}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="confirm-booking-button"
+                      disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
+                      onClick={() => void confirmSelectedBooking(activeOffer)}
+                    >
+                      {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ส่งคำขอเดิมอีกครั้ง'}
+                    </button>
+                    {csrfError && (
+                      <button
+                        type="button"
+                        className="clear-selection-button"
+                        disabled={csrfLoading || submittingBooking || logoutBusy}
+                        onClick={() => void loadCsrfBootstrap()}
+                      >
+                        เตรียมการจองอีกครั้ง
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <>
                     <button
                       type="button"
                       className="confirm-booking-button"
-                      disabled={submittingBooking || csrfLoading || logoutBusy}
+                      disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
                       onClick={() => void confirmSelectedBooking(activeOffer)}
                     >
                       {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ยืนยันการจอง'}
                     </button>
+                    {csrfError && (
+                      <button
+                        type="button"
+                        className="clear-selection-button"
+                        disabled={csrfLoading || submittingBooking || logoutBusy}
+                        onClick={() => void loadCsrfBootstrap()}
+                      >
+                        เตรียมการจองอีกครั้ง
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="clear-selection-button"
