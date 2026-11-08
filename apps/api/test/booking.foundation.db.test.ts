@@ -397,6 +397,44 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     } finally { await holder.query('ROLLBACK').catch(()=>{}); holder.release(); }
   },15_000);
 
+  it('BDF-27 runtime can lock Slot rows for #16 but cannot mutate immutable Slot data', async () => {
+    expect(runtime).not.toBeNull();
+    const f = await fixture();
+    const client = await runtime!.connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+      const lock = await client.query<{ id: string }>(
+        'SELECT "id" FROM "Slot" WHERE "id"=$1 FOR UPDATE',
+        [f.slotId],
+      );
+      expect(lock.rows[0]?.id).toBe(f.slotId);
+
+      // UPDATE privilege is column-scoped solely to satisfy PostgreSQL row-lock
+      // permission checks. The existing Slot guard must still reject mutation.
+      await expect(client.query(
+        'UPDATE "Slot" SET "id"="id" WHERE "id"=$1',
+        [f.slotId],
+      )).rejects.toMatchObject({ code:'23514', constraint:'slot_s1_immutable' });
+    } finally {
+      await client.query('ROLLBACK').catch(() => {});
+      client.release();
+    }
+
+    const grants = await runtime!.query<{ lockColumn: boolean; otherColumn: boolean }>(
+      `SELECT has_column_privilege(current_user,'"Slot"','id','UPDATE') AS "lockColumn",
+        has_column_privilege(current_user,'"Slot"','startsAt','UPDATE') AS "otherColumn"`,
+    );
+    expect(grants.rows[0].lockColumn).toBe(true);
+    expect(grants.rows[0].otherColumn).toBe(false);
+    const unchanged = await owner.query(
+      'SELECT "id","startsAt","endsAt" FROM "Slot" WHERE "id"=$1',
+      [f.slotId],
+    );
+    expect(unchanged.rows[0]).toMatchObject({
+      id:f.slotId, startsAt:f.startsAt, endsAt:f.endsAt,
+    });
+  });
+
   it('BDF-24 runtime DELETE is privilege-denied; guard probe DELETE is rejected and occupancy remains', async () => {
     expect(runtime).not.toBeNull(); expect(probe).not.toBeNull();
     const f = await fixture(); const booking = await insertBooking(f);
