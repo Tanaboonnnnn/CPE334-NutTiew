@@ -5,7 +5,7 @@ import { TutorAvailability } from './tutor-slots.js';
 import { CustomerAvailability } from './customer-availability.js';
 
 type User = { id: string; role: 'Customer' | 'Tutor' };
-type SessionGuardPhase = 'active' | 'logout-pending' | 'logout-uncertain' | 'rechecking';
+type TutorSessionPhase = 'active' | 'logout-pending' | 'logout-uncertain' | 'rechecking';
 
 async function request(path: string, options?: RequestInit) {
   const controller = new AbortController();
@@ -58,29 +58,6 @@ async function verifyOwnList(expectedBinding: string): Promise<void> {
   }
 }
 
-async function verifyCustomerAvailability(expectedBinding: string): Promise<void> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const response = await fetch('/api/v1/customer/availability', {
-      credentials: 'same-origin',
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(body?.error?.code ?? 'HTTP_' + response.status);
-    }
-    if (response.headers.get('X-NutTiew-Session-Binding') !== expectedBinding) {
-      throw new Error('SESSION_MISMATCH');
-    }
-    const body = await response.json();
-    if (!Array.isArray(body?.data)) throw new Error('INVALID_AVAILABILITY_RESPONSE');
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 function isUnauthenticated(error: unknown): boolean {
   return error instanceof Error &&
     (error.message === 'UNAUTHENTICATED' || error.message === 'HTTP_401');
@@ -95,12 +72,12 @@ function App() {
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [sessionPhase, setSessionPhase] = useState<SessionGuardPhase>('active');
+  const [tutorPhase, setTutorPhase] = useState<TutorSessionPhase>('active');
   const version = useRef(0);
   const busyRef = useRef(false);
   const tutorActionsAllowed = useRef(true);
-  // This user identity is never rendered while Logout is pending or uncertain.
-  const suspendedUser = useRef<{ id: string; role: 'Customer' | 'Tutor' } | null>(null);
+  // This ID is never rendered while Logout is pending or uncertain.
+  const suspendedTutorId = useRef<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const guardHeadingRef = useRef<HTMLHeadingElement>(null);
 
@@ -119,8 +96,8 @@ function App() {
       setBusy(false);
       setSessionBinding(null);
       if (user.role === 'Tutor') {
-        suspendedUser.current = { id: user.id, role: user.role }; // Hidden until explicit same-session verification.
-        setSessionPhase('logout-uncertain');
+        suspendedTutorId.current = user.id; // Hidden until explicit same-session verification.
+        setTutorPhase('logout-uncertain');
         setError('มีการเปลี่ยนเซสชันจากแท็บอื่น กรุณาตรวจสอบเซสชันก่อนใช้งานต่อ');
       } else {
         setUser(null); // Never keep a stale Customer identity visible.
@@ -129,6 +106,10 @@ function App() {
     window.addEventListener('storage', onAuthChange);
     return () => window.removeEventListener('storage', onAuthChange);
   }, [user]);
+
+  useEffect(() => {
+    if (tutorPhase !== 'active') guardHeadingRef.current?.focus();
+  }, [tutorPhase]);
 
   useEffect(() => {
     let active = true;
@@ -156,10 +137,6 @@ function App() {
     return () => { active = false; };
   }, []);
 
-  useEffect(() => {
-    if (sessionPhase !== 'active') guardHeadingRef.current?.focus();
-  }, [sessionPhase]);
-
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
     if (busyRef.current) return;
@@ -184,10 +161,10 @@ function App() {
         throw new Error('IDENTITY_CHANGED');
       }
       if (version.current === current) {
-        suspendedUser.current = null;
+        suspendedTutorId.current = null;
         tutorActionsAllowed.current = true;
         setSessionBinding(verified.sessionBinding ?? null);
-        setSessionPhase('active');
+        setTutorPhase('active');
         setUser(verified.user as User);
         setPassword('');
       }
@@ -218,9 +195,10 @@ function App() {
     notifyOtherTabs();
     busyRef.current = true;
     const current = ++version.current;
-    if (user) {
-      suspendedUser.current = { id: user.id, role: user.role };
-      setSessionPhase('logout-pending'); // immediately unmounts private workspace for Tutor and Customer
+    const tutorLogout = user?.role === 'Tutor';
+    if (tutorLogout) {
+      suspendedTutorId.current = user.id;
+      setTutorPhase('logout-pending'); // immediately unmounts all private Tutor content
     }
     setBusy(true);
     setError('');
@@ -231,21 +209,21 @@ function App() {
         headers: { 'X-CSRF-Token': csrfToken },
       });
       if (version.current === current) {
-        suspendedUser.current = null;
+        suspendedTutorId.current = null;
         setSessionBinding(null);
         setUser(null);
-        setSessionPhase('active');
+        setTutorPhase('active');
         notifyOtherTabs();
       }
     } catch (cause) {
       if (version.current === current) {
         if (isUnauthenticated(cause)) {
-          suspendedUser.current = null;
+          suspendedTutorId.current = null;
           setSessionBinding(null);
           setUser(null);
-          setSessionPhase('active');
+          setTutorPhase('active');
         } else {
-          setSessionPhase('logout-uncertain');
+          if (tutorLogout) setTutorPhase('logout-uncertain');
           setError('ไม่สามารถยืนยันการออกจากระบบได้ กรุณาลองอีกครั้งหรือตรวจสอบเซสชัน');
         }
       }
@@ -256,43 +234,39 @@ function App() {
   };
 
   const recheckSession = async () => {
-    if (busyRef.current || sessionPhase !== 'logout-uncertain' || !suspendedUser.current) return;
+    if (busyRef.current || tutorPhase !== 'logout-uncertain' || !suspendedTutorId.current) return;
     busyRef.current = true;
     const current = ++version.current;
-    const expected = suspendedUser.current;
-    setSessionPhase('rechecking');
+    const expectedTutorId = suspendedTutorId.current;
+    setTutorPhase('rechecking');
     setBusy(true);
     setError('');
     try {
       const result = await request('me');
       const currentUser = result?.user as User | undefined;
-      if (!currentUser || currentUser.role !== expected.role || currentUser.id !== expected.id) {
+      if (!currentUser || currentUser.role !== 'Tutor' || currentUser.id !== expectedTutorId) {
         throw new Error('IDENTITY_CHANGED');
       }
       if (!result.sessionBinding) throw new Error('SESSION_BINDING_MISSING');
-      if (expected.role === 'Tutor') {
-        await verifyOwnList(result.sessionBinding);
-      } else {
-        await verifyCustomerAvailability(result.sessionBinding);
-      }
+      await verifyOwnList(result.sessionBinding);
       if (version.current === current) {
-        suspendedUser.current = null;
+        suspendedTutorId.current = null;
         tutorActionsAllowed.current = true;
         setSessionBinding(result.sessionBinding);
         setUser(currentUser);
-        setSessionPhase('active'); // fresh workspace remounts and does its own GET
+        setTutorPhase('active'); // fresh workspace remounts and does its own GET
         setError('');
       }
     } catch (cause) {
       if (version.current === current) {
         if (isUnauthenticated(cause)) {
-          suspendedUser.current = null;
+          suspendedTutorId.current = null;
           setSessionBinding(null);
           setUser(null);
-          setSessionPhase('active');
+          setTutorPhase('active');
           setError('');
         } else {
-          setSessionPhase('logout-uncertain');
+          setTutorPhase('logout-uncertain');
           setError(
             cause instanceof Error && cause.message === 'IDENTITY_CHANGED'
               ? 'เซสชันเปลี่ยนบัญชีแล้ว ไม่สามารถเปิดข้อมูลของบัญชีเดิมได้ กรุณาลองออกจากระบบอีกครั้ง'
@@ -308,17 +282,17 @@ function App() {
 
   const sessionExpired = () => {
     ++version.current;
-    suspendedUser.current = null;
+    suspendedTutorId.current = null;
     tutorActionsAllowed.current = false;
     setSessionBinding(null);
     setUser(null);
-    setSessionPhase('active');
+    setTutorPhase('active');
     setLoading(false);
   };
 
-  if (!loading && (user?.role === 'Tutor' || user?.role === 'Customer')) {
-    if (sessionPhase !== 'active') {
-      const pending = busy || sessionPhase === 'logout-pending' || sessionPhase === 'rechecking';
+  if (!loading && user?.role === 'Tutor') {
+    if (tutorPhase !== 'active') {
+      const pending = busy || tutorPhase === 'logout-pending' || tutorPhase === 'rechecking';
       return (
         <main className="dashboard-root tutor-session-screen">
           <section className="tutor-session-guard" aria-labelledby="session-guard-heading">
@@ -344,22 +318,24 @@ function App() {
       );
     }
     if (!sessionBinding) return null; // No private surface without a server-issued binding.
-    if (user.role === 'Tutor') {
-      return (
-        <main className="dashboard-root">
-          <TutorAvailability
-            key={sessionBinding}
-            accountId={user.id}
-            sessionBinding={sessionBinding}
-            onLogout={logout}
-            logoutBusy={busy}
-            logoutError={error}
-            canMutate={() => tutorActionsAllowed.current}
-            onUnauthorized={sessionExpired}
-          />
-        </main>
-      );
-    }
+    return (
+      <main className="dashboard-root">
+        <TutorAvailability
+          key={sessionBinding}
+          accountId={user.id}
+          sessionBinding={sessionBinding}
+          onLogout={logout}
+          logoutBusy={busy}
+          logoutError={error}
+          canMutate={() => tutorActionsAllowed.current}
+          onUnauthorized={sessionExpired}
+        />
+      </main>
+    );
+  }
+
+  if (!loading && user?.role === 'Customer') {
+    if (!sessionBinding) return null; // No private surface without a server-issued binding.
     return (
       <main className="dashboard-root">
         <CustomerAvailability
@@ -369,6 +345,7 @@ function App() {
           onLogout={logout}
           logoutBusy={busy}
           logoutError={error}
+          onClearLogoutError={() => setError('')}
           onUnauthorized={sessionExpired}
         />
       </main>

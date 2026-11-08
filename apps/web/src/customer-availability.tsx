@@ -142,6 +142,7 @@ export function CustomerAvailability({
   onLogout,
   logoutBusy,
   logoutError,
+  onClearLogoutError,
   onUnauthorized,
 }: {
   accountId: string;
@@ -149,6 +150,7 @@ export function CustomerAvailability({
   onLogout: () => void | Promise<void>;
   logoutBusy: boolean;
   logoutError: string;
+  onClearLogoutError?: () => void;
   onUnauthorized: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -207,6 +209,7 @@ export function CustomerAvailability({
         setEvaluatedAt(result.meta.evaluatedAt);
         setHasConfirmedResponse(true);
         setListError('');
+        onClearLogoutError?.();
       }
     } catch (error) {
       if (version.current === current) {
@@ -447,6 +450,23 @@ export function CustomerAvailability({
               hasConfirmedResponse && !logoutBusy && !logoutError ? (
                 <div className="availability-surface availability-empty" role="status">
                   <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก</p>
+                </div>
+              ) : logoutBusy || logoutError ? (
+                <div className="availability-surface availability-uncertain" role="status">
+                  <p className="availability-uncertain-copy">
+                    {logoutBusy
+                      ? 'กำลังออกจากระบบ…'
+                      : 'ยังไม่สามารถยืนยันการออกจากระบบได้ ข้อมูลช่วงเวลาถูกซ่อนไว้เพื่อความปลอดภัย'}
+                  </p>
+                  {logoutError && (
+                    <button
+                      type="button"
+                      className="retry-button"
+                      onClick={() => void refresh(true)}
+                    >
+                      ตรวจสอบเซสชันอีกครั้ง
+                    </button>
+                  )}
                 </div>
               ) : null
             ) : (

@@ -443,11 +443,11 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
     await expect(page.locator('[data-offer-slot-id]')).toHaveCount(0);
     await expect(page.getByText('เข้าสู่ระบบแล้ว')).toHaveCount(0);
     await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก')).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'ตรวจสอบสถานะเซสชัน' })).toBeVisible();
+    await expect(page.getByText('ยังไม่สามารถยืนยันการออกจากระบบได้ ข้อมูลช่วงเวลาถูกซ่อนไว้เพื่อความปลอดภัย')).toBeVisible();
 
     // 3) Recheck session: session is still live on server, recheck restores Customer availability
-    const recheckBtn = page.getByRole('button', { name: 'ตรวจสอบเซสชัน' });
-    const retryLogoutBtn = page.getByRole('button', { name: 'ลองออกจากระบบอีกครั้ง' });
+    const recheckBtn = page.getByRole('button', { name: 'ตรวจสอบเซสชันอีกครั้ง' });
+    const retryLogoutBtn = page.getByRole('button', { name: 'ออกจากระบบ' });
     await expect(recheckBtn).toBeVisible();
     await expect(retryLogoutBtn).toBeVisible();
 
