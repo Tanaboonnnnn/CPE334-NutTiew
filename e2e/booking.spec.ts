@@ -272,7 +272,14 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
       await route.fulfill({ response });
     });
 
-    await signIn(page, customer1Email);
+    const h = randomBytes(12).toString('hex');
+    await page.setExtraHTTPHeaders({
+      'X-Forwarded-For': `2001:db8:${h.slice(0, 4)}:${h.slice(4, 8)}:${h.slice(8, 12)}::d`,
+    });
+    await page.goto('/');
+    await page.getByLabel('อีเมล').fill(customer1Email);
+    await page.getByLabel('รหัสผ่าน').fill(password);
+    await page.getByRole('button', { name: 'เข้าสู่ระบบ' }).click();
     // Because post-CSRF /auth/me returned a mismatched binding, client discarded state and returned to Auth screen without allowing POST!
     await expect.poll(() => meAfterCsrfCount, { timeout: 5_000 }).toBeGreaterThanOrEqual(1);
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
