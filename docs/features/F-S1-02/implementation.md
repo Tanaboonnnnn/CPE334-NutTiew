@@ -57,10 +57,16 @@ npm and Microsoft Edge for the existing Playwright configuration.
 3. Run `npm ci`, `npm run db:generate`, `npm run db:migrate`, then
    `npm run db:seed` if you need demo accounts. The Slot migration runs **after**
    `20261104000000_auth`; do not rewrite the historical Auth migration.
-4. **Strongly recommended privilege separation:** keep `DATABASE_URL`
-   for Prisma migrations/admin test fixtures, and set optional
-   `DATABASE_URL_APP` for the Express runtime (and its test clients) with
-   a separate login role that **does not own the schema/tables**.
+4. **Required runtime privilege separation:** keep `DATABASE_URL`
+   for Prisma migrations/admin CLI and test-owner fixtures. Set
+   `DATABASE_URL_APP` in the repo-root `.env` for the Express runtime (and
+   its test clients) with a separate login role that **does not own the
+   schema/tables**. API and seed config load the repo-root `.env` by an
+   absolute path derived from the module location, so `npm run dev -w
+   @nuttiew/api` and `npm run db:seed` do not depend on shell CWD. Exported
+   environment variables take precedence over values in `.env`. Runtime
+   startup fails closed if `DATABASE_URL_APP` is missing or equals
+   `DATABASE_URL`; it never falls back to the migration/admin credential.
 
    Example grants to execute **as DB/schema owner** after both migrations,
    with a securely provisioned `nuttiew_runtime` role and database name
@@ -72,16 +78,24 @@ npm and Microsoft Edge for the existing Playwright configuration.
    GRANT SELECT, INSERT, UPDATE, DELETE ON
      "User", "Session", "AuthAttemptBucket", "AuthAttemptReservation"
      TO nuttiew_runtime;
-   GRANT SELECT, INSERT ON "Slot" TO nuttiew_runtime;
+   GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_runtime;
+   -- Needed for PostgreSQL SELECT ... FOR UPDATE in the #16 transaction protocol.
+   -- Slot immutable trigger still rejects every UPDATE; this is not mutation access.
+   GRANT UPDATE ("id") ON "Slot" TO nuttiew_runtime;
    ```
 
-   Do **not** grant UPDATE/DELETE/TRUNCATE on `Slot`, table ownership,
-   superuser/DDL rights or permission to disable triggers. The code falls
-   back to `DATABASE_URL` when `DATABASE_URL_APP` is absent for local
-   compatibility; **that fallback is not a claim of least-privilege
-   deployment**. Manage actual role passwords via private environment
-   variables, not Git. Production/cloud installation of `btree_gist` and
-   runtime grants must be independently validated on the target service.
+   Do **not** grant table-level UPDATE on `Slot`, UPDATE on any Slot column
+   other than `id`, or UPDATE/DELETE/TRUNCATE on `Booking`. The column-scoped
+   `UPDATE ("id")` grant exists only because PostgreSQL requires UPDATE
+   privilege on at least one column for `SELECT ... FOR UPDATE`; the existing
+   `slot_s1_immutable` trigger rejects even a no-op UPDATE. Do not grant
+   Slot/Booking DELETE/TRUNCATE, table ownership, superuser/DDL rights or
+   permission to disable triggers. The API
+   runtime fails closed when `DATABASE_URL_APP` is absent or equals
+   `DATABASE_URL`; it never falls back to the migration/admin credential.
+   Manage actual role passwords via private environment variables, not Git.
+   Production/cloud installation of `btree_gist` and runtime grants must be
+   independently validated on the target service.
 
 5. Run `npm run dev` (or start API and web separately) and authenticate with
    a Tutor test account; Customer and anonymous users cannot see this view.
