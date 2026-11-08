@@ -199,6 +199,47 @@
   flex-wrap: wrap;
 }
 
+.booking-confirmed-surface {
+  border-left: 4px solid #1b5e40;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+
+.booking-confirmed-surface h2 {
+  font-size: 1.08rem;
+  color: #1b5e40;
+  margin: 0 0 8px;
+}
+
+.booking-confirmed-meta {
+  margin: 0;
+  color: var(--customer-ink);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.selected-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.customer-app .confirm-booking-button {
+  padding: 11px 18px;
+  background: var(--customer-orange);
+  color: var(--customer-navy-deep);
+  border: 1px solid #d96123;
+  border-radius: 8px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.customer-app .confirm-booking-button:hover {
+  background: #ff965d;
+}
+
 .selected-summary-copy {
   min-width: 0;
   flex: 1;
@@ -453,8 +494,15 @@
     align-items: stretch;
     gap: 12px;
   }
-  .customer-app .offer-select-button {
+  .customer-app .offer-select-button,
+  .customer-app .confirm-booking-button,
+  .customer-app .clear-selection-button {
     width: 100%;
+  }
+  .selected-summary-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

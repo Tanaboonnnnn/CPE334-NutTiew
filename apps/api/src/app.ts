@@ -3,6 +3,7 @@ import { clientIp } from './client-ip.js';
 import { parseSlotStart } from './slot-time.js';
 import { listOwnSlots, publishOwnSlot, SlotError } from './slots.js';
 import { listCustomerAvailability } from './availability.js';
+import { BookingError, createCustomerBooking, isValidUuid, type BookingAdapterHooks } from './bookings.js';
 import express, { type Request, type Response, type NextFunction, type RequestHandler } from 'express';
 import cookieParser from 'cookie-parser';
 import { createHash,randomBytes,randomUUID } from 'node:crypto';
@@ -10,8 +11,8 @@ import argon2 from 'argon2';
 import type { Pool } from 'pg';
 import { admit, csrf, digest, hmac, QuotaError, randomToken, safeTokenMatch, settle, verifyPassword } from './security.js';
 
-type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword; availabilityClock?:()=>Date|Promise<Date> };
-const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',RATE_LIMITED:'Too many login attempts',SLOT_INVALID_TIME:'Slot must start in the future',SLOT_OVERLAP:'Slot overlaps an existing offer',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
+type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword; availabilityClock?:()=>Date|Promise<Date>; bookingHooks?:BookingAdapterHooks };
+const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',SLOT_NOT_FOUND:'Slot not found',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',SESSION_BINDING_MISMATCH:'Session binding mismatch',RATE_LIMITED:'Too many login attempts',SLOT_INVALID_TIME:'Slot must start in the future',SLOT_OVERLAP:'Slot overlaps an existing offer',SLOT_UNAVAILABLE:'Selected slot is unavailable',CUSTOMER_OVERLAP:'Customer has an overlapping booking',BOOKING_NOT_ELIGIBLE:'Slot is no longer eligible for booking',TRANSACTION_RETRY_EXHAUSTED:'Transaction retry budget exhausted',BOOKING_OUTCOME_UNKNOWN:'Booking outcome could not be confirmed',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
 const code=(res:Response,status:number,error:string)=>res.status(status).json({error:{code:error,message:messages[error]??'Request failed'},requestId:res.locals.requestId??randomUUID()});
 const cookieName=(c:Config)=>c.production?'nuttiew_session':'nuttiew_session_dev';
 const cookieOptions=(c:Config)=>({httpOnly:true,secure:c.production,sameSite:'lax' as const,path:'/' as const});
@@ -87,6 +88,27 @@ export async function createApp(pool:Pool, config:Config) {
    res.setHeader('X-NutTiew-Session-Binding',sessionBinding(principal.userId,principal.sessionId));
    res.json({data:result.data,meta:{requestId:res.locals.requestId,evaluatedAt:result.evaluatedAt}});
   }catch{
+   code(res,503,'SERVICE_UNAVAILABLE');
+  }
+ });
+ // F-S1-04 only: authenticated Customer exclusive Booking confirmation.
+ app.post('/api/v1/customer/bookings',guard,customerRole,async(req,res)=>{
+  if(Object.keys(req.query).length!==0)return void code(res,400,'INVALID_INPUT');
+  if(!allowedOrigin(req,config))return void code(res,403,'ORIGIN_DENIED');
+  const principal=getPrincipal(req);
+  if(!principal)return void code(res,401,'UNAUTHENTICATED');
+  const expected=req.headers['x-nuttiew-expected-session-binding'];
+  if(typeof expected!=='string'||expected!==sessionBinding(principal.userId,principal.sessionId))return void code(res,403,'SESSION_BINDING_MISMATCH');
+  const key=sessionCsrfKey(config,principal.csrfKeyVersion);
+  if(!key)return void code(res,503,'SERVICE_UNAVAILABLE');
+  if(!safeTokenMatch(req.headers['x-csrf-token'],csrf(key,principal.sessionId,principal.csrfNonce)))return void code(res,403,'CSRF_DENIED');
+  const body=req.body;
+  if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).length!==1||!Object.hasOwn(body,'slotId')||!isValidUuid(body.slotId))return void code(res,400,'INVALID_INPUT');
+  try{
+   const outcome=await createCustomerBooking(pool,{userId:principal.userId,sessionId:principal.sessionId},body.slotId,config.bookingHooks);
+   res.status(outcome.httpStatus).json({data:outcome.data,meta:{requestId:res.locals.requestId}});
+  }catch(error){
+   if(error instanceof BookingError)return void code(res,error.status,error.errorCode);
    code(res,503,'SERVICE_UNAVAILABLE');
   }
  });
