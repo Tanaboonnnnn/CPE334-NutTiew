@@ -294,6 +294,64 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
     await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก')).toHaveCount(0);
   });
 
+  test('AVA-10 malformed 200 payload (invalid offer fields or unparseable date) fails safely into read error and retry without crashing', async ({ page }) => {
+    let mode: 'empty-object-offer' | 'invalid-evaluated-at' | 'valid' = 'empty-object-offer';
+    await page.route('**/api/v1/customer/availability', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+      const real = await route.fetch();
+      expect(real.status()).toBe(200);
+      const binding = real.headers()['x-nuttiew-session-binding'] ?? '';
+      const realBody = (await real.json()) as { meta: { requestId: string; evaluatedAt: string } };
+
+      if (mode === 'empty-object-offer') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: {
+            'Cache-Control': 'no-store',
+            'X-NutTiew-Session-Binding': binding,
+          },
+          body: JSON.stringify({ data: [{}], meta: realBody.meta }),
+        });
+      } else if (mode === 'invalid-evaluated-at') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          headers: {
+            'Cache-Control': 'no-store',
+            'X-NutTiew-Session-Binding': binding,
+          },
+          body: JSON.stringify({ data: [], meta: { requestId: 'req-1', evaluatedAt: 'invalid-date' } }),
+        });
+      } else {
+        await route.fulfill({ response: real });
+      }
+    });
+
+    await signIn(page, customer1Email);
+    // Malformed offer data:[{}] must not crash React with RangeError: Invalid time value
+    await expect(page.locator('#availability-error')).toBeVisible();
+    await expect(page.getByText('ไม่สามารถโหลดช่วงเวลาติวที่พร้อมให้เลือกได้ กรุณาลองใหม่')).toBeVisible();
+    await expect(page.locator('[data-testid="availability-offer"]')).toHaveCount(0);
+    await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก')).toHaveCount(0);
+
+    // Click retry with invalid evaluatedAt
+    mode = 'invalid-evaluated-at';
+    await page.getByRole('button', { name: 'โหลดอีกครั้ง' }).click();
+    await expect(page.locator('#availability-error')).toBeVisible();
+    await expect(page.getByText('ไม่สามารถโหลดช่วงเวลาติวที่พร้อมให้เลือกได้ กรุณาลองใหม่')).toBeVisible();
+    await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก')).toHaveCount(0);
+
+    // Click retry with valid payload -> recovers smoothly
+    mode = 'valid';
+    await page.getByRole('button', { name: 'โหลดอีกครั้ง' }).click();
+    await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
+    await expect(page.locator('#availability-error')).toHaveCount(0);
+  });
+
   test('AVA-12 holds old Customer 200 across Logout/account switch and rejects mismatched X-NutTiew-Session-Binding', async ({ page }) => {
     await signIn(page, customer1Email);
     const offerA = page.locator(`[data-offer-slot-id="${slotMorningAId}"]`);
@@ -362,6 +420,45 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
     await expect(page.locator('[data-testid="availability-offer"]')).toHaveCount(0);
     await expect(page.locator('#selected-offer-summary')).toHaveCount(0);
+  });
+
+  test('AVA-12 Customer logout failure stays guarded and private; retry succeeds and recheck restores genuine offers', async ({ page }) => {
+    await signIn(page, customer1Email);
+    await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
+
+    // 1) Inject 503 on logout
+    await page.route('**/api/v1/auth/logout', route =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        headers: { 'Cache-Control': 'no-store' },
+        body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }),
+      }),
+    );
+
+    await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+
+    // 2) Verify private offers and verified account banner are immediately hidden, no false confirmed empty
+    await expect(page.getByRole('alert')).toContainText('ไม่สามารถยืนยันการออกจากระบบได้');
+    await expect(page.locator('[data-offer-slot-id]')).toHaveCount(0);
+    await expect(page.getByText('เข้าสู่ระบบแล้ว')).toHaveCount(0);
+    await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'ตรวจสอบสถานะเซสชัน' })).toBeVisible();
+
+    // 3) Recheck session: session is still live on server, recheck restores Customer availability
+    const recheckBtn = page.getByRole('button', { name: 'ตรวจสอบเซสชัน' });
+    const retryLogoutBtn = page.getByRole('button', { name: 'ลองออกจากระบบอีกครั้ง' });
+    await expect(recheckBtn).toBeVisible();
+    await expect(retryLogoutBtn).toBeVisible();
+
+    await recheckBtn.click();
+    await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
+    await expect(page.getByText('เข้าสู่ระบบแล้ว')).toBeVisible();
+
+    // 4) Now unroute logout 503 and logout cleanly
+    await page.unroute('**/api/v1/auth/logout');
+    await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
   });
 
   test('AVA-13/19 responsive viewports 320/375/768/1280px, keyboard selection, target sizes, WCAG contrast and shared Tutor design tokens', async ({ page }) => {

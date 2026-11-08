@@ -43,6 +43,23 @@ function Icon({ kind }: { kind: IconKind }) {
   );
 }
 
+function isValidUtcIso(value: unknown): boolean {
+  if (typeof value !== 'string' || !value.endsWith('Z')) return false;
+  const time = Date.parse(value);
+  return Number.isFinite(time);
+}
+
+function isValidAvailabilityOffer(item: unknown): item is CustomerAvailabilityOffer {
+  if (!item || typeof item !== 'object') return false;
+  const offer = item as Record<string, unknown>;
+  if (typeof offer.slotId !== 'string' || offer.slotId.trim().length === 0) return false;
+  if (typeof offer.tutorRef !== 'string' || offer.tutorRef.trim().length === 0) return false;
+  if (!isValidUtcIso(offer.startsAt) || !isValidUtcIso(offer.endsAt)) return false;
+  const startTime = Date.parse(offer.startsAt as string);
+  const endTime = Date.parse(offer.endsAt as string);
+  return startTime < endTime;
+}
+
 async function fetchAvailability(
   externalSignal: AbortSignal,
   expectedBinding: string,
@@ -67,8 +84,12 @@ async function fetchAvailability(
     }
     if (
       !payload ||
+      typeof payload !== 'object' ||
       !Array.isArray(payload.data) ||
-      typeof payload?.meta?.evaluatedAt !== 'string'
+      !isValidUtcIso(payload?.meta?.evaluatedAt) ||
+      typeof payload?.meta?.requestId !== 'string' ||
+      payload.meta.requestId.trim().length === 0 ||
+      !payload.data.every(isValidAvailabilityOffer)
     ) {
       throw new Error('INVALID_AVAILABILITY_RESPONSE');
     }
@@ -135,6 +156,7 @@ export function CustomerAvailability({
   const [evaluatedAt, setEvaluatedAt] = useState<string | null>(null);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
   const [staleNotice, setStaleNotice] = useState('');
+  const [hasConfirmedResponse, setHasConfirmedResponse] = useState(false);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState('');
   const version = useRef(0);
@@ -156,6 +178,7 @@ export function CustomerAvailability({
     selectedRef.current = null;
     setSelectedSlotId(null);
     setStaleNotice('');
+    setHasConfirmedResponse(false);
   };
 
   const refresh = async (showLoading = false) => {
@@ -182,6 +205,7 @@ export function CustomerAvailability({
         }
         setOffers(result.data);
         setEvaluatedAt(result.meta.evaluatedAt);
+        setHasConfirmedResponse(true);
         setListError('');
       }
     } catch (error) {
@@ -304,8 +328,21 @@ export function CustomerAvailability({
             <strong>เลือกช่วงเวลาติว</strong>
           </div>
           <div className="account-status">
-            <span className="status-live-dot" aria-hidden="true" />
-            <span>เข้าสู่ระบบแล้ว</span>
+            <span
+              className={
+                logoutBusy || logoutError
+                  ? 'status-live-dot status-dot-warning'
+                  : 'status-live-dot'
+              }
+              aria-hidden="true"
+            />
+            <span>
+              {logoutBusy
+                ? 'กำลังออกจากระบบ…'
+                : logoutError
+                  ? 'เซสชันรอการยืนยัน'
+                  : 'เข้าสู่ระบบแล้ว'}
+            </span>
             <span className="topbar-tutor">Customer · #{shortId}</span>
           </div>
         </div>
@@ -407,9 +444,11 @@ export function CustomerAvailability({
                 </button>
               </div>
             ) : offers.length === 0 ? (
-              <div className="availability-surface availability-empty" role="status">
-                <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก</p>
-              </div>
+              hasConfirmedResponse && !logoutBusy && !logoutError ? (
+                <div className="availability-surface availability-empty" role="status">
+                  <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก</p>
+                </div>
+              ) : null
             ) : (
               <div className="availability-surface">
                 <div className="availability-list-header" role="status">

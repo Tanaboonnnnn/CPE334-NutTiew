@@ -457,3 +457,8 @@
     width: 100%;
   }
 }
+
+.customer-app .status-live-dot.status-dot-warning {
+  background: #d96123;
+  box-shadow: 0 0 0 3px #fde8de;
+}
