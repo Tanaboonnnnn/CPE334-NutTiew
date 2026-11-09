@@ -302,7 +302,7 @@ export function TutorAvailability({
       ) : bookingsError ? (
         <div className="dashboard-list-error" role="alert">
           <p className="error">{bookingsError}</p>
-          <button className="retry-button" type="button" onClick={() => void refresh(true)}>โหลดอีกครั้ง</button>
+          <button className="retry-button" type="button" onClick={() => void refresh(true)}>โหลดรายการนัดหมายใหม่</button>
         </div>
       ) : bookings.length === 0 ? (
         <p className="empty-slots">ยังไม่มีผู้จองในช่วงเวลาที่คุณเปิดสอน</p>

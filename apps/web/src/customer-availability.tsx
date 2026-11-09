@@ -817,27 +817,27 @@ export function CustomerAvailability({
           aria-label="ทางลัดบัญชี Customer"
         >
           <span className="sidebar-section-label">WORKSPACE</span>
-          <button
-            type="button"
+          <a
+            href="#availability-section"
             className={'sidebar-nav-link' + (activeTab === 'availability' ? ' sidebar-nav-active' : '')}
             aria-current={activeTab === 'availability' ? 'page' : undefined}
-            onClick={() => { setActiveTab('availability'); setMenuOpen(false); }}
+            onClick={(e) => { e.preventDefault(); setActiveTab('availability'); setMenuOpen(false); }}
           >
             <Icon kind="calendar" />
             <span>เลือกช่วงเวลาติว</span>
             {activeTab === 'availability' && <span className="nav-active-marker" aria-hidden="true" />}
-          </button>
-          <button
-            type="button"
+          </a>
+          <a
+            href="#customer-bookings-section"
             className={'sidebar-nav-link' + (activeTab === 'bookings' ? ' sidebar-nav-active' : '')}
             aria-current={activeTab === 'bookings' ? 'page' : undefined}
             data-testid="nav-my-bookings"
-            onClick={() => { setActiveTab('bookings'); setMenuOpen(false); }}
+            onClick={(e) => { e.preventDefault(); setActiveTab('bookings'); setMenuOpen(false); }}
           >
             <Icon kind="clock" />
             <span>การจองของฉัน</span>
             {activeTab === 'bookings' && <span className="nav-active-marker" aria-hidden="true" />}
-          </button>
+          </a>
           <a
             className="sidebar-nav-link"
             href="#account-details"

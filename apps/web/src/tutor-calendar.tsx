@@ -138,7 +138,7 @@ export function SlotCalendar({
                   if (!slice || slot.lifecycle !== 'Offered') return null;
                   const start = bangkokClock(new Date(slot.startsAt));
                   const end = bangkokClock(new Date(slot.endsAt));
-                  const occupancy = slot.occupancy === 'Occupied' ? 'มีผู้จองแล้ว (Occupied)' : 'ว่าง (เปิดรับจอง)';
+                  const occupancy = slot.occupancy === 'Occupied' ? 'มีผู้จองแล้ว (Occupied)' : 'ยังไม่มีการจอง';
                   return <div key={slot.id} role="listitem" data-testid="calendar-slot"
                     data-slot-id={slot.id} data-day={day} data-start-minute={slice.top}
                     className={'calendar-slot calendar-slot-' + colorFor(slot.id) + (slice.height < 46 ? ' calendar-slot-compact' : '')}
