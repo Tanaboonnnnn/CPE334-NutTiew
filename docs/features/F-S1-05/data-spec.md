@@ -20,9 +20,12 @@ All database access in F-S1-05 consists of pure `SELECT` queries executed at Pos
 ## 2. Server-Authoritative Queries and Projections
 
 ### 2.1 Customer: List Own Bookings
-Retrieves all Bookings belonging strictly to the authenticated Customer (`customerId = principal.userId`).
+Retrieves all Bookings belonging strictly to the authenticated Customer (`customerId = principal.userId`). All rows in the query share a single uniform evaluation snapshot derived via `statement_timestamp()`:
 
 ```sql
+WITH eval_snapshot AS (
+  SELECT statement_timestamp() AT TIME ZONE 'UTC' AS evaluated_at
+)
 SELECT
   b."id",
   b."currentSlotId" AS "slotId",
@@ -31,8 +34,13 @@ SELECT
   to_char(b."endsAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
   b."status",
   to_char(b."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
-  to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
-FROM "Booking" AS b
+  CASE
+    WHEN b."endsAt" <= s_clock.evaluated_at THEN 'Past'
+    ELSE 'Booked'
+  END AS "displayStatus",
+  to_char(s_clock.evaluated_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
+FROM eval_snapshot AS s_clock
+CROSS JOIN "Booking" AS b
 INNER JOIN "Slot" AS s ON s."id" = b."currentSlotId"
 WHERE b."customerId" = $1
 ORDER BY b."startsAt" ASC, b."id" ASC;
@@ -40,14 +48,18 @@ ORDER BY b."startsAt" ASC, b."id" ASC;
 
 **Data Mapping Rules:**
 - `tutorRef`: Generated as `"TUTOR-" + row.tutorId.slice(0, 8)`.
-- `displayStatus`: If `new Date(row.endsAt).getTime() <= new Date(row.evaluatedAt).getTime()`, set `displayStatus = 'Past'`; otherwise `displayStatus = 'Booked'`.
+- `displayStatus`: Derived conditionally in SQL relative to `s_clock.evaluated_at`. If `endsAt <= evaluated_at`, `displayStatus = 'Past'`; otherwise `'Booked'`. Database `status` remains strictly `'Booked'`.
+- `meta.evaluatedAt`: In multi-row results, the uniform `evaluatedAt` string is extracted for `meta.evaluatedAt`. When the query returns 0 rows (`data: []`), the application service captures `statement_timestamp()` (or an explicit evaluation snapshot) so that `meta.evaluatedAt` is always populated as a valid ISO-8601 UTC timestamp.
 
 ---
 
 ### 2.2 Customer: Get Single Booking Detail
-Retrieves one specific Booking by ID, strictly verifying ownership (`b."id" = $1 AND b."customerId" = $2`).
+Retrieves one specific Booking by ID, strictly verifying ownership (`b."id" = $1 AND b."customerId" = $2`), using the same single statement evaluation timestamp:
 
 ```sql
+WITH eval_snapshot AS (
+  SELECT statement_timestamp() AT TIME ZONE 'UTC' AS evaluated_at
+)
 SELECT
   b."id",
   b."currentSlotId" AS "slotId",
@@ -57,8 +69,13 @@ SELECT
   b."status",
   to_char(b."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
   to_char(b."updatedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "updatedAt",
-  to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
-FROM "Booking" AS b
+  CASE
+    WHEN b."endsAt" <= s_clock.evaluated_at THEN 'Past'
+    ELSE 'Booked'
+  END AS "displayStatus",
+  to_char(s_clock.evaluated_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
+FROM eval_snapshot AS s_clock
+CROSS JOIN "Booking" AS b
 INNER JOIN "Slot" AS s ON s."id" = b."currentSlotId"
 WHERE b."id" = $1 AND b."customerId" = $2;
 ```
@@ -91,9 +108,12 @@ ORDER BY s."startsAt" ASC, s."id" ASC;
 ---
 
 ### 2.4 Tutor: List Schedule Bookings
-Retrieves all Bookings scheduled on Slots owned by the authenticated Tutor (`s."tutorId" = $1`):
+Retrieves all Bookings scheduled on Slots owned by the authenticated Tutor (`s."tutorId" = $1`), evaluated against a single statement evaluation timestamp:
 
 ```sql
+WITH eval_snapshot AS (
+  SELECT statement_timestamp() AT TIME ZONE 'UTC' AS evaluated_at
+)
 SELECT
   b."id",
   b."currentSlotId" AS "slotId",
@@ -103,15 +123,21 @@ SELECT
   to_char(b."endsAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
   b."status",
   to_char(b."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
-  to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
-FROM "Booking" AS b
+  CASE
+    WHEN b."endsAt" <= s_clock.evaluated_at THEN 'Past'
+    ELSE 'Booked'
+  END AS "displayStatus",
+  to_char(s_clock.evaluated_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
+FROM eval_snapshot AS s_clock
+CROSS JOIN "Booking" AS b
 INNER JOIN "Slot" AS s ON s."id" = b."currentSlotId"
 WHERE s."tutorId" = $1 AND b."status" = 'Booked'
 ORDER BY b."startsAt" ASC, b."id" ASC;
 ```
 
-**Privacy Masking:**
-- The raw `customerId` column is projected in backend SQL only to construct the anonymized `customerRef: "CUST-" + row.customerId.slice(0, 8)`.
+**Privacy Masking and Pseudonymity:**
+- The raw `customerId` column is projected in backend SQL only to construct the pseudonymous truncated reference `customerRef: "CUST-" + row.customerId.slice(0, 8)`.
+- This truncated pseudonymous reference provides data minimization for the Tutor schedule view by withholding customer personal identifiers (name, email, phone) and isolating customer UUIDs from the Tutor wire DTO. It is not an irreversible cryptographic anonymization.
 - The raw `customerId` UUID is **strictly excluded** from the serialized HTTP JSON response DTO.
 
 ---

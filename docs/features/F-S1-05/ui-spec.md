@@ -7,25 +7,29 @@
 
 ## 1. Design System and Visual Tokens
 
-All UI components for F-S1-05 share the established NutTiew design system, visual palette, and typography tokens from `F-S1-01`, `F-S1-02`, and `F-S1-03`:
+All UI components for F-S1-05 directly reuse and map to the established NutTiew design system tokens from `F-S1-01`, `F-S1-02` (Tutor Dashboard), and `F-S1-03` (Customer Availability) as implemented in `apps/web/src/customer-availability.css` and `apps/web/src/tutor-dashboard.css`. No new or drifting color palette is introduced.
 
-| Token | CSS Variable / Value | Purpose |
+| Design Token | Existing CSS Variable / Value | Purpose & Contrast Specification |
 |---|---|---|
-| **Canvas Background** | `--color-canvas: #f8fafc` | Main screen background |
-| **Surface Card** | `--color-surface: #ffffff` | Card container background |
-| **Border Color** | `--color-border: #e2e8f0` | Dividers and card borders |
-| **Primary Text** | `--color-text: #0f172a` | Headers, titles, primary labels |
-| **Secondary Text** | `--color-text-muted: #64748b` | Timestamps, metadata, references |
-| **Primary Brand** | `--color-primary: #2563eb` | Action buttons, active tabs |
-| **Success / Booked** | `--color-success: #16a34a` | "ยืนยันแล้ว" (Booked badge background) |
-| **Past / Neutral** | `--color-past: #64748b` | "สิ้นสุดแล้ว" (Past badge background) |
-| **Focus Ring** | `--color-focus: #3b82f6` | 2px solid ring with 2px offset |
+| **Canvas Background** | `--customer-canvas` / `--tutor-canvas`: `#f7f8fb` | Light application background across all screens |
+| **Surface Card** | Surface: `#ffffff` | Primary content panels, cards, and modals |
+| **Brand / Shell Navigation** | `--customer-navy` / `--tutor-navy`: `#202b44`<br>Deep: `#172137` | Top navigation bar, wordmark header, active navigation state |
+| **Divider Border** | `--customer-border` / `--tutor-border`: `#e0e6ef` | Section dividers and card container borders |
+| **Control Border** | `--customer-control-border`: `#66778a` | Form controls, modal borders, and interactive card boundaries (4.59:1 on white) |
+| **Primary Text (Ink)** | `--customer-ink`: `#172137`<br>`--tutor-ink`: `#263244` | High-contrast body text, headings, and primary card labels (>= 12:1 on white) |
+| **Secondary Text (Muted)** | `--customer-muted`: `#455a76`<br>`--tutor-muted`: `#58697f` | Timestamps, metadata, labels (>= 4.5:1 on white and canvas) |
+| **Primary Action (CTA)** | `--customer-orange` / `--tutor-orange`: `#f47736`<br>Hover: `#a43e14`<br>Border: `#d96123` | Refresh and navigation action buttons; paired strictly with dark ink `#172137` text (never low-contrast white text on orange) |
+| **Focus Indicator** | `--customer-focus` / `--tutor-focus`: `#aa4519` | `3px solid #aa4519` with `outline-offset: 3px`; visible and unobstructed on all interactive elements |
+| **Status Badge: Booked** | `background: #eef2f7; color: #172137; border: 1px solid #c6d2e3` | Active / upcoming reservation badge; label **`ยืนยันแล้ว`** (Customer) or **`มีนัดหมาย (Booked)`** (Tutor) |
+| **Status Badge: Past** | `background: #f1f3f6; color: #58697f; border: 1px solid #d4dbe4` | Elapsed appointment badge; label **`สิ้นสุดแล้ว`** (Past) |
+| **Occupancy Badge: Occupied** | `background: #fff7ed; color: #a43e14; border: 1px solid #f47736` | Tutor agenda slot occupancy; label **`มีผู้จองแล้ว (Occupied)`** |
+| **Occupancy Badge: Unoccupied** | `background: #eef2f7; color: #172137; border: 1px solid #c6d2e3` | Tutor agenda available slot; label **`ว่าง (เปิดรับจอง)`** |
 
-All text combinations must pass WCAG 2.2 AA minimum contrast ratios (>= 4.5:1 for normal text, >= 3:1 for large text and UI borders).
+All text combinations pass WCAG 2.2 AA minimum contrast ratios (>= 4.5:1 for normal text, >= 3:1 for large text and UI borders).
 
 ---
 
-## 2. Timezone and Date Presentation Rules (`Q29`, `NFR-S1-07`)
+## 2. Timezone and Date Presentation Rules (`BR-S1-12`, `Q29`, `NFR-S1-06`)
 
 1. **Mandatory Asia/Bangkok Timezone:**
    - All appointment intervals (`startsAt` to `endsAt`) and creation dates must be formatted explicitly in `Asia/Bangkok` (UTC+7) using `Intl.DateTimeFormat` or equivalent, regardless of the user's operating system or device timezone.
@@ -49,9 +53,9 @@ A Customer navigates to "การจองของฉัน" (My Bookings) wit
    - **Tutor Reference:** Displays Tutor opaque reference or approved display name (e.g., `ผู้สอน: TUTOR-f7a8b9c0`).
    - **Appointment Window:** Bangkok time (e.g., `10 พ.ย. 2026, 16:00 – 17:00 น.`).
    - **Status Badge:**
-     - `Booked` (Active/Upcoming): Green badge with text **`ยืนยันแล้ว`**.
-     - `Past` (Elapsed): Gray badge with text **`สิ้นสุดแล้ว`**.
-   - **Detail Action Button:** `<button data-testid="view-booking-detail">ดูรายละเอียด</button>`.
+     - `Booked` (Active/Upcoming): Light navy tint surface with border `#c6d2e3` and text **`ยืนยันแล้ว`**.
+     - `Past` (Elapsed): Neutral gray surface with border `#d4dbe4` and text **`สิ้นสุดแล้ว`**.
+   - **Detail Action Button:** `<button data-testid="view-booking-detail">ดูรายละเอียด</button>` (opens detail modal on `/customer/bookings`).
 3. **Empty State (`.customer-bookings-empty`):**
    - Text: "คุณยังไม่มีประวัติการจองติว".
    - Action link/button: "ค้นหาตารางติวเพื่อเริ่มจอง" (navigates back to availability).
@@ -90,24 +94,24 @@ Fulfills `FR-S1-07` and `FR-S1-15`:
 
 1. **Slots Calendar & Agenda (`AllSlotsAgenda` & `SlotCalendar`):**
    - Each Slot card displays its real-time occupancy status:
-     - If `occupancy === 'Unoccupied'`: Blue/neutral badge **`ว่าง (เปิดรับจอง)`**.
-     - If `occupancy === 'Occupied'`: Orange/green badge **`มีผู้จองแล้ว (Occupied)`**.
+     - If `occupancy === 'Unoccupied'`: Light navy tint badge **`ว่าง (เปิดรับจอง)`** (`#eef2f7`).
+     - If `occupancy === 'Occupied'`: Amber/orange tinted badge **`มีผู้จองแล้ว (Occupied)`** (`#fff7ed` with border `#f47736`).
 2. **Schedule Bookings List (`#tutor-schedule-bookings-section`):**
    - Section Title: `h2` "รายการนัดหมายบนตารางสอนของคุณ" (Bookings on Your Schedule).
    - Card for each assigned Booking:
      - **รหัสการจอง:** Booking UUID.
      - **ช่วงเวลา:** Bangkok formatted time (e.g., `10 พ.ย. 2026, 16:00 – 17:00 น.`).
-     - **ผู้จอง:** Opaque Customer Reference (e.g., `CUST-e4f8d53b`); strict privacy enforcement: Customer password, email, and phone are never disclosed.
+     - **ผู้จอง:** Pseudonymous Customer Reference (e.g., `CUST-e4f8d53b`); provides data minimization by withholding customer name, email, and phone, and isolating customer UUIDs from the Tutor schedule view.
      - **สถานะ:**
-       - Upcoming: Badge `มีนัดหมาย (Booked)`.
-       - Elapsed: Badge `สิ้นสุดแล้ว (Past)`.
+       - Upcoming: Badge `มีนัดหมาย (Booked)` (`#eef2f7`).
+       - Elapsed: Badge `สิ้นสุดแล้ว (Past)` (`#f1f3f6`).
 3. **Empty Schedule State:**
    - If Tutor has no bookings on their schedule:
    - Text: "ยังไม่มีผู้จองในช่วงเวลาที่คุณเปิดสอน".
 
 ---
 
-## 5. Viewport and Accessibility Specifications
+## 5. Viewport and Accessibility Specifications (`NFR-S1-09` Proposal)
 
 1. **Responsive Viewports:**
    - Small Mobile (320px): Single-column stacked cards, full-width buttons (min 44px touch target).

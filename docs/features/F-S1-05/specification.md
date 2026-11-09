@@ -12,11 +12,11 @@
 This specification derives from and complies with:
 1. **[Sprint 1 Requirements](../../requirements.md):**
    - Functional requirements: `FR-S1-04`, `FR-S1-07`, `FR-S1-14`, `FR-S1-15`, `FR-S1-16`, `FR-S1-17`, `FR-S1-18`, `FR-S1-19`.
-   - Business rules: `BR-S1-01`, `BR-S1-14`, `BR-S1-15`, `BR-S1-16`, `BR-S1-17`, `BR-S1-18`, `BR-S1-22`.
-   - Non-functional requirements: `NFR-S1-01` (Record-level privacy), `NFR-S1-02` (Transport security), `NFR-S1-03` (Persistence integrity), `NFR-S1-07` (Bangkok timezone consistency), `NFR-S1-08` (Minimal payload disclosure), `NFR-S1-12` (Accessibility & WCAG tokens).
+   - Business rules: `BR-S1-01`, `BR-S1-02` (60m duration), `BR-S1-03` (manual offer), `BR-S1-12` (Asia/Bangkok timezone), `BR-S1-14`, `BR-S1-15`, `BR-S1-16`, `BR-S1-17`, `BR-S1-18`, `BR-S1-22`.
+   - Non-functional requirements: `NFR-S1-01` (Access isolation), `NFR-S1-02` (Credential protection), `NFR-S1-03` (Persistent correctness), `NFR-S1-06` (Time-boundary correctness), `NFR-S1-07` (Reproducible verification), `NFR-S1-08` (No secret leakage), `NFR-S1-09` (Usability proposal — keyboard & visible focus), `NFR-S1-12` (Traceable change & review).
    - Acceptance criteria: `AC-S1-30`, `AC-S1-31`, `AC-S1-32`, `AC-S1-33`, `AC-S1-34`.
    - Planned validation anchors: `VC/TEST-S1-28`, `VC/TEST-S1-29`, `VC/TEST-S1-30`, `VC/TEST-S1-31`, `VC/TEST-S1-32`.
-   - Direct stakeholder decisions: `Q01` (Single booking), `Q02` (Role authorization), `Q04` (60m duration), `Q05` (Cutoff lead time), `Q28` (Overlap rules), `Q29` (Asia/Bangkok display), `Q30` (Booked vs Past status, never Completed in S1).
+   - Direct stakeholder decisions: `Q01` (Single booking), `Q02` (Role authorization), `Q03` (Fixed 60-minute Slot duration), `Q04` (Manual individual Slot offers, no recurrence), `Q05` (Cutoff lead time), `Q28` (Overlap rules), `Q29` (Single Asia/Bangkok business timezone), `Q30` (Booked vs Past status, never Completed in S1).
 2. **[Whole-product SRS](../../srs.md):** System actors, user journeys `J-01` (Auth), `J-02` (Tutor publishing), `J-03` (Customer booking), `J-04` (Customer booking review), `J-05` (Tutor schedule review).
 3. **[System SDS](../../system-sds.md):** §§3.2–3.3 (Data entity relations), §4 (API conventions and error envelopes), §5 (Role & record level authorization), §6 (Timezone handling in UTC on wire and Asia/Bangkok on display).
 4. **Accepted Preceding Contracts:**
@@ -42,11 +42,11 @@ This specification derives from and complies with:
 1. **Customer-Private Booking Review (`FR-S1-14`, `AC-S1-30`, `AC-S1-31`):**
    An authenticated Customer can retrieve a complete list of their **own** committed Bookings and open individual Booking details after browser refresh or application restart. The details display Booking ID, Slot ID, Tutor reference/identity, appointment interval in Asia/Bangkok time, and business status (`Booked` or time-derived `Past`). No unauthorized Customer or anonymous caller can read or discover any private Booking payload.
 2. **Authorized Tutor Schedule Inspection (`FR-S1-07`, `FR-S1-15`, `AC-S1-32`, `AC-S1-33`):**
-   An authenticated Tutor can inspect the collection of Slots and associated Bookings on their **own** authorized schedule. The Tutor schedule view projects each Slot's occupancy state (`Unoccupied` vs `Occupied`) and lists active Bookings assigned to their schedule without leaking other Tutors' restricted schedule records or foreign Customer data.
+   An authenticated Tutor can inspect the collection of Slots and associated Bookings on their **own** authorized schedule. The Tutor schedule view projects each Slot's occupancy state (`Unoccupied` vs `Occupied`) and lists active Bookings assigned to their schedule without leaking other Tutors' restricted schedule records or foreign Customer data. For privacy and data minimization, Customer identity on the Tutor schedule is represented by a pseudonymous truncated reference (`customerRef: "CUST-" + customerId.slice(0, 8)`), omitting personal identifiers (name, email, phone) and isolating customer UUIDs from the Tutor wire DTO.
 
 ### 2.2 Time-Derived Classification: "Past" is NOT "Completed" (`FR-S1-17`, `BR-S1-14/22`, `AC-S1-34`, `Q30`)
 - In Sprint 1, the database business status of an active appointment is always `'Booked'` (or `'Cancelled'` in future sprints).
-- When the appointment window has elapsed (`endsAt <= clock_timestamp()`), the UI and API may classify the presentation as **`Past`**.
+- When the appointment window has elapsed relative to the single statement evaluation timestamp (`endsAt <= meta.evaluatedAt`), the UI and API classify the presentation as **`Past`**.
 - **Strict Invariant:** An elapsed appointment **MUST NOT** be automatically updated to `'Completed'`, marked as attended, canceled, or released back to the bookable pool. The persisted database row remains `status = 'Booked'`, and the Slot remains occupied.
 
 ---
@@ -127,11 +127,12 @@ sequenceDiagram
 |---|---|---|
 | **INV-RET-01: Session-Bound Ownership** | All read queries filter strictly by `principal.userId` extracted from the server-validated session. | Client cannot forge or query other users' data. URL tampering produces `404` or `403`. |
 | **INV-RET-02: Safe Enumeration Refusal (404 instead of 403)** | If a Customer requests `/api/v1/customer/bookings/:id` for an ID that exists but belongs to someone else, return `404 BOOKING_NOT_FOUND`. | Returning `403 FORBIDDEN` confirms the ID exists in the system (information leakage). `404` prevents ID brute-forcing. |
-| **INV-RET-03: No Phantom Completion** | Elapsed appointments (`endsAt <= clock_timestamp()`) have `displayStatus = 'Past'`, while `status = 'Booked'`. | Adheres strictly to `Q30`, `FR-S1-17`, and `BR-S1-22`. Sprint 1 does not implement attendance or completion. |
+| **INV-RET-03: No Phantom Completion** | Elapsed appointments (`endsAt <= meta.evaluatedAt`, using statement snapshot) have `displayStatus = 'Past'`, while `status = 'Booked'`. | Adheres strictly to `Q30`, `FR-S1-17`, and `BR-S1-22`. Sprint 1 does not implement attendance or completion. |
 | **INV-RET-04: Dynamic Slot Occupancy** | `listOwnSlots` determines `occupancy` via an active `Booked` record matching `Booking.currentSlotId = Slot.id`. | Delivers `FR-S1-07` without adding a mutable `Slot.isBooked` column, preserving single-source-of-truth normalization. |
-| **INV-RET-05: Strict UTC Wire Normalization** | Timestamps returned by the API are normalized to UTC with trailing `Z`. | Eliminates ambiguity caused by database server or runtime timezone settings (`NFR-S1-07`). |
+| **INV-RET-05: Strict UTC Wire Normalization & Bangkok Presentation** | Timestamps returned by the API are normalized to UTC with trailing `Z` on the wire (`NFR-S1-07`), while UI presentation formats strictly in Asia/Bangkok time. | Satisfies `BR-S1-12`, `Q29`, and `NFR-S1-06`; eliminates ambiguity caused by database server or runtime timezone settings. |
 | **INV-RET-06: Strict Query Allowlist** | Query strings are forbidden (`Object.keys(req.query).length === 0`). | Prevents SQL injection, parameter pollution, and unapproved filtering features (`NFR-S1-08`). |
 | **INV-RET-07: Minimal Payload Privacy** | Responses exclude password hashes, CSRF nonces, session digests, and unapproved contact data. | Strict DTO allowlists satisfy `NFR-S1-01` and `NFR-S1-08`. |
+| **INV-RET-08: Pseudonymous Customer Reference** | `customerRef: "CUST-" + customerId.slice(0, 8)` is a truncated pseudonymous identifier, not an irreversible anonymization. | Provides data minimization for Tutor schedule display by withholding customer name, email, and phone, while maintaining an opaque operational reference. |
 
 ---
 
@@ -159,4 +160,4 @@ sequenceDiagram
 - [ ] Backend route handlers, services, and queries implemented for Customer bookings and Tutor schedule views.
 - [ ] Tutor own-slots list updated to project dynamic occupancy from committed `Booking` rows.
 - [ ] Customer and Tutor UI components connected to live API endpoints.
-- [ ] STS test suite `RET-01..RET-16` executed with real PostgreSQL and Playwright browser, achieving 100% PASS.
+- [ ] STS test suite `RET-01..RET-17` executed with real PostgreSQL and Playwright browser, achieving 100% PASS.

@@ -1,7 +1,7 @@
 # F-S1-05 — Software Test Specification (STS) (Part E)
 
 > **Documentation contract only; tests are planned and not executed yet.**
-> Issue [#17](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/17). This document details the test strategy, test fixtures, execution steps, expected outcomes, and traceability mapping for the `RET-01..RET-16` test suite covering Protected Booking Retrieval and Authorized Tutor Schedule Inspection.
+> Issue [#17](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/17). This document details the test strategy, test fixtures, execution steps, expected outcomes, and traceability mapping for the `RET-01..RET-17` test suite covering Protected Booking Retrieval and Authorized Tutor Schedule Inspection.
 
 ---
 
@@ -11,20 +11,21 @@
 |---|---|---|---|---|---|
 | **RET-01** | `FR-S1-14`, `FR-S1-16`, `BR-S1-01` | **AC-S1-30** | `VC/TEST-S1-28` | API / Database (`retrieval.db.test.ts`) | Customer retrieves own committed Bookings list with Bangkok interval and `Booked` status. |
 | **RET-02** | `FR-S1-14`, `FR-S1-16`, `BR-S1-15` | **AC-S1-30** | `VC/TEST-S1-28` | API / Database (`retrieval.db.test.ts`) | Customer retrieves own single Booking detail by valid UUID. |
-| **RET-03** | `FR-S1-04`, `FR-S1-14`, `BR-S1-15`, `NFR-S1-01` | **AC-S1-31** | `VC/TEST-S1-29` | API / Database (`retrieval.db.test.ts`) | Cross-Customer probe: Customer B requests Customer A's Booking ID; returns `404 BOOKING_NOT_FOUND`. |
-| **RET-04** | `FR-S1-15`, `BR-S1-16` | **AC-S1-32** | `VC/TEST-S1-30` | API / Database (`retrieval.db.test.ts`) | Tutor retrieves Bookings scheduled on their own Slots; opaque `customerRef` rendered. |
+| **RET-03** | `FR-S1-04`, `FR-S1-14`, `BR-S1-15`, `NFR-S1-01` | **AC-S1-31** | `VC/TEST-S1-29` | API / Database (`retrieval.db.test.ts`) | Cross-Customer probe: Customer B requests Customer A's Booking ID; returns safe `404 BOOKING_NOT_FOUND`. |
+| **RET-04** | `FR-S1-15`, `BR-S1-16` | **AC-S1-32** | `VC/TEST-S1-30` | API / Database (`retrieval.db.test.ts`) | Tutor retrieves Bookings scheduled on their own Slots; pseudonymous `customerRef` rendered without PII leakage. |
 | **RET-05** | `FR-S1-07` | **AC-S1-32** | `VC/TEST-S1-30` | API / Database (`retrieval.db.test.ts`) | Tutor own-slots list (`/tutor/slots`) projects dynamic `occupancy: 'Occupied'` for booked Slot, `'Unoccupied'` for unbooked. |
 | **RET-06** | `FR-S1-04`, `FR-S1-15`, `BR-S1-16`, `NFR-S1-01` | **AC-S1-33** | `VC/TEST-S1-31` | API / Database (`retrieval.db.test.ts`) | Cross-Tutor schedule isolation: Tutor B cannot inspect Tutor A's schedule bookings. |
-| **RET-07** | `FR-S1-17`, `BR-S1-14`, `BR-S1-22`, `Q30` | **AC-S1-34** | `VC/TEST-S1-32` | API / Database (`retrieval.db.test.ts`) | Elapsed appointment displays `displayStatus: 'Past'`, while database `status` remains `'Booked'`, never `'Completed'`. |
+| **RET-07** | `FR-S1-17`, `BR-S1-14`, `BR-S1-22`, `Q30`, `BR-S1-12`, `NFR-S1-06` | **AC-S1-34** | `VC/TEST-S1-32` | API / Database (`retrieval.db.test.ts`) | Elapsed appointment displays `displayStatus: 'Past'`, while database `status` remains `'Booked'`, never `'Completed'`. |
 | **RET-08** | `FR-S1-04`, `AC-S1-05` | — | `VC/TEST-S1-05` | API Guard (`retrieval.db.test.ts`) | Anonymous callers receive `401 UNAUTHENTICATED` on all customer and tutor retrieval endpoints. |
 | **RET-09** | `FR-S1-04`, `AC-S1-06` | — | `VC/TEST-S1-06` | API Guard (`retrieval.db.test.ts`) | Role boundary: Authenticated Tutor calling Customer booking endpoints receives `403 FORBIDDEN`. |
 | **RET-10** | `FR-S1-04`, `AC-S1-06` | — | `VC/TEST-S1-06` | API Guard (`retrieval.db.test.ts`) | Role boundary: Authenticated Customer calling Tutor booking endpoints receives `403 FORBIDDEN`. |
 | **RET-11** | `NFR-S1-08` | — | — | API Input (`retrieval.db.test.ts`) | Malformed non-UUID in path parameter (`/api/v1/customer/bookings/invalid-id`) returns `400 INVALID_INPUT`. |
 | **RET-12** | `NFR-S1-08` | — | — | API Input (`retrieval.db.test.ts`) | Unexpected query parameters on list and detail endpoints return `400 INVALID_INPUT`. |
 | **RET-13** | `NFR-S1-01`, `NFR-S1-08` | — | `VC/TEST-S1-35` | Security / Privacy (`retrieval.db.test.ts`) | Full JSON response inspection: Zero leakage of password hashes, session tokens, or unapproved contact data. |
-| **RET-14** | `FR-S1-16`, `NFR-S1-03` | **AC-S1-30** | `VC/TEST-S1-28` | Persistence / Lifecycle (`retrieval.db.test.ts`) | Server restart persistence: Fresh Express app instance reading same database returns identical committed Bookings. |
-| **RET-15** | `FR-S1-14`, `FR-S1-17`, `NFR-S1-07` | **AC-S1-30**, **AC-S1-34** | `VC/TEST-S1-28`, `VC/TEST-S1-32` | Playwright E2E (`e2e/retrieval.spec.ts`) | Customer browser UI: Navigates to My Bookings, views upcoming & past badges, checks Bangkok time, opens detail view. |
-| **RET-16** | `FR-S1-04`, `FR-S1-07`, `FR-S1-15` | **AC-S1-31**, **AC-S1-32** | `VC/TEST-S1-29`, `VC/TEST-S1-30` | Playwright E2E (`e2e/retrieval.spec.ts`) | Tutor browser UI: Inspects schedule bookings; Customer B attempting to visit Customer A booking detail shows safe 404 UI. |
+| **RET-14** | `FR-S1-16`, `NFR-S1-03` | **AC-S1-30** | `VC/TEST-S1-28` | Persistence / Process Lifecycle (`retrieval.db.test.ts`) | Server restart persistence: Process termination + new DB connection pool reading persistent DB returns identical committed Bookings. |
+| **RET-15** | `FR-S1-14`, `FR-S1-17`, `BR-S1-12`, `Q29`, `NFR-S1-06`, `NFR-S1-09` | **AC-S1-30**, **AC-S1-34** | `VC/TEST-S1-28`, `VC/TEST-S1-32` | Playwright E2E (`e2e/retrieval.spec.ts`) | Customer browser UI: Navigates to My Bookings, views upcoming & past badges, checks Bangkok time, opens detail modal. |
+| **RET-16** | `FR-S1-04`, `FR-S1-07`, `FR-S1-15`, `BR-S1-16`, `NFR-S1-01` | **AC-S1-31**, **AC-S1-32** | `VC/TEST-S1-29`, `VC/TEST-S1-30` | Playwright E2E (`e2e/retrieval.spec.ts`) | Tutor browser UI: Inspects schedule bookings; Customer B cannot see Customer A's booking in UI list/modal; direct API probe returns safe 404. |
+| **RET-17** | `FR-S1-17`, `BR-S1-22`, `Q30`, `NFR-S1-06` | **AC-S1-34** | `VC/TEST-S1-32` | API / Evaluator (`retrieval.db.test.ts`) | Statement snapshot uniformity & empty list: `meta.evaluatedAt` returned when zero rows, shared single snapshot across multi-rows, and exact Q30 boundary ($T-1\text{s}$ vs $T$ vs $T+1\text{s}$). |
 
 ---
 
@@ -75,7 +76,7 @@
 - **Expected Outcome:**
   - HTTP `200 OK`.
   - Response contains Slot 1's Booking.
-  - Customer identity is masked as `customerRef: "CUST-" + customerAId.slice(0, 8)`.
+  - Customer identity is represented as pseudonymous `customerRef: "CUST-" + customerAId.slice(0, 8)` for data minimization; customer name, email, and phone are never disclosed, and raw `customerId` UUID is excluded.
   - Slot 2's Booking (Tutor 2) is completely absent.
 
 ---
@@ -100,14 +101,18 @@
 
 ---
 
-### RET-07: Time-Derived "Past" Appointment Display (`Q30`, `AC-S1-34`)
+### RET-07: Time-Derived "Past" Appointment Display (`Q30`, `AC-S1-34`, `BR-S1-14/22`, `NFR-S1-06`)
 - **Goal:** Verify that an elapsed Booking displays as `Past` without modifying database state or asserting `Completed`.
-- **Setup:** Insert a fixture Booking with `startsAt = now() - 2 hours` and `endsAt = now() - 1 hour`.
+- **Historical Fixture Feasibility Protocol:**
+  - In canonical database schemas, DB triggers prevent creating past slots (`slot_overlap_s1`) or booking with lead time <60m (`booking_guard_s1()` with `P0B02`). The test suite in Part F must NOT alter or disable triggers in the shared public schema.
+  - **Authorized Test Strategy for Part F:**
+    - **Method A (Query Evaluation Snapshot / Injected Clock):** Seed a valid future Slot and Booking (>60m notice) passing all canonical guards. Execute the retrieval evaluation specifying an evaluation snapshot `evaluatedAt >= endsAt`. Assert that `displayStatus: 'Past'`, `meta.evaluatedAt` reflects the evaluation time, and database `Booking.status` remains strictly `'Booked'` without database mutation.
+    - **Method B (Isolated Disposable Ephemeral DB Seed):** In an ephemeral, disposable test container (never in shared/production schema), seed historical rows under a localized seed script with triggers re-enabled before test execution, without ever touching shared/canonical database schemas.
 - **Execution:** Customer opens `GET /api/v1/customer/bookings/:id`.
 - **Expected Outcome:**
   - Response body contains `displayStatus: 'Past'`, but `status: 'Booked'`.
-  - Database row check via `ownerPool.query`: `status` column is strictly `'Booked'`.
-  - Slot remains occupied and is not automatically released.
+  - Direct database inspection via `ownerPool.query`: `Booking.status` column is strictly `'Booked'`.
+  - Associated Slot remains occupied and is not automatically released.
 
 ---
 
@@ -125,21 +130,38 @@
 
 ---
 
-### RET-14: Persistence Across Application Restart
-- **Goal:** Prove that committed Bookings survive application shutdown and restart (`FR-S1-16`, `NFR-S1-03`).
+### RET-14: Persistence Across Application Process Restart and Pool Reconnection (`FR-S1-16`, `NFR-S1-03`)
+- **Goal:** Prove that committed Bookings survive complete application process shutdown, connection pool termination, and restart against the persistent database.
 - **Execution:**
-  1. Commit Booking on Express app instance 1.
-  2. Instantiate fresh Express app instance 2 against the same database pool.
-  3. Query `GET /api/v1/customer/bookings` on instance 2.
-- **Expected Outcome:** Returns the committed Booking with identical timestamps and IDs.
+  1. Commit a valid Slot and Booking on running API instance 1.
+  2. Explicitly disconnect and terminate active database connection pool (`prisma.$disconnect()` / `pool.end()`).
+  3. Spawn an entirely separate Node.js process / fresh connection pool against the same persistent PostgreSQL database.
+  4. Call `GET /api/v1/customer/bookings` from the newly spawned process/pool.
+- **Expected Outcome:** Returns the exact committed Booking with identical IDs, timestamps, and status, proving durable persistence across process lifecycles.
 
 ---
 
 ### RET-15 & RET-16: Playwright Edge Browser E2E Tests
-- **RET-15 (Customer E2E):** Customer logs in, navigates to "การจองของฉัน", verifies Bangkok time format, clicks "ดูรายละเอียด", verifies Booking ID and "ยืนยันแล้ว" badge, verifies "สิ้นสุดแล้ว" badge for elapsed slot.
-- **RET-16 (Tutor E2E & Negative Privacy):** Tutor logs in, views Agenda with "มีผู้จองแล้ว (Occupied)" badge, views schedule bookings. In parallel session, Customer B tries to directly browse Customer A's detail URL and verifies the "ไม่พบข้อมูลการจองนี้" error screen without any foreign data leakage.
+- **RET-15 (Customer E2E):** Customer logs in, navigates to "การจองของฉัน", verifies Bangkok time formatting (`d MMM yyyy, HH:mm – HH:mm น.`), verifies upcoming badge (`ยืนยันแล้ว`, `#eef2f7`) and elapsed badge (`สิ้นสุดแล้ว`, `#f1f3f6`), clicks "ดูรายละเอียด" to open modal, verifies Booking UUID and details, and presses `Escape` or close button to dismiss modal.
+- **RET-16 (Tutor E2E & Negative Privacy Isolation):**
+  - Tutor logs in, views schedule agenda with "มีผู้จองแล้ว (Occupied)" amber badge (`#fff7ed` / `#f47736`) and unbooked slots with "ว่าง (เปิดรับจอง)", and verifies schedule bookings list displaying pseudonymous `customerRef`.
+  - Customer B logs in to their own account; Customer A's booking is absent from the list. Customer B cannot open Customer A's booking modal.
+  - Direct API probe: Customer B issues `GET /api/v1/customer/bookings/<CustomerA_BookingId>` and verifies safe `404 BOOKING_NOT_FOUND` response with zero data disclosure.
+
+---
+
+### RET-17: Single Statement Evaluation Snapshot Uniformity, Empty List Metadata, and Q30 Exact Boundary (`Q30`, `FR-S1-17`, `BR-S1-22`, `NFR-S1-06`)
+- **Goal:** Verify that `meta.evaluatedAt` is a single uniform evaluation snapshot, is present on empty responses, and cleanly governs the Q30 boundary.
+- **Scenarios:**
+  1. **Empty List Metadata:** An authenticated Customer with 0 bookings calls `GET /api/v1/customer/bookings`. Expected: `200 OK` with `data: []` and a valid ISO-8601 UTC `meta.evaluatedAt` timestamp.
+  2. **Multi-Row Snapshot Uniformity:** A Customer with multiple bookings calls `GET /api/v1/customer/bookings`. Expected: all rows project `displayStatus` based on the exact single evaluation timestamp that matches `meta.evaluatedAt`.
+  3. **Q30 Exact Boundary:** For an appointment ending at $T$:
+     - When evaluated at $T - 1\text{s}$: `displayStatus: 'Booked'`, `status: 'Booked'`.
+     - When evaluated at $T$: `displayStatus: 'Past'`, `status: 'Booked'`.
+     - When evaluated at $T + 1\text{s}$: `displayStatus: 'Past'`, `status: 'Booked'`.
+     - Database row check: in all three states, `Booking.status` remains `'Booked'`, never mutating to `'Completed'`.
 
 ---
 
 ## 3. Current Part E Status
-All 16 test cases (`RET-01..RET-16`) are **PLANNED / NOT RUN**. No test execution or pass results are claimed in this Part E specification PR.
+All 17 test cases (`RET-01..RET-17`) are **PLANNED / NOT RUN**. No test execution or pass results are claimed in this Part E specification PR.

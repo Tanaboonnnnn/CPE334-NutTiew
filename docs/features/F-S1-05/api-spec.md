@@ -29,6 +29,7 @@ Retrieves all Bookings owned by the currently authenticated Customer.
 - **Authorization:** Authenticated Customer only (`role = Customer`).
 - **Query Parameters:** None permitted. Any query string produces `400 INVALID_INPUT`.
 - **Ordering:** Deterministic ascending order: `startsAt ASC, id ASC`.
+- **Evaluation Snapshot Uniformity:** `meta.evaluatedAt` represents a single server evaluation timestamp captured at statement execution (`statement_timestamp()`). This exact timestamp is applied uniformly to compute `displayStatus` across all returned items. Even when no bookings exist (`data: []`), `meta.evaluatedAt` is always populated as an ISO-8601 UTC timestamp.
 
 #### Success Response (`200 OK`)
 ```json
@@ -145,7 +146,7 @@ Fulfills `FR-S1-15` & `AC-S1-32`: An authorized Tutor inspects Bookings on their
 - **Authorization:** Authenticated Tutor only (`role = Tutor`).
 - **Query Parameters:** None permitted. Any query parameters produce `400 INVALID_INPUT`.
 - **Query Predicate:** Filters strictly by `Slot.tutorId = principal.userId` and `Booking.status = 'Booked'`.
-- **Privacy Guarantee:** Excludes other Tutors' bookings. Masks/abstracts Customer personal data to an opaque reference (`customerRef: "CUST-" + customerId.slice(0, 8)`); never returns password hashes, session cookies, or foreign contact details.
+- **Privacy Guarantee:** Excludes other Tutors' bookings. Represents Customer identity as a pseudonymous truncated reference (`customerRef: "CUST-" + customerId.slice(0, 8)`), omitting Customer PII (name, email, phone) and isolating internal customer UUIDs from the Tutor wire DTO. Note: this is pseudonymous data minimization, not an irreversible cryptographic anonymization. Never returns password hashes, session cookies, or foreign contact details.
 
 #### Success Response (`200 OK`)
 ```json
@@ -179,9 +180,9 @@ The API explicitly returns two separate status fields to cleanly distinguish dat
 | Field | Possible Values | Semantics |
 |---|---|---|
 | `status` | `'Booked'` (or `'Cancelled'` in future sprints) | Authoritative database status persisted in the `Booking.status` column. |
-| `displayStatus` | `'Booked'` \| `'Past'` | Time-derived presentation status computed relative to `evaluatedAt` (`meta.evaluatedAt`). If `endsAt <= evaluatedAt`, `displayStatus` is `'Past'`; otherwise `'Booked'`. |
+| `displayStatus` | `'Booked'` \| `'Past'` | Time-derived presentation status computed relative to the single statement evaluation snapshot `meta.evaluatedAt`. If `endsAt <= meta.evaluatedAt`, `displayStatus` is `'Past'`; if `endsAt > meta.evaluatedAt`, `displayStatus` is `'Booked'`. |
 
-**Rule:** `displayStatus = 'Past'` is an informative presentation label. It **never** causes the row in PostgreSQL to be marked as `Completed`, nor does it release the Slot from occupancy.
+**Rule:** `displayStatus = 'Past'` is an informative presentation label. It **never** causes the row in PostgreSQL to be marked as `Completed`, nor does it release the Slot from occupancy. Both list endpoints and single-detail endpoints evaluate `displayStatus` using this single snapshot mechanism, and empty lists still return a valid ISO-8601 UTC `meta.evaluatedAt`.
 
 ---
 
