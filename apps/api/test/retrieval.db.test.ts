@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import request from 'supertest';
 import argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
@@ -420,31 +422,57 @@ describe('F-S1-05 Protected Booking Retrieval & Authorized Tutor Schedule View (
   });
 
   // RET-14: Persistence Across Application Process Restart and Pool Reconnection (FR-S1-16, NFR-S1-03)
-  it('RET-14: Fresh application instance and connection pool reading persistent DB returns identical committed bookings', async () => {
-    // Create a new, isolated connection pool simulating process restart
-    const restartedPool = createPool();
-    try {
-      const restartedApp = await createApp(restartedPool, {
-        origin,
-        csrfKey: Buffer.alloc(32, 7),
-        rateKey: Buffer.alloc(32, 9),
-        production: false,
-      });
+  it('RET-14: Separate Node child process and connection pool reading persistent DB returns identical committed bookings', async () => {
+    const apiDir = fileURLToPath(new URL('..', import.meta.url));
+    const childCode = `
+import { createPool } from './src/config.ts';
+import { createApp } from './src/app.ts';
+import { createServer } from 'node:http';
 
-      // Login fresh session for Customer A on restartedApp
-      const freshAuth = await loginBundle(restartedApp, `cust_a_${marker}@example.com`, customerAId);
+const pool = createPool();
+try {
+  const app = await createApp(pool, {
+    origin: '${origin}',
+    csrfKey: Buffer.alloc(32, 7),
+    rateKey: Buffer.alloc(32, 9),
+    production: false,
+  });
+  const server = createServer(app);
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
 
-      const res = await request(restartedApp)
-        .get(`/api/v1/customer/bookings/${customerABooking1Id}`)
-        .set('Cookie', freshAuth.cookie);
+  const loginRes = await fetch(\`http://127.0.0.1:\${port}/api/v1/auth/login\`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: '${origin}' },
+    body: JSON.stringify({ email: 'cust_a_${marker}@example.com', password: '${password}' }),
+  });
+  const cookie = loginRes.headers.get('set-cookie');
 
-      expect(res.status).toBe(200);
-      expect(res.body.data.id).toBe(customerABooking1Id);
-      expect(res.body.data.slotId).toBe(slotA1Id);
-      expect(res.body.data.status).toBe('Booked');
-    } finally {
-      await restartedPool.end();
-    }
+  const bookRes = await fetch(\`http://127.0.0.1:\${port}/api/v1/customer/bookings/${customerABooking1Id}\`, {
+    headers: { Cookie: cookie, Origin: '${origin}' },
+  });
+  const json = await bookRes.json();
+  server.close();
+  process.stdout.write(JSON.stringify({ status: bookRes.status, body: json }));
+} finally {
+  await pool.end();
+}
+`;
+    const child = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '-e', childCode],
+      { cwd: apiDir, env: process.env, encoding: 'utf8', timeout: 15000 },
+    );
+
+    expect(child.status).toBe(0);
+    const lastLine = child.stdout.trim().split('\n').pop()!;
+    const parsed = JSON.parse(lastLine);
+    expect(parsed.status).toBe(200);
+    expect(parsed.body.data.id).toBe(customerABooking1Id);
+    expect(parsed.body.data.slotId).toBe(slotA1Id);
+    expect(parsed.body.data.tutorId).toBe(tutorAId);
+    expect(parsed.body.data.tutorRef).toBe('TUTOR-' + tutorAId.slice(0, 8));
+    expect(parsed.body.data.status).toBe('Booked');
   });
 
   // RET-17: Single Statement Evaluation Snapshot Uniformity, Empty List Metadata, and Q30 Boundary

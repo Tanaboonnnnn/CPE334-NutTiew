@@ -375,9 +375,13 @@ export function CustomerAvailability({
   const version = useRef(0);
   const csrfVersion = useRef(0);
   const sessionEpoch = useRef(0);
+  const bookingsVersion = useRef(0);
+  const detailVersion = useRef(0);
   const pendingGet = useRef<AbortController | null>(null);
   const pendingCsrf = useRef<AbortController | null>(null);
   const pendingPost = useRef<AbortController | null>(null);
+  const pendingBookingsGet = useRef<AbortController | null>(null);
+  const pendingDetailGet = useRef<AbortController | null>(null);
   const selectedRef = useRef<string | null>(null);
   const unknownOutcomeRef = useRef<UnknownBookingOutcome | null>(null);
   const submittingRef = useRef(false);
@@ -403,7 +407,11 @@ export function CustomerAvailability({
   const clearProtectedState = () => {
     sessionEpoch.current++;
     csrfVersion.current++;
+    bookingsVersion.current++;
+    detailVersion.current++;
     pendingCsrf.current?.abort();
+    pendingBookingsGet.current?.abort();
+    pendingDetailGet.current?.abort();
     setOffers([]);
     setEvaluatedAt(null);
     selectedRef.current = null;
@@ -419,15 +427,25 @@ export function CustomerAvailability({
     setUnknownOutcome(null);
     submittingRef.current = false;
     setSubmittingBooking(false);
+    setMyBookings([]);
+    setSelectedBookingDetail(null);
+    setLoadingDetail(false);
+    setDetailError('');
+    setBookingsError('');
+    setLoadingBookings(false);
   };
 
   const handleSessionBindingChanged = () => {
     version.current++;
     csrfVersion.current++;
+    bookingsVersion.current++;
+    detailVersion.current++;
     sessionEpoch.current++;
     pendingGet.current?.abort();
     pendingCsrf.current?.abort();
     pendingPost.current?.abort();
+    pendingBookingsGet.current?.abort();
+    pendingDetailGet.current?.abort();
     clearProtectedState();
     if (onSessionBindingChanged) {
       void onSessionBindingChanged();
@@ -552,42 +570,94 @@ export function CustomerAvailability({
     return () => {
       version.current++;
       csrfVersion.current++;
+      bookingsVersion.current++;
+      detailVersion.current++;
       sessionEpoch.current++;
       pendingGet.current?.abort();
       pendingCsrf.current?.abort();
       pendingPost.current?.abort();
+      pendingBookingsGet.current?.abort();
+      pendingDetailGet.current?.abort();
     };
     // Component is keyed by sessionBinding in main.tsx; remounts on session change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchMyBookings = async () => {
+    if (logoutBusy || logoutError) return;
+    const current = ++bookingsVersion.current;
+    const capturedEpoch = sessionEpoch.current;
+    const capturedBinding = sessionBinding;
+    pendingBookingsGet.current?.abort();
+    const controller = new AbortController();
+    pendingBookingsGet.current = controller;
     setLoadingBookings(true);
     setBookingsError('');
     try {
       const res = await fetch('/api/v1/customer/bookings', {
         credentials: 'same-origin',
         cache: 'no-store',
+        signal: controller.signal,
       });
+      if (
+        bookingsVersion.current !== current ||
+        sessionEpoch.current !== capturedEpoch ||
+        sessionBinding !== capturedBinding ||
+        controller.signal.aborted
+      ) return;
+
+      if (capturedBinding && res.headers.get('X-NutTiew-Session-Binding') !== capturedBinding) {
+        handleSessionBindingChanged();
+        return;
+      }
+
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
+          clearProtectedState();
           onUnauthorized();
           return;
         }
         throw new Error('HTTP_' + res.status);
       }
       const body = await res.json();
-      if (Array.isArray(body?.data)) {
-        setMyBookings(body.data);
+      if (
+        bookingsVersion.current === current &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding &&
+        !controller.signal.aborted
+      ) {
+        if (Array.isArray(body?.data)) {
+          setMyBookings(body.data);
+          setBookingsError('');
+        } else {
+          setBookingsError('ข้อมูลการจองไม่ถูกต้อง');
+        }
       }
     } catch {
-      setBookingsError('ไม่สามารถโหลดข้อมูลการจองได้ในขณะนี้');
+      if (
+        bookingsVersion.current === current &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding &&
+        !controller.signal.aborted
+      ) {
+        setBookingsError('ไม่สามารถโหลดข้อมูลการจองได้ในขณะนี้');
+      }
     } finally {
-      setLoadingBookings(false);
+      if (bookingsVersion.current === current && sessionEpoch.current === capturedEpoch) {
+        setLoadingBookings(false);
+        pendingBookingsGet.current = null;
+      }
     }
   };
 
   const openBookingDetail = async (bookingId: string) => {
+    if (logoutBusy || logoutError) return;
+    const current = ++detailVersion.current;
+    const capturedEpoch = sessionEpoch.current;
+    const capturedBinding = sessionBinding;
+    pendingDetailGet.current?.abort();
+    const controller = new AbortController();
+    pendingDetailGet.current = controller;
     setLoadingDetail(true);
     setDetailError('');
     setSelectedBookingDetail(null);
@@ -595,9 +665,23 @@ export function CustomerAvailability({
       const res = await fetch('/api/v1/customer/bookings/' + bookingId, {
         credentials: 'same-origin',
         cache: 'no-store',
+        signal: controller.signal,
       });
+      if (
+        detailVersion.current !== current ||
+        sessionEpoch.current !== capturedEpoch ||
+        sessionBinding !== capturedBinding ||
+        controller.signal.aborted
+      ) return;
+
+      if (capturedBinding && res.headers.get('X-NutTiew-Session-Binding') !== capturedBinding) {
+        handleSessionBindingChanged();
+        return;
+      }
+
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
+          clearProtectedState();
           onUnauthorized();
           return;
         }
@@ -608,13 +692,33 @@ export function CustomerAvailability({
         throw new Error('HTTP_' + res.status);
       }
       const body = await res.json();
-      if (body?.data) {
-        setSelectedBookingDetail(body.data);
+      if (
+        detailVersion.current === current &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding &&
+        !controller.signal.aborted
+      ) {
+        if (body?.data && typeof body.data.id === 'string') {
+          setSelectedBookingDetail(body.data);
+          setDetailError('');
+        } else {
+          setDetailError('LOAD_FAILED');
+        }
       }
     } catch {
-      setDetailError('LOAD_FAILED');
+      if (
+        detailVersion.current === current &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding &&
+        !controller.signal.aborted
+      ) {
+        setDetailError('LOAD_FAILED');
+      }
     } finally {
-      setLoadingDetail(false);
+      if (detailVersion.current === current && sessionEpoch.current === capturedEpoch) {
+        setLoadingDetail(false);
+        pendingDetailGet.current = null;
+      }
     }
   };
 
@@ -639,10 +743,14 @@ export function CustomerAvailability({
   const handleLogout = () => {
     version.current++;
     csrfVersion.current++;
+    bookingsVersion.current++;
+    detailVersion.current++;
     sessionEpoch.current++;
     pendingGet.current?.abort();
     pendingCsrf.current?.abort();
     pendingPost.current?.abort();
+    pendingBookingsGet.current?.abort();
+    pendingDetailGet.current?.abort();
     clearProtectedState();
     void onLogout();
   };
@@ -904,6 +1012,11 @@ export function CustomerAvailability({
           )}
 
           {activeTab === 'bookings' ? (
+            logoutBusy || logoutError ? (
+              <div className="availability-surface" role="status">
+                <p>เซสชันกำลังออกจากระบบหรือรอการยืนยัน ข้อมูลการจองถูกซ่อนเพื่อความปลอดภัย</p>
+              </div>
+            ) : (
             <section id="customer-bookings-section" className="customer-bookings-section" aria-labelledby="customer-bookings-heading">
               <header className="availability-hero">
                 <div className="availability-hero-copy">
@@ -988,6 +1101,7 @@ export function CustomerAvailability({
                 </div>
               )}
             </section>
+            )
           ) : (
             <>
               <header className="availability-hero">
@@ -1296,7 +1410,7 @@ export function CustomerAvailability({
             </>
           )}
 
-          {(selectedBookingDetail || detailError || loadingDetail) && (
+          {!logoutBusy && !logoutError && (selectedBookingDetail || detailError || loadingDetail) && (
             <div
               className="customer-modal-backdrop"
               role="dialog"

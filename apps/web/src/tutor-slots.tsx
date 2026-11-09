@@ -103,61 +103,93 @@ export function TutorAvailability({
   const [error, setError] = useState('');
   const [listError, setListError] = useState('');
   const [notice, setNotice] = useState('');
-  const version = useRef(0);
-  const pendingGet = useRef<AbortController | null>(null);
+  const slotsVersion = useRef(0);
+  const bookingsVersion = useRef(0);
+  const pendingSlotsGet = useRef<AbortController | null>(null);
+  const pendingBookingsGet = useRef<AbortController | null>(null);
   const pendingPost = useRef<AbortController | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const preview = bangkokStart(date, startTime);
   const end = preview ? new Date(preview.getTime() + 3_600_000) : null;
 
-  const refresh = async (showLoading = false) => {
-    const current = ++version.current;
-    pendingGet.current?.abort();
+  const refreshSlots = async (showLoading = false) => {
+    const current = ++slotsVersion.current;
+    pendingSlotsGet.current?.abort();
     const controller = new AbortController();
-    pendingGet.current = controller;
+    pendingSlotsGet.current = controller;
     if (showLoading) {
       setLoading(true);
-      setLoadingBookings(true);
     }
     try {
-      const [slotResult, bookingResult] = await Promise.all([
-        apiJson<SlotList>('/api/v1/tutor/slots', {}, controller.signal, sessionBinding),
-        apiJson<{ data: TutorScheduleBooking[]; meta: { requestId: string; evaluatedAt: string } }>(
-          '/api/v1/tutor/bookings', {}, controller.signal, sessionBinding
-        ),
-      ]);
-      if (version.current === current) {
+      const slotResult = await apiJson<SlotList>(
+        '/api/v1/tutor/slots', {}, controller.signal, sessionBinding
+      );
+      if (slotsVersion.current === current) {
         setSlots(slotResult.data);
-        setBookings(bookingResult.data);
         setListError('');
-        setBookingsError('');
         setReconciliationPending(false);
       }
     } catch (e) {
-      if (version.current === current) {
+      if (slotsVersion.current === current) {
         if (accessExpired(e)) {
           setSlots([]);
-          setBookings([]);
           onUnauthorized();
         } else if (!controller.signal.aborted) {
           setListError('ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่');
+        }
+      }
+    } finally {
+      if (slotsVersion.current === current) {
+        setLoading(false);
+        pendingSlotsGet.current = null;
+      }
+    }
+  };
+
+  const refreshBookings = async (showLoading = false) => {
+    const current = ++bookingsVersion.current;
+    pendingBookingsGet.current?.abort();
+    const controller = new AbortController();
+    pendingBookingsGet.current = controller;
+    if (showLoading) {
+      setLoadingBookings(true);
+    }
+    try {
+      const bookingResult = await apiJson<{ data: TutorScheduleBooking[]; meta: { requestId: string; evaluatedAt: string } }>(
+        '/api/v1/tutor/bookings', {}, controller.signal, sessionBinding
+      );
+      if (bookingsVersion.current === current) {
+        setBookings(bookingResult.data);
+        setBookingsError('');
+      }
+    } catch (e) {
+      if (bookingsVersion.current === current) {
+        if (accessExpired(e)) {
+          setBookings([]);
+          onUnauthorized();
+        } else if (!controller.signal.aborted) {
           setBookingsError('ไม่สามารถโหลดรายการนัดหมายได้');
         }
       }
     } finally {
-      if (version.current === current) {
-        setLoading(false);
+      if (bookingsVersion.current === current) {
         setLoadingBookings(false);
-        pendingGet.current = null;
+        pendingBookingsGet.current = null;
       }
     }
+  };
+
+  const refresh = async (showLoading = false) => {
+    await Promise.allSettled([refreshSlots(showLoading), refreshBookings(showLoading)]);
   };
 
   useEffect(() => {
     void refresh(true);
     return () => {
-      version.current++;
-      pendingGet.current?.abort();
+      slotsVersion.current++;
+      bookingsVersion.current++;
+      pendingSlotsGet.current?.abort();
+      pendingBookingsGet.current?.abort();
       pendingPost.current?.abort();
     };
     // This component is keyed by the authenticated User; remount on identity switch.
@@ -284,7 +316,7 @@ export function TutorAvailability({
     {loading ? <div className="dashboard-card loading-agenda" role="status">กำลังโหลดรายการเวลาติว…</div> : listError
       ? <div className="dashboard-list-error" role="alert">
         <p className="error">ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่</p>
-        <button className="retry-button" type="button" onClick={() => void refresh(true)}>โหลดอีกครั้ง</button>
+        <button className="retry-button" type="button" onClick={() => void refreshSlots(true)}>โหลดอีกครั้ง</button>
       </div>
       : <AllSlotsAgenda slots={slots}/>}
 
@@ -302,7 +334,7 @@ export function TutorAvailability({
       ) : bookingsError ? (
         <div className="dashboard-list-error" role="alert">
           <p className="error">{bookingsError}</p>
-          <button className="retry-button" type="button" onClick={() => void refresh(true)}>โหลดรายการนัดหมายใหม่</button>
+          <button className="retry-button" type="button" onClick={() => void refreshBookings(true)}>โหลดรายการนัดหมายใหม่</button>
         </div>
       ) : bookings.length === 0 ? (
         <p className="empty-slots">ยังไม่มีผู้จองในช่วงเวลาที่คุณเปิดสอน</p>
