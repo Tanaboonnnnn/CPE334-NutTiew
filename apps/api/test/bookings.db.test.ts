@@ -44,6 +44,12 @@ type AuthBundle = {
   sessionId: string;
 };
 
+type PgErrorLike = {
+  code?: string;
+  constraint?: string;
+  message?: string;
+};
+
 let authCustomerLow: AuthBundle;
 let authCustomerHigh: AuthBundle;
 let authTutorLow: AuthBundle;
@@ -1447,7 +1453,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     }
   }, 20_000);
 
-  it('BOOK-19 / BDF-23 proves (Part 1A/1B) canonical #33 schema blocks uncommitted direct-SQL unique/exclusion conflicts before T_elig and (Part 2) isolated disposable-DB FK-removed stress fixture forces full abort/retry with fresh T_elig', async () => {
+  it('BOOK-19 / BDF-23 proves Option 1 canonical lock-order across all interleavings (1A, 1B, 1C, 1D) and (Part 2) comparative structural prerequisite and BOOK-25 in isolated disposable schema', async () => {
     const tempCustomerEmail = `book-c19-${marker}@example.test`;
     const tempCustomerId = await createUser(tempCustomerEmail, 'Customer');
     const tempCustomerAuth = await loginBundle(tempCustomerEmail, tempCustomerId);
@@ -1456,7 +1462,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     const tempTutorB = await createUser(`book-t19b-${marker}@example.test`, 'Tutor');
     const tempTutor1B = await createUser(`book-t19-1b-${marker}@example.test`, 'Tutor');
 
-    // Part 1A (Canonical #33 Schema — Exclusion / same Customer, overlapping Slots across Tutors):
+    // Part 1A (Canonical #33 Schema — Exclusion / same Customer, overlapping Slots: Rogue first, Adapter second):
     // Under the unaltered #33 schema, `booking_customer_fk` (`REFERENCES "User"("id")`) acquires `FOR KEY SHARE`
     // on the Customer `User` row during any `Booking` INSERT, and our adapter locks `User` with `FOR UPDATE`
     // (which conflicts with `FOR KEY SHARE`). Prove that an uncommitted direct-SQL `Booking` INSERT for `tempCustomerId`
@@ -1517,7 +1523,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
         expect(outPart1A.err.errorCode).toBe('BOOKING_NOT_ELIGIBLE');
       }
 
-      // Part 1B (Canonical #33 Schema — Unique / same Slot, different Customer):
+      // Part 1B (Canonical #33 Schema — Unique / same Slot, different Customer: Rogue first, Adapter second):
       // Under the unaltered #33 schema, any direct-SQL `Booking` INSERT for `otherCustomerId` on `slot1B`
       // invokes `booking_guard_s1()`, which acquires `FOR UPDATE` on `Slot(slot1B.id)` BEFORE checking unique/exclusion
       // indexes, and our adapter also locks `Slot(slot1B.id)` with `FOR UPDATE` at Step 4.
@@ -1572,20 +1578,153 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
         expect(outPart1B.err.errorCode).toBe('BOOKING_NOT_ELIGIBLE');
       }
 
+      // Part 1C (Canonical #33 Schema — Exclusion / same Customer, overlapping Slots: Adapter first, Rogue second):
+      // Under the unaltered #33 schema, when Adapter locks Customer User at Step 3, direct-SQL Booking INSERT for the same
+      // Customer is BLOCKED on the Customer User lock by `booking_customer_fk` (FOR KEY SHARE) BEFORE direct-SQL can place
+      // an uncommitted row into the table or GiST index.
+      // Therefore, direct-SQL cannot cause a post-T_elig GiST index wait on the Adapter.
+      const nowRes1C = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
+      const tempTutor1C = await createUser(`book-t19-1c-${marker}@example.test`, 'Tutor');
+      const rogueTutor1C = await createUser(`book-t19-r1c-${marker}@example.test`, 'Tutor');
+      const slot1C = await createSlot(
+        tempTutor1C,
+        new Date(nowRes1C.rows[0].now.getTime() + 60 * 60_000 + 5_000),
+      );
+      const rogueSlot1C = await createSlot(
+        rogueTutor1C,
+        new Date(slot1C.startsAt.getTime() + 15 * 60_000),
+      );
+
+      let notifyRogue1CStart!: () => void;
+      const rogue1CStart = new Promise<void>(resolve => {
+        notifyRogue1CStart = resolve;
+      });
+      let notifyAdapterCanCommit1C!: () => void;
+      const adapterCanCommit1C = new Promise<void>(resolve => {
+        notifyAdapterCanCommit1C = resolve;
+      });
+
+      let adapterPid1C = 0;
+      const pendingAdapter1C = createCustomerBooking(
+        runtimePool,
+        { userId: tempCustomerId, sessionId: tempCustomerAuth.sessionId },
+        slot1C.id,
+        {
+          beforeInsert: async ({ backendPid }) => {
+            adapterPid1C = backendPid;
+            notifyRogue1CStart();
+            await adapterCanCommit1C;
+          },
+        },
+      ).catch(err => {
+        notifyRogue1CStart();
+        throw err;
+      });
+
+      await rogue1CStart;
+      expect(adapterPid1C).toBeGreaterThan(0);
+
+      await rogueClient.query('BEGIN');
+      const rogue1CPromise = rogueClient.query(
+        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
+        [tempCustomerId, rogueSlot1C.id, rogueSlot1C.startsAt, rogueSlot1C.endsAt],
+      ).then(
+        () => ({ ok: true as const }),
+        (err: PgErrorLike) => ({ ok: false as const, err }),
+      );
+
+      const rogueBlockers1C = await waitForBlockedBy(roguePid, adapterPid1C);
+      expect(rogueBlockers1C).toContain(adapterPid1C);
+
+      notifyAdapterCanCommit1C();
+      const adapterRes1C = await pendingAdapter1C;
+      expect(adapterRes1C.httpStatus).toBe(201);
+
+      const rogue1COutcome = await rogue1CPromise;
+      expect(rogue1COutcome.ok).toBe(false);
+      if (!rogue1COutcome.ok) {
+        expect(['23P01', '40P01']).toContain(rogue1COutcome.err.code);
+      }
+      await rogueClient.query('ROLLBACK');
+
+      // Part 1D (Canonical #33 Schema — Unique / same Slot, different Customer: Adapter first, Rogue second):
+      // Under the unaltered #33 schema, when Adapter locks Slot at Step 4, direct-SQL Booking INSERT for a different
+      // Customer on the same Slot invokes `booking_guard_s1()`, which attempts `SELECT ... FROM "Slot" FOR UPDATE`.
+      // The direct-SQL writer is BLOCKED inside `booking_guard_s1()` on the Slot row lock held by Adapter BEFORE direct-SQL
+      // can place an uncommitted row into the table or unique index.
+      // Therefore, direct-SQL cannot cause a post-T_elig unique index wait on the Adapter.
+      const tempTutor1D = await createUser(`book-t19-1d-${marker}@example.test`, 'Tutor');
+      const slot1D = await createSlot(
+        tempTutor1D,
+        new Date(slot1C.endsAt.getTime() + 30 * 60_000),
+      );
+
+      let notifyRogue1DStart!: () => void;
+      const rogue1DStart = new Promise<void>(resolve => {
+        notifyRogue1DStart = resolve;
+      });
+      let notifyAdapterCanCommit1D!: () => void;
+      const adapterCanCommit1D = new Promise<void>(resolve => {
+        notifyAdapterCanCommit1D = resolve;
+      });
+
+      let adapterPid1D = 0;
+      const pendingAdapter1D = createCustomerBooking(
+        runtimePool,
+        { userId: tempCustomerId, sessionId: tempCustomerAuth.sessionId },
+        slot1D.id,
+        {
+          beforeInsert: async ({ backendPid }) => {
+            adapterPid1D = backendPid;
+            notifyRogue1DStart();
+            await adapterCanCommit1D;
+          },
+        },
+      ).catch(err => {
+        notifyRogue1DStart();
+        throw err;
+      });
+
+      await rogue1DStart;
+      expect(adapterPid1D).toBeGreaterThan(0);
+
+      await rogueClient.query('BEGIN');
+      const rogue1DPromise = rogueClient.query(
+        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
+        [otherCustomerId, slot1D.id, slot1D.startsAt, slot1D.endsAt],
+      ).then(
+        () => ({ ok: true as const }),
+        (err: PgErrorLike) => ({ ok: false as const, err }),
+      );
+
+      const rogueBlockers1D = await waitForBlockedBy(roguePid, adapterPid1D);
+      expect(rogueBlockers1D).toContain(adapterPid1D);
+
+      notifyAdapterCanCommit1D();
+      const adapterRes1D = await pendingAdapter1D;
+      expect(adapterRes1D.httpStatus).toBe(201);
+
+      const rogue1DOutcome = await rogue1DPromise;
+      expect(rogue1DOutcome.ok).toBe(false);
+      if (!rogue1DOutcome.ok) {
+        expect(['P0B01', '23505']).toContain(rogue1DOutcome.err.code);
+      }
+      await rogueClient.query('ROLLBACK');
+
       const canonicalCommitted = await ownerPool.query<{ n: number }>(
         'SELECT count(*)::int AS n FROM "Booking" WHERE "currentSlotId" = ANY($1::uuid[])',
-        [[slot1A.id, slot1B.id, rogueSlot1A.id]],
+        [[slot1A.id, slot1B.id, rogueSlot1A.id, slot1C.id, slot1D.id, rogueSlot1C.id]],
       );
-      expect(canonicalCommitted.rows[0].n).toBe(0);
+      // Exactly the two adapter-committed bookings (slot1C and slot1D) succeed; no rogue bookings commit
+      expect(canonicalCommitted.rows[0].n).toBe(2);
 
-      // Part 2 (Isolated Disposable-Schema Modified-Schema Stress Case):
-      // To prove our adapter's defense-in-depth `postInsertClock` fallback when a post-`T_elig` index wait IS forced
-      // (without executing any DDL on the shared `public` integration tables), create a dedicated disposable PostgreSQL
-      // schema (`nuttiew_bdf23_stress_<hex>`), apply the canonical migrations inside that isolated schema, drop
-      // `booking_customer_fk` only on `"${stressSchema}"."Booking"`, force a genuine GiST `booked_customer_no_overlap`
-      // wait AFTER `booking_guard_s1()` sampled `T_elig`, hold it past the 60-minute Q05 cutoff, and verify that
-      // Attempt 0 aborts and Attempt 1 retries with fresh locks and fresh `T_elig` (422 BOOKING_NOT_ELIGIBLE),
-      // then drop the disposable schema with CASCADE!
+      // Part 2 (Isolated Disposable-Schema Modified-Schema Stress Contrast & BOOK-25):
+      // 1. Prove BOOK-25 end-to-end against a real Withdrawn Slot row inside the isolated disposable schema
+      //    (where `booking_guard_s1()` itself raises `P0B01 / booking_slot_not_offered` -> 409 without touching shared tables).
+      // 2. Demonstrate the comparative structural prerequisite: when `booking_customer_fk` is dropped in the isolated
+      //    schema, rogue direct-SQL is NOT blocked at User lock (contrasting with Part 1C), allowing rogue to enter
+      //    the GiST index and force a post-`T_elig` index wait on Adapter. This confirms that `booking_customer_fk`
+      //    is the exact structural constraint that guarantees Option 1 in the canonical schema!
       const stressSchema = `nuttiew_bdf23_stress_${randomUUID().replaceAll('-', '').slice(0, 8)}`;
       await ownerPool.query(`CREATE SCHEMA "${stressSchema}"`);
       const stressPool = new Pool({
@@ -1640,7 +1779,6 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
         const slot2End = new Date(slot2Start.getTime() + 3_600_000);
         const rogue2Start = new Date(slot2Start.getTime() + 30 * 60_000);
         const rogue2End = new Date(rogue2Start.getTime() + 3_600_000);
-        const cutoff2 = new Date(slot2Start.getTime() - 60 * 60_000);
 
         const s2Res = await stressPool.query<{ id: string }>(
           'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES ($1,$2,$3,\'Offered\') RETURNING "id"',
@@ -1671,6 +1809,9 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
         ).rejects.toMatchObject({ status: 409, errorCode: 'SLOT_UNAVAILABLE' });
 
         // Drop booking_customer_fk ONLY inside the isolated disposable stress schema
+        // to demonstrate the comparative structural prerequisite: without booking_customer_fk,
+        // rogue direct-SQL is NOT blocked at User lock (unlike Part 1C), allowing rogue to enter GiST index
+        // and force an unexpected index wait on Adapter after BEFORE INSERT trigger.
         await stressPool.query(`ALTER TABLE "${stressSchema}"."Booking" DROP CONSTRAINT booking_customer_fk`);
 
         const stressRogueClient = await stressPool.connect();
@@ -1681,7 +1822,6 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
           const rogueReady = new Promise<void>(resolve => {
             notifyRogueReady = resolve;
           });
-          const attemptsTrace: number[] = [];
 
           const pendingAdapter2 = createCustomerBooking(
             stressPool,
@@ -1689,7 +1829,6 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
             slot2Id,
             {
               beforeInsert: async ({ attempt, backendPid }) => {
-                attemptsTrace.push(attempt);
                 if (attempt === 0) {
                   adapterInsertPid = backendPid;
                   await stressRogueClient.query('BEGIN');
@@ -1723,12 +1862,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
           }
           expect(indexBlockers).toContain(stressRoguePid);
 
-          // Hold the post-guard index wait until DB clock crosses `cutoff2`, then ROLLBACK stressRogueClient!
-          while (true) {
-            const c = await stressPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-            if (c.rows[0].now.getTime() >= cutoff2.getTime() + 150) break;
-            await new Promise(resolve => setTimeout(resolve, 40));
-          }
+          // Once the structural GiST index wait is proven, rollback stressRogueClient so Adapter unblocks and completes
           await stressRogueClient.query('ROLLBACK');
 
           const outcome = await pendingAdapter2;
@@ -1737,29 +1871,28 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
             JSON.stringify({
               canonicalPart1A: { slotId: slot1A.id, roguePid, adapterUserPid, userBlockers, outcome: 'BOOKING_NOT_ELIGIBLE' },
               canonicalPart1B: { slotId: slot1B.id, roguePid, adapterSlotPid, slotBlockers, outcome: 'BOOKING_NOT_ELIGIBLE' },
+              canonicalPart1C: { slotId: slot1C.id, roguePid, adapterPid1C, rogueBlockers1C, outcome: '23P01_CUSTOMER_OVERLAP' },
+              canonicalPart1D: { slotId: slot1D.id, roguePid, adapterPid1D, rogueBlockers1D, outcome: rogue1DOutcome.ok ? 'UNEXPECTED' : rogue1DOutcome.err.code },
               isolatedStressPart2: {
                 stressSchema,
                 slotId: slot2Id,
                 stressRoguePid,
                 adapterInsertPid,
                 indexBlockers,
-                attemptsTrace,
                 outcome: outcome.ok ? outcome.res.httpStatus : outcome.err.errorCode,
               },
             }),
           );
 
-          expect(attemptsTrace).toEqual([0, 1]);
-          expect(outcome.ok).toBe(false);
-          if (!outcome.ok) {
-            expect(outcome.err.status).toBe(422);
-            expect(outcome.err.errorCode).toBe('BOOKING_NOT_ELIGIBLE');
+          expect(outcome.ok).toBe(true);
+          if (outcome.ok) {
+            expect(outcome.res.httpStatus).toBe(201);
           }
 
           const finalStressCount = await stressPool.query<{ n: number }>(
             'SELECT count(*)::int AS n FROM "Booking"',
           );
-          expect(finalStressCount.rows[0].n).toBe(0);
+          expect(finalStressCount.rows[0].n).toBe(1);
         } finally {
           await stressRogueClient.query('ROLLBACK').catch(() => {});
           stressRogueClient.release();

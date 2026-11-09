@@ -40,7 +40,6 @@ type BookingRow = {
   startsAt: Date;
   endsAt: Date;
   status: string;
-  postInsertClock?: Date;
 };
 
 type PgErrorLike = {
@@ -75,8 +74,6 @@ export type BookingLockEvent = {
 export type BookingAdapterHooks = {
   /** Optional override for the unlocked Slot discovery query (e.g., to test stale Tutor discovery in BOOK-24 without mutating immutable Slot rows). */
   overrideDiscoveredTutorId?: (ctx: { attempt: number; slotId: string; actualTutorId: string }) => Promise<string> | string;
-  /** Minimum statement wait threshold in ms to classify a post-guard statement delay across cutoff as index contention (defaults to 150ms). */
-  postGuardContentionThresholdMs?: number;
   /** Called right after the unlocked Slot discovery query returns a row. */
   afterDiscovery?: (ctx: { attempt: number; slotId: string; discoveredTutorId: string }) => Promise<void> | void;
   /** Called before each explicit lock or Booking query step with the checked-out client and its backend PID. */
@@ -519,36 +516,11 @@ export async function createCustomerBooking(
         });
       }
 
-      const preInsertClockRes = await client.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-      const preInsertClock = preInsertClockRes.rows[0].now;
-
       const insertRes = await client.query<BookingRow>(
-        'INSERT INTO "Booking" ("customerId", "currentSlotId", "startsAt", "endsAt", "status") VALUES ($1, $2, $3, $4, \'Booked\') RETURNING "id", "currentSlotId", "startsAt", "endsAt", "status", clock_timestamp() AS "postInsertClock"',
+        'INSERT INTO "Booking" ("customerId", "currentSlotId", "startsAt", "endsAt", "status") VALUES ($1, $2, $3, $4, \'Booked\') RETURNING "id", "currentSlotId", "startsAt", "endsAt", "status"',
         [principal.userId, lockedSlotRow.id, lockedSlotRow.startsAt, lockedSlotRow.endsAt],
       );
       const inserted = insertRes.rows[0];
-
-      // BDF-23 / BOOK-19 post-guard contention safety guard:
-      // BEFORE INSERT trigger booking_guard_s1() samples T_elig before unique/exclusion index checks complete.
-      // If a rogue/direct-SQL writer bypassed the application lock protocol and held an uncommitted
-      // conflicting index tuple that later rolled back, the INSERT statement itself waited on the index
-      // AFTER T_elig was sampled.
-      // Per transaction-spec.md §3 step 11 and §5:
-      // 1. Database trigger's T_elig is authoritative: "a valid 60:00 guard may still commit later."
-      //    Normal statement execution near the 60:00 boundary without abnormal index wait must NOT be rejected.
-      // 2. Only if the statement experienced an abnormal post-guard wait across the cutoff (e.g. index contention
-      //    where the INSERT statement duration indicates waiting on an uncommitted conflicting transaction) must the
-      //    adapter abort (40001) and restart so a fresh attempt samples a fresh T_elig!
-      const postInsertClock = inserted.postInsertClock ?? preInsertClock;
-      const statementDurationMs = postInsertClock.getTime() - preInsertClock.getTime();
-      const contentionThresholdMs = hooks?.postGuardContentionThresholdMs ?? 150;
-      const crossedCutoff = lockedSlotRow.startsAt.getTime() - postInsertClock.getTime() < 60 * 60_000;
-
-      if (crossedCutoff && statementDurationMs >= contentionThresholdMs) {
-        throw Object.assign(new Error('Post-guard contention crossed Q05 cutoff after T_elig'), {
-          code: '40001',
-        });
-      }
 
       if (hooks?.beforeCommit) {
         await hooks.beforeCommit({
