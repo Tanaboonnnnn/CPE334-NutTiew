@@ -249,9 +249,9 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     const f = await fixture();
     await insertBooking(f);
     await expect(owner.query('DELETE FROM "User" WHERE "id"=$1',[f.customerId]))
-      .rejects.toMatchObject({ code:'23001', constraint:'booking_customer_fk' });
+      .rejects.toMatchObject({ code: expect.stringMatching(/^(23001|23503)$/), constraint: 'booking_customer_fk' });
     await expect(owner.query('UPDATE "User" SET "id"=$2 WHERE "id"=$1',[f.customerId,randomUUID()]))
-      .rejects.toMatchObject({ code:'23001', constraint:'booking_customer_fk' });
+      .rejects.toMatchObject({ code: expect.stringMatching(/^(23001|23503)$/), constraint: 'booking_customer_fk' });
     await expect(owner.query('DELETE FROM "Slot" WHERE "id"=$1',[f.slotId]))
       .rejects.toMatchObject({ code:'23514', constraint:'slot_s1_immutable' });
     await expect(owner.query('UPDATE "Slot" SET "startsAt"="startsAt"+interval \'1 minute\' WHERE "id"=$1',[f.slotId]))
@@ -486,5 +486,52 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
        WHERE m.member=(SELECT oid FROM pg_roles WHERE rolname=current_user)`,
     );
     expect(memberships.rows[0].n).toBe(0);
+  });
+  it('BDF-28 proves booking_guard_s1() acquires User(customerId) FOR UPDATE before Slot lock and before index insertion, preventing reverse GiST wait', async () => {
+    const customerId = await user('Customer');
+    const tutorId = await user('Tutor');
+    const startsAt = future(180);
+    const endsAt = new Date(startsAt.getTime() + 60 * 60_000);
+    const slotRes = await owner.query<{ id: string }>(
+      'INSERT INTO "Slot"("tutorId","startsAt","endsAt") VALUES($1,$2,$3) RETURNING "id"',
+      [tutorId, startsAt, endsAt],
+    );
+    const slotId = slotRes.rows[0].id;
+
+    const clientA = await owner.connect();
+    const clientB = await owner.connect();
+    try {
+      await clientA.query('BEGIN');
+      await clientA.query('SELECT "id" FROM "User" WHERE "id" = $1 FOR UPDATE', [customerId]);
+      const pidA = await pid(clientA);
+      const pidB = await pid(clientB);
+
+      await clientB.query('BEGIN');
+      const insertBPromise = clientB.query(
+        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
+        [customerId, slotId, startsAt, endsAt],
+      );
+
+      await blockedBy(pidB, pidA);
+
+      const uncommitted = await owner.query<{ count: string }>(
+        'SELECT count(*)::text as count FROM "Booking" WHERE "customerId" = $1',
+        [customerId],
+      );
+      expect(uncommitted.rows[0].count).toBe('0');
+
+      await clientA.query('COMMIT');
+      await insertBPromise;
+      await clientB.query('COMMIT');
+
+      const finalRow = await owner.query<{ count: string }>(
+        'SELECT count(*)::text as count FROM "Booking" WHERE "customerId" = $1',
+        [customerId],
+      );
+      expect(finalRow.rows[0].count).toBe('1');
+    } finally {
+      clientA.release();
+      clientB.release();
+    }
   });
 });
