@@ -487,51 +487,294 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     );
     expect(memberships.rows[0].n).toBe(0);
   });
-  it('BDF-28 proves booking_guard_s1() acquires User(customerId) FOR UPDATE before Slot lock and before index insertion, preventing reverse GiST wait', async () => {
-    const customerId = await user('Customer');
-    const tutorId = await user('Tutor');
-    const startsAt = future(180);
-    const endsAt = new Date(startsAt.getTime() + 60 * 60_000);
-    const slotRes = await owner.query<{ id: string }>(
-      'INSERT INTO "Slot"("tutorId","startsAt","endsAt") VALUES($1,$2,$3) RETURNING "id"',
-      [tutorId, startsAt, endsAt],
-    );
-    const slotId = slotRes.rows[0].id;
+  it('BDF-28 proves booking_guard_s1() acquires User(customerId) FOR UPDATE before Slot lock and before index insertion, preventing reverse GiST wait (targeted red->green)', async () => {
+    // -------------------------------------------------------------------------------------------------
+    // Part 1: Red Baseline Demonstration in Isolated Disposable Schema (Canonical #33 un-remediated trigger)
+    // Proves that under the original #33 trigger (which locked Slot only), PostgreSQL's AFTER ROW FK timing
+    // allows a direct-SQL writer to insert into the GiST exclusion index before locking User, causing the
+    // Adapter's subsequent INSERT to encounter a reverse wait on Rogue in GiST.
+    // -------------------------------------------------------------------------------------------------
+    const legacySchema = `bdf28_legacy_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
+    await owner.query(`CREATE SCHEMA ${legacySchema}`);
+    let legacyReverseWaitObserved = false;
+    let legacyAdapterPid = 0;
+    let legacyRoguePid = 0;
+    let legacyReverseBlockers: number[] = [];
 
-    const clientA = await owner.connect();
-    const clientB = await owner.connect();
     try {
-      await clientA.query('BEGIN');
-      await clientA.query('SELECT "id" FROM "User" WHERE "id" = $1 FOR UPDATE', [customerId]);
-      const pidA = await pid(clientA);
-      const pidB = await pid(clientB);
+      await owner.query(`
+        CREATE TABLE ${legacySchema}."User" (
+          "id" uuid PRIMARY KEY,
+          "email" text UNIQUE NOT NULL,
+          "role" text NOT NULL
+        );
+        CREATE TABLE ${legacySchema}."Slot" (
+          "id" uuid PRIMARY KEY,
+          "tutorId" uuid NOT NULL REFERENCES ${legacySchema}."User"("id"),
+          "startsAt" timestamptz(6) NOT NULL,
+          "endsAt" timestamptz(6) NOT NULL,
+          "lifecycle" text NOT NULL DEFAULT 'Offered'
+        );
+        CREATE TABLE ${legacySchema}."Booking" (
+          "id" uuid PRIMARY KEY,
+          "customerId" uuid NOT NULL,
+          "currentSlotId" uuid NOT NULL,
+          "startsAt" timestamptz(6) NOT NULL,
+          "endsAt" timestamptz(6) NOT NULL,
+          "status" text NOT NULL,
+          CONSTRAINT booking_customer_fk FOREIGN KEY ("customerId") REFERENCES ${legacySchema}."User"("id") ON DELETE RESTRICT ON UPDATE RESTRICT
+        );
+        CREATE EXTENSION IF NOT EXISTS btree_gist;
+        ALTER TABLE ${legacySchema}."Booking" ADD CONSTRAINT booked_customer_no_overlap EXCLUDE USING gist (
+          "customerId" WITH =,
+          tstzrange("startsAt", "endsAt", '[)') WITH &&
+        ) WHERE ("status" = 'Booked');
 
-      await clientB.query('BEGIN');
-      const insertBPromise = clientB.query(
-        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
-        [customerId, slotId, startsAt, endsAt],
-      );
+        CREATE FUNCTION ${legacySchema}.booking_guard_legacy()
+        RETURNS trigger LANGUAGE plpgsql AS $$
+        DECLARE
+          slot_lifecycle text;
+          slot_starts_at timestamptz(6);
+          eligibility_time timestamptz(6);
+        BEGIN
+          IF NEW."status" = 'Booked' THEN
+            SELECT s."lifecycle", s."startsAt"
+              INTO slot_lifecycle, slot_starts_at
+              FROM ${legacySchema}."Slot" AS s
+             WHERE s."id" = NEW."currentSlotId"
+               FOR UPDATE;
 
-      await blockedBy(pidB, pidA);
+            IF NOT FOUND THEN RETURN NEW; END IF;
+            IF slot_lifecycle IS DISTINCT FROM 'Offered' THEN
+              RAISE EXCEPTION 'Booking requires an Offered Slot' USING ERRCODE = 'P0B01';
+            END IF;
 
-      const uncommitted = await owner.query<{ count: string }>(
-        'SELECT count(*)::text as count FROM "Booking" WHERE "customerId" = $1',
-        [customerId],
-      );
-      expect(uncommitted.rows[0].count).toBe('0');
+            eligibility_time := clock_timestamp();
+            IF slot_starts_at - eligibility_time < INTERVAL '60 minutes' THEN
+              RAISE EXCEPTION 'Booking is outside the Sprint 1 eligibility window' USING ERRCODE = 'P0B02';
+            END IF;
+          END IF;
+          RETURN NEW;
+        END;
+        $$;
 
-      await clientA.query('COMMIT');
-      await insertBPromise;
-      await clientB.query('COMMIT');
+        CREATE TRIGGER booking_guard_legacy_row
+        BEFORE INSERT OR UPDATE OR DELETE ON ${legacySchema}."Booking"
+        FOR EACH ROW EXECUTE FUNCTION ${legacySchema}.booking_guard_legacy();
+      `);
 
-      const finalRow = await owner.query<{ count: string }>(
-        'SELECT count(*)::text as count FROM "Booking" WHERE "customerId" = $1',
-        [customerId],
-      );
-      expect(finalRow.rows[0].count).toBe('1');
+      const clientA1 = await owner.connect();
+      const clientB1 = await owner.connect();
+      try {
+        const c1Id = randomUUID();
+        const t1AId = randomUUID();
+        const t1BId = randomUUID();
+        await owner.query(`INSERT INTO ${legacySchema}."User" VALUES ($1, $2, 'Customer')`, [c1Id, `c1-${randomUUID()}@example.test`]);
+        await owner.query(`INSERT INTO ${legacySchema}."User" VALUES ($1, $2, 'Tutor')`, [t1AId, `t1a-${randomUUID()}@example.test`]);
+        await owner.query(`INSERT INTO ${legacySchema}."User" VALUES ($1, $2, 'Tutor')`, [t1BId, `t1b-${randomUUID()}@example.test`]);
+
+        const start1 = future(180);
+        const end1 = new Date(start1.getTime() + 60 * 60_000);
+        const slot1AId = randomUUID();
+        const slot1BId = randomUUID();
+        await owner.query(`INSERT INTO ${legacySchema}."Slot" VALUES ($1, $2, $3, $4, 'Offered')`, [slot1AId, t1AId, start1, end1]);
+        await owner.query(`INSERT INTO ${legacySchema}."Slot" VALUES ($1, $2, $3, $4, 'Offered')`, [slot1BId, t1BId, start1, end1]);
+
+        legacyAdapterPid = await pid(clientA1);
+        legacyRoguePid = await pid(clientB1);
+
+        // Adapter locks User
+        await clientA1.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+        await clientA1.query(`SELECT "id" FROM ${legacySchema}."User" WHERE "id" = $1 FOR UPDATE`, [c1Id]);
+
+        // Rogue direct-SQL INSERT runs and blocks on Adapter's User lock (via AFTER ROW FK trigger)
+        await clientB1.query('BEGIN');
+        const roguePromise1 = clientB1.query(
+          `INSERT INTO ${legacySchema}."Booking" VALUES ($1, $2, $3, $4, $5, 'Booked')`,
+          [randomUUID(), c1Id, slot1BId, start1, end1],
+        ).catch((err: { code: string }) => ({ ok: false, code: err.code }));
+
+        await blockedBy(legacyRoguePid, legacyAdapterPid);
+
+        // Adapter executes INSERT -> blocks on Rogue in GiST index (reverse wait!)
+        const adapterPromise1 = clientA1.query(
+          `INSERT INTO ${legacySchema}."Booking" VALUES ($1, $2, $3, $4, $5, 'Booked')`,
+          [randomUUID(), c1Id, slot1AId, start1, end1],
+        ).catch((err: { code: string }) => ({ ok: false, code: err.code }));
+
+        const deadlineReverse = Date.now() + 2_500;
+        while (Date.now() < deadlineReverse) {
+          const obs = await owner.query<{ blockers: number[] }>(
+            'SELECT pg_blocking_pids($1) AS blockers',
+            [legacyAdapterPid],
+          );
+          if (obs.rows[0]?.blockers?.includes(legacyRoguePid)) {
+            legacyReverseBlockers = obs.rows[0].blockers;
+            legacyReverseWaitObserved = true;
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+
+        expect(legacyReverseWaitObserved).toBe(true);
+        expect(legacyReverseBlockers).toContain(legacyRoguePid);
+
+        await clientB1.query('ROLLBACK').catch(() => {});
+        await clientA1.query('ROLLBACK').catch(() => {});
+        await roguePromise1;
+        await adapterPromise1;
+      } finally {
+        clientA1.release();
+        clientB1.release();
+      }
     } finally {
-      clientA.release();
-      clientB.release();
+      await owner.query(`DROP SCHEMA ${legacySchema} CASCADE`);
+    }
+
+    // -------------------------------------------------------------------------------------------------
+    // Part 2: Green Remediated Demonstration on Canonical Database (20261109000000_booking_guard_user_lock)
+    // Proves that under the new migration, booking_guard_s1() acquires User(customerId) FOR UPDATE in
+    // BEFORE ROW trigger before touching the GiST index.
+    // Consequently:
+    // 1. Rogue is serialized at User lock BEFORE entering GiST.
+    // 2. Adapter's INSERT executes with ZERO reverse wait (pg_blocking_pids is empty).
+    // 3. Pre/post Q05 separation: Adapter samples T_elig at > 60m, delays across the 60m cutoff without
+    //    any index wait, and commits cleanly ("a valid 60:00 guard may still commit later").
+    // 4. Rogue unblocks after Adapter commits and fails with 23P01 (CUSTOMER_OVERLAP), NEVER 40P01 (deadlock).
+    // 5. Exactly 1 Booked row commits.
+    // -------------------------------------------------------------------------------------------------
+    const customerId = await user('Customer');
+    const tutorAId = await user('Tutor');
+    const tutorBId = await user('Tutor');
+
+    const now = Date.now();
+    // slotA starts at +60m + 700ms to test pre/post Q05 commit separation
+    const slotAStartsAt = new Date(now + 60 * 60_000 + 700);
+    const slotAEndsAt = new Date(slotAStartsAt.getTime() + 60 * 60_000);
+
+    // slotB overlaps slotA by +30m, well above 60m so Q05 passes on Rogue unblock
+    const slotBStartsAt = new Date(slotAStartsAt.getTime() + 30 * 60_000);
+    const slotBEndsAt = new Date(slotBStartsAt.getTime() + 60 * 60_000);
+
+    const slotARes = await owner.query<{ id: string }>(
+      'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2,$3,\'Offered\') RETURNING "id"',
+      [tutorAId, slotAStartsAt, slotAEndsAt],
+    );
+    const slotBRes = await owner.query<{ id: string }>(
+      'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2,$3,\'Offered\') RETURNING "id"',
+      [tutorBId, slotBStartsAt, slotBEndsAt],
+    );
+    const slotAId = slotARes.rows[0].id;
+    const slotBId = slotBRes.rows[0].id;
+
+    const adapterClient = await owner.connect();
+    const rogueClient = await owner.connect();
+
+    let adapterPid = 0;
+    let roguePid = 0;
+    let rogueBlockers: number[] = [];
+    let adapterReverseBlockers: number[] = [];
+    let rogueSqlState = '';
+    let remainingNoticeAtCommitMs = 0;
+
+    try {
+      adapterPid = await pid(adapterClient);
+      roguePid = await pid(rogueClient);
+
+      // 1. Adapter begins SERIALIZABLE transaction and acquires User and SlotA locks
+      await adapterClient.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+      await adapterClient.query('SELECT "id" FROM "User" WHERE "id" = $1 FOR UPDATE', [customerId]);
+      await adapterClient.query('SELECT "id" FROM "User" WHERE "id" = $1 FOR UPDATE', [tutorAId]);
+      await adapterClient.query('SELECT "id" FROM "Slot" WHERE "id" = $1 FOR UPDATE', [slotAId]);
+
+      // 2. Rogue begins transaction and issues direct-SQL INSERT for the same Customer on overlapping SlotB
+      await rogueClient.query('BEGIN');
+      const roguePromise2 = rogueClient.query(
+        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
+        [customerId, slotBId, slotBStartsAt, slotBEndsAt],
+      ).then(
+        () => ({ ok: true as const }),
+        (err: { code: string; message: string }) => ({ ok: false as const, err }),
+      );
+
+      // 3. Verify Rogue is blocked by Adapter on User lock inside booking_guard_s1() BEFORE index entry
+      await blockedBy(roguePid, adapterPid);
+      const obsRogue = await owner.query<{ blockers: number[] }>(
+        'SELECT pg_blocking_pids($1) AS blockers',
+        [roguePid],
+      );
+      rogueBlockers = obsRogue.rows[0].blockers;
+      expect(rogueBlockers).toContain(adapterPid);
+
+      // 4. Adapter executes INSERT into Booking: trigger runs, samples T_elig (> 60m), and inserts into GiST
+      const insertStartMs = Date.now();
+      await adapterClient.query(
+        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
+        [customerId, slotAId, slotAStartsAt, slotAEndsAt],
+      );
+      const insertDurationMs = Date.now() - insertStartMs;
+
+      // 5. Observe Adapter blockers: because Rogue was blocked BEFORE inserting into GiST,
+      // Adapter experiences ZERO reverse wait on Rogue in GiST!
+      const obsAdapter = await owner.query<{ blockers: number[] }>(
+        'SELECT pg_blocking_pids($1) AS blockers',
+        [adapterPid],
+      );
+      adapterReverseBlockers = obsAdapter.rows[0].blockers;
+      expect(adapterReverseBlockers).not.toContain(roguePid);
+      expect(adapterReverseBlockers.length).toBe(0);
+
+      // 6. Demonstrate pre/post Q05 separation:
+      // T_elig was sampled during INSERT at > 60m remaining.
+      // Now delay 800ms across the 60m boundary so remaining notice is < 60m.
+      await new Promise(resolve => setTimeout(resolve, 800));
+      remainingNoticeAtCommitMs = slotAStartsAt.getTime() - Date.now();
+      expect(remainingNoticeAtCommitMs).toBeLessThan(60 * 60_000);
+
+      // Adapter issues COMMIT: valid 60:00 guard may still commit later
+      await adapterClient.query('COMMIT');
+
+      // 7. Rogue now unblocks from User lock, evaluates SlotB and T_elig, attempts GiST insert,
+      // and fails with 23P01 (booked_customer_no_overlap). ZERO deadlock (40P01) occurs!
+      const rogueOutcome2 = await roguePromise2;
+      expect(rogueOutcome2.ok).toBe(false);
+      if (!rogueOutcome2.ok) {
+        rogueSqlState = rogueOutcome2.err.code;
+        expect(rogueSqlState).toBe('23P01');
+      }
+      await rogueClient.query('ROLLBACK');
+
+      // 8. Confirm final committed state: exactly 1 Booked row exists for this Customer
+      const finalCountRes = await owner.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM "Booking" WHERE "customerId" = $1 AND "status" = \'Booked\'',
+        [customerId],
+      );
+      expect(finalCountRes.rows[0].n).toBe(1);
+
+      console.info(
+        'BDF28_EVIDENCE',
+        JSON.stringify({
+          legacyComparativePart1: {
+            legacyAdapterPid,
+            legacyRoguePid,
+            legacyReverseBlockers,
+            reverseWaitObserved: legacyReverseWaitObserved,
+          },
+          remediatedCanonicalPart2: {
+            adapterPid,
+            roguePid,
+            rogueBlockers,
+            adapterReverseBlockers,
+            insertDurationMs,
+            remainingNoticeAtCommitMs,
+            rogueSqlState,
+            finalBookedRows: finalCountRes.rows[0].n,
+          },
+        }),
+      );
+    } finally {
+      adapterClient.release();
+      rogueClient.release();
     }
   });
 });
