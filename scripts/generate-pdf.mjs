@@ -8,6 +8,15 @@ const rootDir = resolve(__dirname, '..');
 const mdPath = resolve(rootDir, 'docs/deliverables/deliverable-1.md');
 const pdfPath = resolve(rootDir, 'docs/deliverables/CPE334_Deliverable1_NutTiew.pdf');
 
+function slugify(text) {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\u0E00-\u0E7F\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 function parseMarkdown(md) {
   let html = '';
   const lines = md.split('\n');
@@ -36,26 +45,38 @@ function parseMarkdown(md) {
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
 
-    // Code blocks
+    // Code blocks / Mermaid
     if (line.trim().startsWith('```')) {
       closeListIfNeeded();
       closeTableIfNeeded();
       if (!inCode) {
         inCode = true;
-        codeLang = line.trim().slice(3);
-        html += `<pre><code class="language-${codeLang}">`;
+        codeLang = line.trim().slice(3).trim();
+        if (codeLang === 'mermaid') {
+          html += '<div class="mermaid">\n';
+        } else {
+          html += `<pre><code class="language-${codeLang}">`;
+        }
       } else {
         inCode = false;
-        html += '</code></pre>\n';
+        if (codeLang === 'mermaid') {
+          html += '</div>\n';
+        } else {
+          html += '</code></pre>\n';
+        }
       }
       continue;
     }
 
     if (inCode) {
-      html += line
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;') + '\n';
+      if (codeLang === 'mermaid') {
+        html += line + '\n';
+      } else {
+        html += line
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;') + '\n';
+      }
       continue;
     }
 
@@ -73,9 +94,11 @@ function parseMarkdown(md) {
       closeListIfNeeded();
       closeTableIfNeeded();
       const level = headingMatch[1].length;
-      const text = inlineFormat(headingMatch[2]);
-      const id = headingMatch[2].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-      html += `<h${level} id="${id}">${text}</h${level}>\n`;
+      const headingRaw = headingMatch[2];
+      const text = inlineFormat(headingRaw);
+      const slug = slugify(headingRaw);
+      const altSlug = headingRaw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      html += `<h${level} id="${slug}"><a name="${altSlug}"></a>${text}</h${level}>\n`;
       continue;
     }
 
@@ -130,7 +153,6 @@ function parseMarkdown(md) {
         html += '<ul>\n';
       }
       let content = ulMatch[2];
-      // Checkbox support
       if (content.startsWith('[x] ') || content.startsWith('[X] ')) {
         content = '<input type="checkbox" checked disabled /> ' + content.slice(4);
       } else if (content.startsWith('[ ] ')) {
@@ -213,21 +235,28 @@ async function generatePdf() {
   <style>
     @page {
       size: A4;
-      margin: 20mm 15mm 20mm 15mm;
+      margin: 18mm 14mm 18mm 14mm;
       @bottom-right {
-        content: counter(page);
-        font-size: 9pt;
-        color: #718096;
+        content: "Page " counter(page);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #64748b;
+      }
+      @bottom-left {
+        content: "CPE334 NutTiew — Deliverable 1 (Parts A–F)";
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 8.5pt;
+        color: #64748b;
       }
     }
     *, *::before, *::after {
       box-sizing: border-box;
     }
     body {
-      font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      font-size: 10.5pt;
-      line-height: 1.6;
-      color: #1a202c;
+      font-family: 'Sarabun', 'TH Sarabun New', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 10pt;
+      line-height: 1.55;
+      color: #1e293b;
       background: #ffffff;
       margin: 0;
       padding: 0;
@@ -239,57 +268,62 @@ async function generatePdf() {
       break-after: avoid;
     }
     h1 {
-      font-size: 20pt;
+      font-size: 18pt;
       border-bottom: 2px solid #2563eb;
-      padding-bottom: 6px;
-      margin-top: 24pt;
-      margin-bottom: 12pt;
-    }
-    h2 {
-      font-size: 15pt;
-      border-bottom: 1px solid #cbd5e1;
-      padding-bottom: 4px;
-      margin-top: 18pt;
+      padding-bottom: 5px;
+      margin-top: 22pt;
       margin-bottom: 10pt;
     }
+    h2 {
+      font-size: 14pt;
+      border-bottom: 1px solid #cbd5e1;
+      padding-bottom: 4px;
+      margin-top: 16pt;
+      margin-bottom: 8pt;
+    }
     h3 {
-      font-size: 12pt;
-      margin-top: 14pt;
+      font-size: 11.5pt;
+      margin-top: 12pt;
       margin-bottom: 6pt;
+    }
+    h4 {
+      font-size: 10.5pt;
+      margin-top: 10pt;
+      margin-bottom: 4pt;
     }
     p, ul, ol {
       margin-top: 0;
-      margin-bottom: 10pt;
+      margin-bottom: 8pt;
     }
     li {
-      margin-bottom: 4pt;
+      margin-bottom: 3pt;
     }
     hr {
       border: 0;
       height: 1px;
       background: #e2e8f0;
-      margin: 20pt 0;
+      margin: 16pt 0;
     }
     code {
       font-family: 'Fira Code', 'Consolas', 'Courier New', monospace;
-      font-size: 9pt;
+      font-size: 8.5pt;
       background-color: #f1f5f9;
       color: #0f172a;
-      padding: 2px 5px;
-      border-radius: 4px;
+      padding: 2px 4px;
+      border-radius: 3px;
       border: 1px solid #e2e8f0;
     }
     pre {
       background-color: #0f172a;
       color: #f8fafc;
-      padding: 12px;
-      border-radius: 6px;
+      padding: 10px 12px;
+      border-radius: 5px;
       overflow-x: auto;
-      font-size: 8.5pt;
-      line-height: 1.45;
+      font-size: 8pt;
+      line-height: 1.4;
       page-break-inside: avoid;
       break-inside: avoid;
-      margin-bottom: 12pt;
+      margin-bottom: 10pt;
     }
     pre code {
       background-color: transparent;
@@ -298,27 +332,33 @@ async function generatePdf() {
       border: 0;
     }
     blockquote {
-      margin: 12pt 0;
-      padding: 8pt 12pt;
+      margin: 10pt 0;
+      padding: 6pt 10pt;
       background-color: #f8fafc;
-      border-left: 4px solid #3b82f6;
+      border-left: 3.5px solid #3b82f6;
       color: #475569;
       font-style: italic;
     }
     .table-container {
-      margin-bottom: 14pt;
+      margin-bottom: 12pt;
       overflow-x: auto;
-      page-break-inside: avoid;
-      break-inside: avoid;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 9pt;
+      font-size: 8.5pt;
+      page-break-inside: auto;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tr {
+      page-break-inside: avoid;
+      break-inside: avoid;
     }
     th, td {
       border: 1px solid #cbd5e1;
-      padding: 6pt 8pt;
+      padding: 5pt 7pt;
       text-align: left;
       vertical-align: top;
     }
@@ -331,17 +371,17 @@ async function generatePdf() {
       background-color: #f8fafc;
     }
     .doc-image {
-      margin: 14pt 0;
+      margin: 12pt 0;
       text-align: center;
       page-break-inside: avoid;
       break-inside: avoid;
     }
     .doc-image img {
-      max-width: 95%;
+      max-width: 92%;
       height: auto;
-      border-radius: 6px;
+      border-radius: 5px;
       border: 1px solid #cbd5e1;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     }
     .doc-image figcaption {
       font-size: 8.5pt;
@@ -350,28 +390,38 @@ async function generatePdf() {
       font-style: italic;
     }
     .math-display {
-      margin: 10pt 0;
+      margin: 8pt 0;
       text-align: center;
       page-break-inside: avoid;
       break-inside: avoid;
     }
     .math-display code {
-      font-size: 10pt;
+      font-size: 9.5pt;
       background: #eff6ff;
       border-color: #bfdbfe;
       color: #1d4ed8;
-      padding: 4px 10px;
+      padding: 3px 8px;
     }
     .math-inline code {
       background: #eff6ff;
       border-color: #bfdbfe;
       color: #1d4ed8;
     }
+    .mermaid {
+      text-align: center;
+      margin: 12pt 0;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
     a {
       color: #2563eb;
       text-decoration: none;
     }
   </style>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+  </script>
 </head>
 <body>
 ${bodyHtml}
@@ -384,16 +434,19 @@ ${bodyHtml}
   
   await page.setContent(fullHtml, { waitUntil: 'load' });
   
+  // Wait a short moment for any async client-side mermaid rendering
+  await page.waitForTimeout(1500);
+
   console.log('Generating PDF to:', pdfPath);
   await page.pdf({
     path: pdfPath,
     format: 'A4',
     printBackground: true,
     margin: {
-      top: '20mm',
-      bottom: '20mm',
-      left: '15mm',
-      right: '15mm',
+      top: '18mm',
+      bottom: '18mm',
+      left: '14mm',
+      right: '14mm',
     },
   });
 
