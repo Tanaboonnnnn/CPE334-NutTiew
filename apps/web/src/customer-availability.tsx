@@ -606,11 +606,6 @@ export function CustomerAvailability({
         controller.signal.aborted
       ) return;
 
-      if (capturedBinding && res.headers.get('X-NutTiew-Session-Binding') !== capturedBinding) {
-        handleSessionBindingChanged();
-        return;
-      }
-
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
           clearProtectedState();
@@ -618,6 +613,11 @@ export function CustomerAvailability({
           return;
         }
         throw new Error('HTTP_' + res.status);
+      }
+
+      if (capturedBinding && res.headers.get('X-NutTiew-Session-Binding') !== capturedBinding) {
+        handleSessionBindingChanged();
+        return;
       }
       const body = await res.json();
       if (
@@ -674,11 +674,6 @@ export function CustomerAvailability({
         controller.signal.aborted
       ) return;
 
-      if (capturedBinding && res.headers.get('X-NutTiew-Session-Binding') !== capturedBinding) {
-        handleSessionBindingChanged();
-        return;
-      }
-
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
           clearProtectedState();
@@ -690,6 +685,11 @@ export function CustomerAvailability({
           return;
         }
         throw new Error('HTTP_' + res.status);
+      }
+
+      if (capturedBinding && res.headers.get('X-NutTiew-Session-Binding') !== capturedBinding) {
+        handleSessionBindingChanged();
+        return;
       }
       const body = await res.json();
       if (

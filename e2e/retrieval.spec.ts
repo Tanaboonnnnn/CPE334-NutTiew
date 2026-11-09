@@ -286,6 +286,72 @@ test.describe('F-S1-05 Booking Retrieval and Schedule View E2E (RET-15 & RET-16)
     await expect(page.locator('.dashboard-auth-error')).toBeVisible();
   });
 
+  test('RET-15-ERR-503: Injected 503 without session binding header renders error state with retry and does not trigger session mismatch', async ({
+    page,
+  }) => {
+    await signIn(page, customer1Email);
+
+    // Intercept list request to return 503 with real error envelope WITHOUT X-NutTiew-Session-Binding header
+    await page.route('**/api/v1/customer/bookings', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE', message: 'Service unavailable' } }),
+      });
+    });
+
+    await page.locator('[data-testid="nav-my-bookings"]').click();
+
+    // Verify error state is shown and user is NOT logged out / session not re-bootstrapped
+    const errorSurface = page.locator('.customer-bookings-error');
+    await expect(errorSurface).toBeVisible();
+    await expect(errorSurface).toContainText('ไม่สามารถโหลดข้อมูลการจองได้ในขณะนี้');
+    const retryBtn = errorSurface.getByRole('button', { name: 'ลองใหม่อีกครั้ง' });
+    await expect(retryBtn).toBeVisible();
+
+    // Unroute 503 and retry -> restores bookings
+    await page.unroute('**/api/v1/customer/bookings');
+    await retryBtn.click();
+    await expect(page.locator('[data-testid="customer-bookings-list"]')).toBeVisible();
+  });
+
+  test('RET-15-ERR-404: Injected 404 detail without session binding header renders not-found modal state and does not trigger session mismatch', async ({
+    page,
+  }) => {
+    await signIn(page, customer1Email);
+    await page.locator('[data-testid="nav-my-bookings"]').click();
+
+    const futureCard = page.locator(`[data-booking-id="${futureBookingId}"]`);
+    await expect(futureCard).toBeVisible();
+
+    // Intercept detail request to return 404 with real error envelope WITHOUT X-NutTiew-Session-Binding header
+    await page.route(`**/api/v1/customer/bookings/${futureBookingId}`, async (route) => {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: 'BOOKING_NOT_FOUND', message: 'Booking not found' } }),
+      });
+    });
+
+    // Click "ดูรายละเอียด"
+    await futureCard.locator('[data-testid="view-booking-detail"]').click();
+
+    // Verify not-found modal state is rendered according to ui-spec.md §3.2
+    const modal = page.locator('#customer-booking-detail-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal.locator('.not-found-state')).toBeVisible();
+    await expect(modal.locator('.not-found-state')).toContainText('ไม่พบข้อมูลการจองนี้');
+
+    // Click "กลับสู่รายการจอง" to dismiss
+    const backBtn = page.locator('[data-testid="modal-back-btn"]');
+    await expect(backBtn).toBeVisible();
+    await backBtn.click();
+
+    // Modal is dismissed, user remains on bookings tab with cards intact
+    await expect(modal).toBeHidden();
+    await expect(futureCard).toBeVisible();
+  });
+
   test('RET-16: Tutor views dynamic occupancy badges and schedule bookings list; Customer B cannot see Customer A bookings or retrieve via API (safe 404)', async ({
     page,
   }) => {

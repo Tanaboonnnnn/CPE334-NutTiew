@@ -16,7 +16,7 @@
 | `npm run typecheck` | `@nuttiew/api` and `@nuttiew/web` TypeScript typechecks exit 0 with 0 errors | **PASS** |
 | `npm run build` | `@nuttiew/api` `tsc` and `@nuttiew/web` `tsc -b && vite build` exit 0 with 0 errors | **PASS** |
 | `npx --prefix apps/api vitest run test/retrieval.db.test.ts` | **15 passed / 0 failed** (`RET-01..RET-14`, `RET-17` against real PostgreSQL, including RET-14 OS child process) | **PASS** |
-| `npx playwright test e2e/retrieval.spec.ts` | Microsoft Edge browser, **4 passed / 0 failed** (`RET-15`, `RET-15-LATE`, `RET-15-LOGOUT-503`, `RET-16`) | **PASS** |
+| `npx playwright test e2e/retrieval.spec.ts` | Microsoft Edge browser, **6 passed / 0 failed** (`RET-15`, `RET-15-LATE`, `RET-15-LOGOUT-503`, `RET-15-ERR-503`, `RET-15-ERR-404`, `RET-16`) | **PASS** |
 | `npx playwright test` | Full regression suite, Microsoft Edge browser, **61 passed / 0 failed** across all features | **PASS** |
 | `git diff --check` | Zero whitespace or formatting errors | **PASS** |
 
@@ -36,9 +36,10 @@
 
 3. **Fail-Closed Customer Private Booking UI Lifecycle (`apps/web/src/customer-availability.tsx`):**
    - `clearProtectedState()` immediately resets `myBookings = []`, `selectedBookingDetail = null`, `loadingDetail = false`, and `bookingsError = ''`.
-   - Both `fetchMyBookings` and `openBookingDetail` implement dedicated `AbortController` refs, epoch/generation checks (`sessionEpoch.current !== capturedEpoch`), response header validation (`X-NutTiew-Session-Binding`), and DTO shape validation.
+   - Validated HTTP response status before checking session binding: 401/403 triggers auth fail-closed, 404 detail renders `BOOKING_NOT_FOUND` modal without session mismatch, and 503 list renders error surface with retry without triggering session mismatch. Evaluated through `RET-15-ERR-503` and `RET-15-ERR-404`.
+   - Both `fetchMyBookings` and `openBookingDetail` implement dedicated `AbortController` refs, epoch/generation checks (`sessionEpoch.current !== capturedEpoch`), response header validation (`X-NutTiew-Session-Binding` on 200 OK), and DTO shape validation.
    - Under `logoutBusy` or `logoutError`, the `#customer-bookings-section` and detail modal are immediately hidden, displaying an auth-guarded notice.
-   - Proven via deterministic E2E tests: `RET-15-LATE` (discarding stale delayed 200) and `RET-15-LOGOUT-503` (fail-closed concealment on logout 503).
+   - Proven via deterministic E2E tests: `RET-15-LATE` (discarding stale delayed 200), `RET-15-LOGOUT-503` (fail-closed concealment on logout 503), `RET-15-ERR-503` (injected 503 with retry), and `RET-15-ERR-404` (injected 404 not-found modal).
 
 4. **Genuine Process Restart Persistence Proof (`RET-14` in `apps/api/test/retrieval.db.test.ts`):**
    - Updated `RET-14` to spawn an actual Node child process via `node:child_process.spawnSync` running `--import tsx --input-type=module -e <childCode>`.
