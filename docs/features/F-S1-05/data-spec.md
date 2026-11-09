@@ -20,11 +20,11 @@ All database access in F-S1-05 consists of pure `SELECT` queries executed at Pos
 ## 2. Server-Authoritative Queries and Projections
 
 ### 2.1 Customer: List Own Bookings
-Retrieves all Bookings belonging strictly to the authenticated Customer (`customerId = principal.userId`). All rows in the query share a single uniform evaluation snapshot derived via `statement_timestamp()`:
+Retrieves all Bookings belonging strictly to the authenticated Customer (`customerId = principal.userId`). All rows in the query share a single uniform evaluation snapshot derived via `statement_timestamp()`, preserved as `timestamptz` throughout SQL comparison to prevent session timezone drift:
 
 ```sql
 WITH eval_snapshot AS (
-  SELECT statement_timestamp() AT TIME ZONE 'UTC' AS evaluated_at
+  SELECT statement_timestamp() AS evaluated_at
 )
 SELECT
   b."id",
@@ -38,7 +38,7 @@ SELECT
     WHEN b."endsAt" <= s_clock.evaluated_at THEN 'Past'
     ELSE 'Booked'
   END AS "displayStatus",
-  to_char(s_clock.evaluated_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
+  to_char(s_clock.evaluated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
 FROM eval_snapshot AS s_clock
 CROSS JOIN "Booking" AS b
 INNER JOIN "Slot" AS s ON s."id" = b."currentSlotId"
@@ -49,16 +49,17 @@ ORDER BY b."startsAt" ASC, b."id" ASC;
 **Data Mapping Rules:**
 - `tutorRef`: Generated as `"TUTOR-" + row.tutorId.slice(0, 8)`.
 - `displayStatus`: Derived conditionally in SQL relative to `s_clock.evaluated_at`. If `endsAt <= evaluated_at`, `displayStatus = 'Past'`; otherwise `'Booked'`. Database `status` remains strictly `'Booked'`.
-- `meta.evaluatedAt`: In multi-row results, the uniform `evaluatedAt` string is extracted for `meta.evaluatedAt`. When the query returns 0 rows (`data: []`), the application service captures `statement_timestamp()` (or an explicit evaluation snapshot) so that `meta.evaluatedAt` is always populated as a valid ISO-8601 UTC timestamp.
+- `timestamptz` Integrity: `s_clock.evaluated_at` is preserved as `timestamptz` throughout SQL comparison against `b."endsAt"`. Converting `statement_timestamp()` via `AT TIME ZONE 'UTC'` in the CTE would strip timezone information into a naive timestamp (`timestamp without time zone`), causing PostgreSQL to interpret it using the session's active `TimeZone` (e.g. `Asia/Bangkok`), skewing comparisons by 7 hours. Preserving `timestamptz` guarantees absolute, timezone-independent comparison.
+- `meta.evaluatedAt`: In multi-row results, the uniform `evaluatedAt` string (formatted explicitly `AT TIME ZONE 'UTC'`) is extracted for `meta.evaluatedAt`. When the query returns 0 rows (`data: []`), the application service captures `statement_timestamp()` so that `meta.evaluatedAt` is always populated as a valid ISO-8601 UTC timestamp.
 
 ---
 
 ### 2.2 Customer: Get Single Booking Detail
-Retrieves one specific Booking by ID, strictly verifying ownership (`b."id" = $1 AND b."customerId" = $2`), using the same single statement evaluation timestamp:
+Retrieves one specific Booking by ID, strictly verifying ownership (`b."id" = $1 AND b."customerId" = $2`), using the same single statement evaluation timestamp preserved as `timestamptz`:
 
 ```sql
 WITH eval_snapshot AS (
-  SELECT statement_timestamp() AT TIME ZONE 'UTC' AS evaluated_at
+  SELECT statement_timestamp() AS evaluated_at
 )
 SELECT
   b."id",
@@ -73,7 +74,7 @@ SELECT
     WHEN b."endsAt" <= s_clock.evaluated_at THEN 'Past'
     ELSE 'Booked'
   END AS "displayStatus",
-  to_char(s_clock.evaluated_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
+  to_char(s_clock.evaluated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
 FROM eval_snapshot AS s_clock
 CROSS JOIN "Booking" AS b
 INNER JOIN "Slot" AS s ON s."id" = b."currentSlotId"
@@ -108,11 +109,11 @@ ORDER BY s."startsAt" ASC, s."id" ASC;
 ---
 
 ### 2.4 Tutor: List Schedule Bookings
-Retrieves all Bookings scheduled on Slots owned by the authenticated Tutor (`s."tutorId" = $1`), evaluated against a single statement evaluation timestamp:
+Retrieves all Bookings scheduled on Slots owned by the authenticated Tutor (`s."tutorId" = $1`), evaluated against a single statement evaluation timestamp preserved as `timestamptz`:
 
 ```sql
 WITH eval_snapshot AS (
-  SELECT statement_timestamp() AT TIME ZONE 'UTC' AS evaluated_at
+  SELECT statement_timestamp() AS evaluated_at
 )
 SELECT
   b."id",
@@ -127,7 +128,7 @@ SELECT
     WHEN b."endsAt" <= s_clock.evaluated_at THEN 'Past'
     ELSE 'Booked'
   END AS "displayStatus",
-  to_char(s_clock.evaluated_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
+  to_char(s_clock.evaluated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "evaluatedAt"
 FROM eval_snapshot AS s_clock
 CROSS JOIN "Booking" AS b
 INNER JOIN "Slot" AS s ON s."id" = b."currentSlotId"

@@ -25,7 +25,7 @@
 | **RET-14** | `FR-S1-16`, `NFR-S1-03` | **AC-S1-30** | `VC/TEST-S1-28` | Persistence / Process Lifecycle (`retrieval.db.test.ts`) | Server restart persistence: Process termination + new DB connection pool reading persistent DB returns identical committed Bookings. |
 | **RET-15** | `FR-S1-14`, `FR-S1-17`, `BR-S1-12`, `Q29`, `NFR-S1-06`, `NFR-S1-09` | **AC-S1-30**, **AC-S1-34** | `VC/TEST-S1-28`, `VC/TEST-S1-32` | Playwright E2E (`e2e/retrieval.spec.ts`) | Customer browser UI: Navigates to My Bookings, views upcoming & past badges, checks Bangkok time, opens detail modal. |
 | **RET-16** | `FR-S1-04`, `FR-S1-07`, `FR-S1-15`, `BR-S1-16`, `NFR-S1-01` | **AC-S1-31**, **AC-S1-32** | `VC/TEST-S1-29`, `VC/TEST-S1-30` | Playwright E2E (`e2e/retrieval.spec.ts`) | Tutor browser UI: Inspects schedule bookings; Customer B cannot see Customer A's booking in UI list/modal; direct API probe returns safe 404. |
-| **RET-17** | `FR-S1-17`, `BR-S1-22`, `Q30`, `NFR-S1-06` | **AC-S1-34** | `VC/TEST-S1-32` | API / Evaluator (`retrieval.db.test.ts`) | Statement snapshot uniformity & empty list: `meta.evaluatedAt` returned when zero rows, shared single snapshot across multi-rows, and exact Q30 boundary ($T-1\text{s}$ vs $T$ vs $T+1\text{s}$). |
+| **RET-17** | `FR-S1-17`, `BR-S1-22`, `Q30`, `NFR-S1-06` | **AC-S1-34** | `VC/TEST-S1-32` | API / Evaluator (`retrieval.db.test.ts`) | Statement snapshot uniformity, empty list metadata, exact Q30 boundary, and session TimeZone independence (`SET LOCAL TIME ZONE 'UTC'` vs `'Asia/Bangkok'`). |
 
 ---
 
@@ -160,6 +160,7 @@
      - When evaluated at $T$: `displayStatus: 'Past'`, `status: 'Booked'`.
      - When evaluated at $T + 1\text{s}$: `displayStatus: 'Past'`, `status: 'Booked'`.
      - Database row check: in all three states, `Booking.status` remains `'Booked'`, never mutating to `'Completed'`.
+  4. **Session TimeZone Independence (`SET LOCAL TIME ZONE`):** Execute retrieval evaluation query with `SET LOCAL TIME ZONE 'UTC'` and `SET LOCAL TIME ZONE 'Asia/Bangkok'`. Verify that because `s_clock.evaluated_at` is preserved as `timestamptz` throughout SQL comparison (`endsAt <= s_clock.evaluated_at`), the computed `displayStatus` ('Booked' vs 'Past') is strictly identical across different session timezones, completely avoiding naive timestamp interpretation bugs.
 
 ---
 
