@@ -290,6 +290,52 @@ function App() {
     setLoading(false);
   };
 
+  const rebootstrapSession = async () => {
+    const current = ++version.current;
+    setLoading(true);
+    setSessionBinding(null);
+    setError('');
+    try {
+      const result = await request('me');
+      if (version.current !== current) return;
+      if (
+        (result.user?.role === 'Tutor' || result.user?.role === 'Customer') &&
+        !result.sessionBinding
+      ) {
+        throw new Error('SESSION_BINDING_MISSING');
+      }
+      suspendedTutorId.current = null;
+      tutorActionsAllowed.current = true;
+      setSessionBinding(result.sessionBinding ?? null);
+      setTutorPhase('active');
+      setUser(result.user as User);
+      setError('');
+    } catch (cause) {
+      if (version.current === current) {
+        if (isUnauthenticated(cause)) {
+          suspendedTutorId.current = null;
+          tutorActionsAllowed.current = false;
+          setSessionBinding(null);
+          setUser(null);
+          setTutorPhase('active');
+          setError('');
+        } else {
+          // Indeterminate failure (503, timeout, network error):
+          // Retain customer identity, do NOT kick to Login!
+          // sessionBinding is null so private selection is hidden.
+          setSessionBinding(null);
+          setError(
+            cause instanceof Error && cause.name === 'AbortError'
+              ? 'การเชื่อมต่อหมดเวลา กรุณาลองใหม่อีกครั้ง'
+              : 'ยังไม่สามารถตรวจสอบสถานะเซสชันได้ กรุณาลองใหม่อีกครั้ง',
+          );
+        }
+      }
+    } finally {
+      if (version.current === current) setLoading(false);
+    }
+  };
+
   if (!loading && user?.role === 'Tutor') {
     if (tutorPhase !== 'active') {
       const pending = busy || tutorPhase === 'logout-pending' || tutorPhase === 'rechecking';
@@ -335,7 +381,34 @@ function App() {
   }
 
   if (!loading && user?.role === 'Customer') {
-    if (!sessionBinding) return null; // No private surface without a server-issued binding.
+    if (!sessionBinding) {
+      return (
+        <main className="dashboard-root customer-session-screen">
+          <section className="customer-session-guard" aria-labelledby="customer-guard-heading">
+            <p className="session-guard-brand">NutTiew</p>
+            <h1 id="customer-guard-heading">ตรวจสอบสถานะเซสชัน</h1>
+            <p role="alert">{error || 'ยังไม่สามารถตรวจสอบสถานะเซสชันได้ กรุณาลองใหม่อีกครั้ง'}</p>
+            <p>ข้อมูลการเลือกช่วงเวลาและบัญชีถูกซ่อนไว้จนกว่าจะยืนยันตัวตนกับเซิร์ฟเวอร์อีกครั้ง</p>
+            <div className="session-guard-actions">
+              <button
+                type="button"
+                onClick={() => void rebootstrapSession()}
+                disabled={busy}
+              >
+                ตรวจสอบเซสชันอีกครั้ง
+              </button>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                disabled={busy}
+              >
+                ออกจากระบบ
+              </button>
+            </div>
+          </section>
+        </main>
+      );
+    }
     return (
       <main className="dashboard-root">
         <CustomerAvailability
@@ -347,6 +420,7 @@ function App() {
           logoutError={error}
           onClearLogoutError={() => setError('')}
           onUnauthorized={sessionExpired}
+          onSessionBindingChanged={rebootstrapSession}
         />
       </main>
     );
