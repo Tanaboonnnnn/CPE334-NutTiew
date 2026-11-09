@@ -6,7 +6,7 @@ export type SlotDto = {
   startsAt: string;
   endsAt: string;
   lifecycle: 'Offered';
-  occupancy: 'Unoccupied';
+  occupancy: 'Occupied' | 'Unoccupied';
 };
 
 type SlotRow = {
@@ -14,6 +14,7 @@ type SlotRow = {
   startsAt: Date;
   endsAt: Date;
   lifecycle: 'Offered';
+  occupancy?: 'Occupied' | 'Unoccupied';
 };
 
 function project(row: SlotRow): SlotDto {
@@ -22,9 +23,7 @@ function project(row: SlotRow): SlotDto {
     startsAt: row.startsAt.toISOString(),
     endsAt: row.endsAt.toISOString(),
     lifecycle: row.lifecycle,
-    // Booking is introduced by Issue #16. It must replace this read projection
-    // with one derived from active Booked rows, never introduce Slot.isBooked.
-    occupancy: 'Unoccupied',
+    occupancy: row.occupancy ?? 'Unoccupied',
   };
 }
 
@@ -36,7 +35,7 @@ export class SlotError extends Error {
 
 export async function listOwnSlots(pool: Pool, userId: string): Promise<SlotDto[]> {
   const result = await pool.query<SlotRow>(
-    'SELECT "id","startsAt","endsAt","lifecycle" FROM "Slot" WHERE "tutorId"=$1 ORDER BY "startsAt" ASC,"id" ASC',
+    'SELECT s."id",s."startsAt",s."endsAt",s."lifecycle",CASE WHEN b."id" IS NOT NULL THEN \'Occupied\' ELSE \'Unoccupied\' END AS "occupancy" FROM "Slot" AS s LEFT JOIN "Booking" AS b ON b."currentSlotId" = s."id" AND b."status" = \'Booked\' WHERE s."tutorId"=$1 ORDER BY s."startsAt" ASC,s."id" ASC',
     [userId],
   );
   return result.rows.map(project);

@@ -576,3 +576,209 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* F-S1-05: Customer Booking Retrieval & Modal */
+.customer-app .badge-booked {
+  background: #eef2f7;
+  color: #172137;
+  border: 1px solid #c6d2e3;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+.customer-app .badge-past {
+  background: #f1f3f6;
+  color: #58697f;
+  border: 1px solid #d4dbe4;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+.customer-bookings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.customer-bookings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.customer-booking-card {
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #cad4e1;
+  border-radius: 12px;
+}
+.card-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.card-mid-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.booking-time-interval {
+  margin: 0;
+  font-weight: 600;
+  color: #202b44;
+  font-size: 1.05rem;
+}
+.booking-code-row {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #58697f;
+}
+.card-action-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.customer-app .view-detail-btn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 16px;
+  background: #f7f8fb;
+  border: 1px solid #cad4e1;
+  border-radius: 8px;
+  color: #202b44;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.customer-app .view-detail-btn:hover {
+  background: #eef2f7;
+  border-color: #8492a8;
+}
+.customer-app .view-detail-btn:focus-visible {
+  outline: 3px solid #aa4519;
+  outline-offset: 2px;
+}
+.customer-app .view-my-bookings-btn {
+  margin-top: 12px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 18px;
+  background: #202b44;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.customer-app .view-my-bookings-btn:focus-visible {
+  outline: 3px solid #aa4519;
+  outline-offset: 2px;
+}
+.customer-app .refresh-availability-button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 9px 18px;
+  background: #f47736;
+  color: #172137;
+  border: 1px solid #d96123;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.customer-app .refresh-availability-button:focus-visible {
+  outline: 3px solid #aa4519;
+  outline-offset: 2px;
+}
+.customer-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.customer-modal {
+  width: min(100%, 540px);
+  background: #ffffff;
+  border: 1px solid #cad4e1;
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+  padding: 24px;
+}
+.customer-modal .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.customer-modal .modal-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: #202b44;
+}
+.customer-modal .modal-close-icon-btn {
+  min-height: 44px;
+  min-width: 44px;
+  background: transparent;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.customer-modal .modal-close-icon-btn:focus-visible {
+  outline: 3px solid #aa4519;
+  outline-offset: 2px;
+}
+.detail-dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  row-gap: 12px;
+  column-gap: 16px;
+  margin: 0 0 20px 0;
+}
+.detail-dl dt {
+  font-weight: 600;
+  color: #58697f;
+  font-size: 0.9rem;
+}
+.detail-dl dd {
+  margin: 0;
+  color: #202b44;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.customer-modal .modal-close-btn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 10px 20px;
+  background: #202b44;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.customer-modal .modal-close-btn:focus-visible {
+  outline: 3px solid #aa4519;
+  outline-offset: 2px;
+}
+.past-notice {
+  font-size: 0.85rem;
+  color: #58697f;
+}

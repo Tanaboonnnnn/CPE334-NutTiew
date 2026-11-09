@@ -48,6 +48,23 @@ type BookingBannerState =
       message: string;
     };
 
+
+export type CustomerBookingItem = {
+  id: string;
+  slotId: string;
+  tutorId: string;
+  tutorRef: string;
+  startsAt: string;
+  endsAt: string;
+  status: 'Booked';
+  displayStatus: 'Booked' | 'Past';
+  createdAt: string;
+};
+
+export type CustomerBookingDetail = CustomerBookingItem & {
+  updatedAt: string;
+};
+
 type UnknownBookingOutcome = {
   slotId: string;
   tutorRef: string;
@@ -345,6 +362,13 @@ export function CustomerAvailability({
   const [csrfLoading, setCsrfLoading] = useState(true);
   const [csrfError, setCsrfError] = useState('');
   const [submittingBooking, setSubmittingBooking] = useState(false);
+  const [activeTab, setActiveTab] = useState<'availability' | 'bookings'>('availability');
+  const [myBookings, setMyBookings] = useState<CustomerBookingItem[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [bookingsError, setBookingsError] = useState('');
+  const [selectedBookingDetail, setSelectedBookingDetail] = useState<CustomerBookingDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState('');
   const [bookingBanner, setBookingBanner] = useState<BookingBannerState | null>(null);
   const [unknownOutcome, setUnknownOutcome] = useState<UnknownBookingOutcome | null>(null);
 
@@ -537,6 +561,81 @@ export function CustomerAvailability({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const fetchMyBookings = async () => {
+    setLoadingBookings(true);
+    setBookingsError('');
+    try {
+      const res = await fetch('/api/v1/customer/bookings', {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          onUnauthorized();
+          return;
+        }
+        throw new Error('HTTP_' + res.status);
+      }
+      const body = await res.json();
+      if (Array.isArray(body?.data)) {
+        setMyBookings(body.data);
+      }
+    } catch {
+      setBookingsError('ไม่สามารถโหลดข้อมูลการจองได้ในขณะนี้');
+    } finally {
+      setLoadingBookings(false);
+    }
+  };
+
+  const openBookingDetail = async (bookingId: string) => {
+    setLoadingDetail(true);
+    setDetailError('');
+    setSelectedBookingDetail(null);
+    try {
+      const res = await fetch('/api/v1/customer/bookings/' + bookingId, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          onUnauthorized();
+          return;
+        }
+        if (res.status === 404) {
+          setDetailError('BOOKING_NOT_FOUND');
+          return;
+        }
+        throw new Error('HTTP_' + res.status);
+      }
+      const body = await res.json();
+      if (body?.data) {
+        setSelectedBookingDetail(body.data);
+      }
+    } catch {
+      setDetailError('LOAD_FAILED');
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'bookings') {
+      void fetchMyBookings();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!selectedBookingDetail && !detailError && !loadingDetail) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedBookingDetail(null);
+        setDetailError('');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedBookingDetail, detailError, loadingDetail]);
+
   const handleLogout = () => {
     version.current++;
     csrfVersion.current++;
@@ -718,16 +817,27 @@ export function CustomerAvailability({
           aria-label="ทางลัดบัญชี Customer"
         >
           <span className="sidebar-section-label">WORKSPACE</span>
-          <a
-            className="sidebar-nav-link sidebar-nav-active"
-            aria-current="page"
-            href="#availability-section"
-            onClick={() => setMenuOpen(false)}
+          <button
+            type="button"
+            className={'sidebar-nav-link' + (activeTab === 'availability' ? ' sidebar-nav-active' : '')}
+            aria-current={activeTab === 'availability' ? 'page' : undefined}
+            onClick={() => { setActiveTab('availability'); setMenuOpen(false); }}
           >
             <Icon kind="calendar" />
             <span>เลือกช่วงเวลาติว</span>
-            <span className="nav-active-marker" aria-hidden="true" />
-          </a>
+            {activeTab === 'availability' && <span className="nav-active-marker" aria-hidden="true" />}
+          </button>
+          <button
+            type="button"
+            className={'sidebar-nav-link' + (activeTab === 'bookings' ? ' sidebar-nav-active' : '')}
+            aria-current={activeTab === 'bookings' ? 'page' : undefined}
+            data-testid="nav-my-bookings"
+            onClick={() => { setActiveTab('bookings'); setMenuOpen(false); }}
+          >
+            <Icon kind="clock" />
+            <span>การจองของฉัน</span>
+            {activeTab === 'bookings' && <span className="nav-active-marker" aria-hidden="true" />}
+          </button>
           <a
             className="sidebar-nav-link"
             href="#account-details"
@@ -764,7 +874,7 @@ export function CustomerAvailability({
           <div className="breadcrumb">
             <span className="breadcrumb-first">NutTiew</span>
             <span aria-hidden="true">/</span>
-            <strong>เลือกช่วงเวลาติว</strong>
+            <strong>{activeTab === 'availability' ? 'เลือกช่วงเวลาติว' : 'การจองของฉัน'}</strong>
           </div>
           <div className="account-status">
             <span
@@ -793,7 +903,94 @@ export function CustomerAvailability({
             </p>
           )}
 
-          <header className="availability-hero">
+          {activeTab === 'bookings' ? (
+            <section id="customer-bookings-section" className="customer-bookings-section" aria-labelledby="customer-bookings-heading">
+              <header className="availability-hero">
+                <div className="availability-hero-copy">
+                  <h2 className="dashboard-kicker">YOUR RESERVATIONS</h2>
+                  <h1 id="customer-bookings-heading">การจองของฉัน</h1>
+                  <p className="availability-helper">
+                    เวลาที่แสดงเป็นเวลาประเทศไทย <strong>Asia/Bangkok (UTC+07:00)</strong>
+                  </p>
+                </div>
+                <div className="availability-hero-actions">
+                  <button
+                    type="button"
+                    className="refresh-availability-button"
+                    data-testid="refresh-bookings-btn"
+                    disabled={loadingBookings}
+                    onClick={() => void fetchMyBookings()}
+                  >
+                    {loadingBookings ? 'กำลังโหลด…' : 'รีเฟรช'}
+                  </button>
+                </div>
+              </header>
+
+              {loadingBookings && (
+                <div className="availability-surface" role="status">
+                  <p>กำลังโหลดรายการจองของคุณ...</p>
+                </div>
+              )}
+
+              {bookingsError && (
+                <div className="customer-bookings-error availability-surface" role="alert">
+                  <p>{bookingsError}</p>
+                  <button type="button" onClick={() => void fetchMyBookings()}>ลองใหม่อีกครั้ง</button>
+                </div>
+              )}
+
+              {!loadingBookings && !bookingsError && myBookings.length === 0 && (
+                <div className="customer-bookings-empty availability-surface">
+                  <p>คุณยังไม่มีประวัติการจองติว</p>
+                  <button
+                    type="button"
+                    data-testid="empty-browse-availability-btn"
+                    onClick={() => setActiveTab('availability')}
+                  >
+                    ค้นหาตารางติวเพื่อเริ่มจอง
+                  </button>
+                </div>
+              )}
+
+              {!loadingBookings && !bookingsError && myBookings.length > 0 && (
+                <div className="customer-bookings-list" data-testid="customer-bookings-list">
+                  {myBookings.map(b => (
+                    <div key={b.id} className="customer-booking-card availability-surface" data-testid="customer-booking-card" data-booking-id={b.id}>
+                      <div className="card-top-row">
+                        <span className="booking-tutor-ref">ผู้สอน: <strong>{b.tutorRef}</strong></span>
+                        <span
+                          className={b.displayStatus === 'Past' ? 'badge-past' : 'badge-booked'}
+                          data-testid="customer-booking-status-badge"
+                        >
+                          {b.displayStatus === 'Past' ? 'สิ้นสุดแล้ว' : 'ยืนยันแล้ว'}
+                        </span>
+                      </div>
+                      <div className="card-mid-row">
+                        <p className="booking-time-interval">
+                          {bangkokLongDate(new Date(b.startsAt))}, {bangkokClock(new Date(b.startsAt))} – {bangkokClock(new Date(b.endsAt))} น. (Asia/Bangkok)
+                        </p>
+                        <p className="booking-code-row">
+                          รหัสการจอง: <code data-testid="booking-card-id">{b.id}</code>
+                        </p>
+                      </div>
+                      <div className="card-action-row">
+                        <button
+                          type="button"
+                          className="view-detail-btn"
+                          data-testid="view-booking-detail"
+                          onClick={() => void openBookingDetail(b.id)}
+                        >
+                          ดูรายละเอียด
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : (
+            <>
+              <header className="availability-hero">
             <div className="availability-hero-copy">
               <h2 className="dashboard-kicker">ยินดีต้อนรับ</h2>
               <h1 id="availability-heading">เลือกช่วงเวลาติว</h1>
@@ -1096,6 +1293,89 @@ export function CustomerAvailability({
             <span>NutTiew · Customer availability</span>
             <span>ข้อมูลช่วงเวลาที่พร้อมให้เลือกจากเซิร์ฟเวอร์เท่านั้น</span>
           </footer>
+            </>
+          )}
+
+          {(selectedBookingDetail || detailError || loadingDetail) && (
+            <div
+              className="customer-modal-backdrop"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="modal-heading"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setSelectedBookingDetail(null);
+                  setDetailError('');
+                }
+              }}
+            >
+              <div className="customer-modal" id="customer-booking-detail-modal">
+                <div className="modal-header">
+                  <h2 id="modal-heading">รายละเอียดการจอง</h2>
+                  <button
+                    type="button"
+                    className="modal-close-icon-btn"
+                    data-testid="close-detail-btn"
+                    aria-label="ปิดรายละเอียดการจอง"
+                    onClick={() => { setSelectedBookingDetail(null); setDetailError(''); }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                {loadingDetail ? (
+                  <div className="modal-content">
+                    <p>กำลังโหลดรายละเอียด...</p>
+                  </div>
+                ) : detailError === 'BOOKING_NOT_FOUND' ? (
+                  <div className="modal-content not-found-state">
+                    <p role="alert">ไม่พบข้อมูลการจองนี้</p>
+                    <button
+                      type="button"
+                      className="modal-close-btn"
+                      data-testid="modal-back-btn"
+                      onClick={() => { setSelectedBookingDetail(null); setDetailError(''); }}
+                    >
+                      กลับสู่รายการจอง
+                    </button>
+                  </div>
+                ) : selectedBookingDetail ? (
+                  <div className="modal-content">
+                    <dl className="detail-dl">
+                      <dt>รหัสการจอง (Booking ID)</dt>
+                      <dd><code data-testid="detail-booking-id">{selectedBookingDetail.id}</code></dd>
+                      <dt>ผู้สอน (Tutor)</dt>
+                      <dd><strong>{selectedBookingDetail.tutorRef}</strong></dd>
+                      <dt>วันและเวลาติว (Appointment Time)</dt>
+                      <dd>
+                        {bangkokLongDate(new Date(selectedBookingDetail.startsAt))}, {bangkokClock(new Date(selectedBookingDetail.startsAt))} – {bangkokClock(new Date(selectedBookingDetail.endsAt))} น. (Asia/Bangkok)
+                      </dd>
+                      <dt>สถานะ (Status)</dt>
+                      <dd>
+                        <span className={selectedBookingDetail.displayStatus === 'Past' ? 'badge-past' : 'badge-booked'} data-testid="detail-status-badge">
+                          {selectedBookingDetail.displayStatus === 'Past' ? 'สิ้นสุดแล้ว' : 'ยืนยันแล้ว'}
+                        </span>
+                        {selectedBookingDetail.displayStatus === 'Past' && (
+                          <span className="past-notice"> • การนัดหมายนี้สิ้นสุดลงแล้ว</span>
+                        )}
+                      </dd>
+                      <dt>วันที่ทำรายการ (Booked At)</dt>
+                      <dd>{bangkokLongDate(new Date(selectedBookingDetail.createdAt))} {bangkokClock(new Date(selectedBookingDetail.createdAt))} น.</dd>
+                    </dl>
+                    <div className="modal-actions">
+                      <button
+                        type="button"
+                        className="modal-close-btn"
+                        data-testid="close-detail-btn-bottom"
+                        onClick={() => { setSelectedBookingDetail(null); setDetailError(''); }}
+                      >
+                        ปิด / กลับสู่รายการ
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

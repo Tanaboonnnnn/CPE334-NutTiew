@@ -138,7 +138,7 @@ export function SlotCalendar({
                   if (!slice || slot.lifecycle !== 'Offered') return null;
                   const start = bangkokClock(new Date(slot.startsAt));
                   const end = bangkokClock(new Date(slot.endsAt));
-                  const occupancy = slot.occupancy === 'Occupied' ? 'มีการจองแล้ว' : 'ยังไม่มีการจอง';
+                  const occupancy = slot.occupancy === 'Occupied' ? 'มีผู้จองแล้ว (Occupied)' : 'ว่าง (เปิดรับจอง)';
                   return <div key={slot.id} role="listitem" data-testid="calendar-slot"
                     data-slot-id={slot.id} data-day={day} data-start-minute={slice.top}
                     className={'calendar-slot calendar-slot-' + colorFor(slot.id) + (slice.height < 46 ? ' calendar-slot-compact' : '')}
@@ -146,7 +146,7 @@ export function SlotCalendar({
                     aria-label={'เปิดช่วงเวลาแล้ว ' + start + ' ถึง ' + end + ' เวลาไทย ' + occupancy}>
                     <strong>{start}–{end}</strong>
                     <span>เปิดช่วงเวลาแล้ว</span>
-                    <span className="calendar-slot-occupancy">{occupancy}</span>
+                    <span className={"calendar-slot-occupancy " + (slot.occupancy === 'Occupied' ? 'badge-occupied' : 'badge-unoccupied')} data-testid="calendar-occupancy-badge">{occupancy}</span>
                   </div>;
                 })}
               </div>
@@ -186,7 +186,7 @@ export function AllSlotsAgenda({ slots }: { slots: OfferedSlot[] }) {
           </div>
           <div className="slot-tags">
             <span>เปิดช่วงเวลาแล้ว</span>
-            <span>{slot.occupancy === 'Occupied' ? 'มีการจองแล้ว' : 'ยังไม่มีการจอง'}</span>
+            <span className={slot.occupancy === 'Occupied' ? 'badge-occupied' : 'badge-unoccupied'} data-testid="slot-occupancy-badge">{slot.occupancy === 'Occupied' ? 'มีผู้จองแล้ว (Occupied)' : 'ว่าง (เปิดรับจอง)'}</span>
           </div>
         </li>;
       })}</ul>}

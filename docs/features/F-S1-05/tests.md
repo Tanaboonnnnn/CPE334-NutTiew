@@ -164,5 +164,5 @@
 
 ---
 
-## 3. Current Part E Status
-All 17 test cases (`RET-01..RET-17`) are **PLANNED / NOT RUN**. No test execution or pass results are claimed in this Part E specification PR.
+## 3. Part F Execution Status
+All 17 test cases (`RET-01..RET-17`) are fully implemented and verified **PASS (100%)**. Complete execution logs, observed command outcomes, and TDD evidence are documented in [`verification-ledger.md`](./verification-ledger.md).
