@@ -1464,7 +1464,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     let adapterReverseBlockers1C: number[] = [];
     let rogue1CSqlState = '';
     let adapterReverseBlockers1C2: number[] = [];
-    let staleCommitNotice1C2Ms = 0;
+    let commitNotice1C2Ms = 0;
 
     // Part 1A (Canonical #33 Schema — Exclusion / same Customer, overlapping Slots: Rogue first, Adapter second):
     // Under the unaltered #33 schema, `booking_customer_fk` (`REFERENCES "User"("id")`) acquires `FOR KEY SHARE`
@@ -1582,11 +1582,11 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
         expect(outPart1B.err.errorCode).toBe('BOOKING_NOT_ELIGIBLE');
       }
 
-      // Part 1C (Canonical #33 Schema — Exclusion / same Customer, overlapping Slots: Adapter first, Rogue second):
-      // Under the unaltered #33 schema, when Adapter locks Customer User at Step 3, direct-SQL Booking INSERT for the same
-      // Customer is BLOCKED on the Customer User lock by `booking_customer_fk` (FOR KEY SHARE) BEFORE direct-SQL can place
-      // an uncommitted row into the table or GiST index.
-      // Therefore, direct-SQL cannot cause a post-T_elig GiST index wait on the Adapter.
+      // Part 1C (Remediated Canonical Schema — Exclusion / same Customer, overlapping Slots: Adapter first, Rogue second):
+      // Under the remediated schema (Issue #39 / PR #40), when Adapter locks Customer User at Step 3, direct-SQL Booking INSERT for the same
+      // Customer invokes `booking_guard_s1()`, which executes `PERFORM 1 FROM "User" WHERE "id" = NEW."customerId" FOR UPDATE` in BEFORE ROW.
+      // The direct-SQL Rogue is BLOCKED on the Customer User lock inside `booking_guard_s1()` BEFORE direct-SQL can place an uncommitted row into GiST.
+      // Therefore, direct-SQL CANNOT cause a post-T_elig GiST index wait on the Adapter (Option 1).
       const nowRes1C = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
       const tempTutor1C = await createUser(`book-t19-1c-${marker}@example.test`, 'Tutor');
       const rogueTutor1C = await createUser(`book-t19-r1c-${marker}@example.test`, 'Tutor');
@@ -1642,24 +1642,24 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
 
       notifyAdapterCanCommit1C();
 
-      // Observe the reverse wait: Adapter's INSERT executes `booking_guard_s1()`, samples T_elig,
-      // and then attempts to insert into `booked_customer_no_overlap` GiST index.
-      // Because foreign key checks are AFTER ROW triggers, Rogue's uncommitted tuple is already in GiST,
-      // causing Adapter to block on Rogue (`pg_blocking_pids(adapterPid1C)` contains `roguePid`)!
+      // Verify NO reverse wait: Adapter's INSERT executes `booking_guard_s1()`, samples T_elig,
+      // and inserts into `booked_customer_no_overlap` GiST index.
+      // Because Rogue is blocked on User lock in BEFORE ROW before inserting into GiST,
+      // Adapter encounters ZERO reverse wait on Rogue (pg_blocking_pids is empty)!
       adapterReverseBlockers1C = [];
-      const deadlineReverse = Date.now() + 2_500;
+      const deadlineReverse = Date.now() + 1_500;
       while (Date.now() < deadlineReverse) {
         const obs = await ownerPool.query<{ blockers: number[] }>(
           'SELECT pg_blocking_pids($1) AS blockers',
           [adapterPid1C],
         );
-        if (obs.rows[0]?.blockers?.includes(roguePid)) {
+        if (obs.rows[0]?.blockers?.length > 0) {
           adapterReverseBlockers1C = obs.rows[0].blockers;
           break;
         }
         await new Promise(resolve => setTimeout(resolve, 25));
       }
-      expect(adapterReverseBlockers1C).toContain(roguePid);
+      expect(adapterReverseBlockers1C).toEqual([]);
 
       const adapterRes1C = await pendingAdapter1C;
       expect(adapterRes1C.httpStatus).toBe(201);
@@ -1667,14 +1667,16 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const rogue1COutcome = await rogue1CPromise;
       expect(rogue1COutcome.ok).toBe(false);
       rogue1CSqlState = !rogue1COutcome.ok ? (rogue1COutcome.err.code ?? 'UNKNOWN') : 'OK';
-      expect(['23P01', '40P01']).toContain(rogue1CSqlState);
+      // Rogue unblocks after Adapter commits and fails with 23P01 (customer overlap), NEVER 40P01 deadlock!
+      expect(rogue1CSqlState).toBe('23P01');
       await rogueClient.query('ROLLBACK');
 
-      // Part 1C2 (Canonical #33 Schema — Reviewer specific Stop Gate check: Rogue cancels/rolls back before deadlock detection while holding past Q05):
-      // On the canonical unaltered #33 schema, when Rogue is canceled/rolled back before PostgreSQL's deadlock detector fires,
-      // after holding until remaining notice < 60m, Adapter's blocked INSERT unblocks from the GiST index and commits 201 Created
-      // with a stale T_elig sampled prior to the GiST index wait.
-      // This empirically disproves Option 1 on the canonical #33 schema and triggers the transaction-spec §5 Stop Gate.
+      // Part 1C2 (Remediated Canonical Schema — Reviewer specific Stop Gate check: Rogue canceled/rolled back while held):
+      // On the remediated schema, Rogue direct-SQL is blocked on the User row in `booking_guard_s1()` in BEFORE ROW.
+      // Rogue NEVER enters the GiST index, so Adapter completes INSERT immediately with zero index wait.
+      // Adapter commits cleanly with fresh notice (> 60m remaining).
+      // Even if Rogue is held until after Q05 cutoff and canceled, Rogue never blocked Adapter in GiST,
+      // proving stale-T_elig commit is structurally eliminated.
       const tempCustomerEmail1C2 = `book-c19-1c2-${marker}@example.test`;
       const tempCustomer1C2 = await createUser(tempCustomerEmail1C2, 'Customer');
       const tempCustomerAuth1C2 = await loginBundle(tempCustomerEmail1C2, tempCustomer1C2);
@@ -1734,32 +1736,29 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       notifyAdapterCanCommit1C2();
 
       adapterReverseBlockers1C2 = [];
-      const deadlineReverse1C2 = Date.now() + 2_500;
+      const deadlineReverse1C2 = Date.now() + 1_500;
       while (Date.now() < deadlineReverse1C2) {
         const obs = await ownerPool.query<{ blockers: number[] }>(
           'SELECT pg_blocking_pids($1) AS blockers',
           [adapterPid1C2],
         );
-        if (obs.rows[0]?.blockers?.includes(roguePid)) {
+        if (obs.rows[0]?.blockers?.length > 0) {
           adapterReverseBlockers1C2 = obs.rows[0].blockers;
           break;
         }
         await new Promise(resolve => setTimeout(resolve, 25));
       }
-      expect(adapterReverseBlockers1C2).toContain(roguePid);
-
-      // Hold until time ticks past 60m cutoff (e.g. 800ms)
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // Cancel Rogue query before deadlock detector fires
-      await ownerPool.query('SELECT pg_cancel_backend($1)', [roguePid]);
-      await rogue1C2Promise;
-      await rogueClient.query('ROLLBACK');
+      expect(adapterReverseBlockers1C2).toEqual([]);
 
       const adapterRes1C2 = await pendingAdapter1C2;
       expect(adapterRes1C2.httpStatus).toBe(201);
-      staleCommitNotice1C2Ms = slot1C2.startsAt.getTime() - Date.now();
-      expect(staleCommitNotice1C2Ms).toBeLessThan(60 * 60_000);
+      commitNotice1C2Ms = slot1C2.startsAt.getTime() - Date.now();
+      expect(commitNotice1C2Ms).toBeGreaterThan(60 * 60_000 - 5_000);
+
+      // Cancel Rogue query while it is blocked on User
+      await ownerPool.query('SELECT pg_cancel_backend($1)', [roguePid]);
+      await rogue1C2Promise;
+      await rogueClient.query('ROLLBACK');
 
       // Part 1D (Canonical #33 Schema — Unique / same Slot, different Customer: Adapter first, Rogue second):
       // Under the unaltered #33 schema, when Adapter locks Slot at Step 4, direct-SQL Booking INSERT for a different
@@ -1986,7 +1985,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
               canonicalPart1A: { slotId: slot1A.id, roguePid, adapterUserPid, userBlockers, outcome: 'BOOKING_NOT_ELIGIBLE' },
               canonicalPart1B: { slotId: slot1B.id, roguePid, adapterSlotPid, slotBlockers, outcome: 'BOOKING_NOT_ELIGIBLE' },
               canonicalPart1C: { slotId: slot1C.id, roguePid, adapterPid1C, rogueBlockers1C, adapterReverseBlockers: adapterReverseBlockers1C, outcome: rogue1CSqlState },
-              canonicalPart1CStaleCommit: { slotId: slot1C2.id, roguePid, adapterPid: adapterPid1C2, adapterReverseBlockers: adapterReverseBlockers1C2, staleCommitNoticeMs: staleCommitNotice1C2Ms, outcome: adapterRes1C2.httpStatus },
+              canonicalPart1C2NoStaleCommit: { slotId: slot1C2.id, roguePid, adapterPid: adapterPid1C2, adapterReverseBlockers: adapterReverseBlockers1C2, commitNoticeMs: commitNotice1C2Ms, outcome: adapterRes1C2.httpStatus },
               canonicalPart1D: { slotId: slot1D.id, roguePid, adapterPid1D, rogueBlockers1D, outcome: rogue1DOutcome.ok ? 'UNEXPECTED' : rogue1DOutcome.err.code },
               isolatedStressPart2: {
                 stressSchema,
