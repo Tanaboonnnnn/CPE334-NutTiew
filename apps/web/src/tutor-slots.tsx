@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { AllSlotsAgenda, SlotCalendar, type OfferedSlot } from './tutor-calendar.js';
+import { AllSlotsAgenda, SlotCalendar, bangkokClock, bangkokLongDate, type OfferedSlot } from './tutor-calendar.js';
 import { TutorDashboardShell } from './tutor-dashboard-shell.js';
 
 type SlotList = { data: OfferedSlot[]; meta: { requestId: string } };
+export type TutorScheduleBooking = {
+  id: string;
+  slotId: string;
+  tutorId: string;
+  customerRef: string;
+  startsAt: string;
+  endsAt: string;
+  status: 'Booked';
+  displayStatus: 'Booked' | 'Past';
+  createdAt: string;
+};
+
 
 /** A Bangkok wall-clock input must never be interpreted in the device's timezone. */
 function bangkokStart(date: string, time: string): Date | null {
@@ -82,52 +94,102 @@ export function TutorAvailability({
   const [startTime, setStartTime] = useState('');
   const [calendarStart, setCalendarStart] = useState(() => bangkokDayKey(new Date()));
   const [slots, setSlots] = useState<OfferedSlot[]>([]);
+  const [bookings, setBookings] = useState<TutorScheduleBooking[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
+  const [bookingsError, setBookingsError] = useState('');
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [reconciliationPending, setReconciliationPending] = useState(false);
   const [error, setError] = useState('');
   const [listError, setListError] = useState('');
   const [notice, setNotice] = useState('');
-  const version = useRef(0);
-  const pendingGet = useRef<AbortController | null>(null);
+  const slotsVersion = useRef(0);
+  const bookingsVersion = useRef(0);
+  const pendingSlotsGet = useRef<AbortController | null>(null);
+  const pendingBookingsGet = useRef<AbortController | null>(null);
   const pendingPost = useRef<AbortController | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const preview = bangkokStart(date, startTime);
   const end = preview ? new Date(preview.getTime() + 3_600_000) : null;
 
-  const refresh = async (showLoading = false) => {
-    const current = ++version.current;
-    pendingGet.current?.abort();
+  const refreshSlots = async (showLoading = false) => {
+    const current = ++slotsVersion.current;
+    pendingSlotsGet.current?.abort();
     const controller = new AbortController();
-    pendingGet.current = controller;
-    if (showLoading) setLoading(true);
+    pendingSlotsGet.current = controller;
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
-      const result = await apiJson<SlotList>(
-        '/api/v1/tutor/slots', {}, controller.signal, sessionBinding,
+      const slotResult = await apiJson<SlotList>(
+        '/api/v1/tutor/slots', {}, controller.signal, sessionBinding
       );
-      if (version.current === current) {
-        setSlots(result.data);
+      if (slotsVersion.current === current) {
+        setSlots(slotResult.data);
         setListError('');
         setReconciliationPending(false);
       }
     } catch (e) {
-      if (version.current === current) {
-        if (accessExpired(e)) { setSlots([]); onUnauthorized(); }
-        else if (!controller.signal.aborted) setListError('ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่');
+      if (slotsVersion.current === current) {
+        if (accessExpired(e)) {
+          setSlots([]);
+          onUnauthorized();
+        } else if (!controller.signal.aborted) {
+          setListError('ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่');
+        }
       }
     } finally {
-      if (version.current === current) {
+      if (slotsVersion.current === current) {
         setLoading(false);
-        pendingGet.current = null;
+        pendingSlotsGet.current = null;
       }
     }
+  };
+
+  const refreshBookings = async (showLoading = false) => {
+    const current = ++bookingsVersion.current;
+    pendingBookingsGet.current?.abort();
+    const controller = new AbortController();
+    pendingBookingsGet.current = controller;
+    if (showLoading) {
+      setLoadingBookings(true);
+    }
+    try {
+      const bookingResult = await apiJson<{ data: TutorScheduleBooking[]; meta: { requestId: string; evaluatedAt: string } }>(
+        '/api/v1/tutor/bookings', {}, controller.signal, sessionBinding
+      );
+      if (bookingsVersion.current === current) {
+        setBookings(bookingResult.data);
+        setBookingsError('');
+      }
+    } catch (e) {
+      if (bookingsVersion.current === current) {
+        if (accessExpired(e)) {
+          setBookings([]);
+          onUnauthorized();
+        } else if (!controller.signal.aborted) {
+          setBookingsError('ไม่สามารถโหลดรายการนัดหมายได้');
+        }
+      }
+    } finally {
+      if (bookingsVersion.current === current) {
+        setLoadingBookings(false);
+        pendingBookingsGet.current = null;
+      }
+    }
+  };
+
+  const refresh = async (showLoading = false) => {
+    await Promise.allSettled([refreshSlots(showLoading), refreshBookings(showLoading)]);
   };
 
   useEffect(() => {
     void refresh(true);
     return () => {
-      version.current++;
-      pendingGet.current?.abort();
+      slotsVersion.current++;
+      bookingsVersion.current++;
+      pendingSlotsGet.current?.abort();
+      pendingBookingsGet.current?.abort();
       pendingPost.current?.abort();
     };
     // This component is keyed by the authenticated User; remount on identity switch.
@@ -254,8 +316,57 @@ export function TutorAvailability({
     {loading ? <div className="dashboard-card loading-agenda" role="status">กำลังโหลดรายการเวลาติว…</div> : listError
       ? <div className="dashboard-list-error" role="alert">
         <p className="error">ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่</p>
-        <button className="retry-button" type="button" onClick={() => void refresh(true)}>โหลดอีกครั้ง</button>
+        <button className="retry-button" type="button" onClick={() => void refreshSlots(true)}>โหลดอีกครั้ง</button>
       </div>
       : <AllSlotsAgenda slots={slots}/>}
+
+    <section className="dashboard-card agenda-card" id="tutor-schedule-bookings-section" aria-labelledby="schedule-bookings-title">
+      <div className="agenda-header">
+        <div>
+          <p className="dashboard-kicker">SCHEDULE BOOKINGS</p>
+          <h2 id="schedule-bookings-title">รายการนัดหมายบนตารางสอนของคุณ</h2>
+          <p className="agenda-subtitle">การจองที่ได้รับการยืนยันบนช่วงเวลาที่คุณเปิดสอน</p>
+        </div>
+        <span className="agenda-count">{bookings.length} รายการ</span>
+      </div>
+      {loadingBookings ? (
+        <p className="empty-slots">กำลังโหลดรายการนัดหมาย...</p>
+      ) : bookingsError ? (
+        <div className="dashboard-list-error" role="alert">
+          <p className="error">{bookingsError}</p>
+          <button className="retry-button" type="button" onClick={() => void refreshBookings(true)}>โหลดรายการนัดหมายใหม่</button>
+        </div>
+      ) : bookings.length === 0 ? (
+        <p className="empty-slots">ยังไม่มีผู้จองในช่วงเวลาที่คุณเปิดสอน</p>
+      ) : (
+        <ul className="slot-list" aria-label="รายการนัดหมายบนตารางสอน">
+          {bookings.map(b => {
+            const start = new Date(b.startsAt);
+            const end = new Date(b.endsAt);
+            return (
+              <li key={b.id} className="slot-item customer-booking-item" data-booking-id={b.id}>
+                <div className="agenda-color-mark" style={{ background: '#202b44' }} aria-hidden="true" />
+                <div className="agenda-row-main">
+                  <div className="slot-item-date">{bangkokLongDate(start)}</div>
+                  <div className="slot-item-hours">
+                    <time dateTime={b.startsAt}>{bangkokClock(start)}</time>
+                    <span aria-hidden="true">–</span>
+                    <time dateTime={b.endsAt}>{bangkokClock(end)}</time> น. (Asia/Bangkok)
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#58697f', marginTop: '4px' }}>
+                    ผู้จอง: <strong data-testid="tutor-booking-customer-ref">{b.customerRef}</strong> • รหัสการจอง: <code data-testid="schedule-booking-id">{b.id}</code>
+                  </div>
+                </div>
+                <div className="slot-tags">
+                  <span className={b.displayStatus === 'Past' ? 'badge-past' : 'badge-booked'} data-testid="tutor-booking-status-badge">
+                    {b.displayStatus === 'Past' ? 'สิ้นสุดแล้ว (Past)' : 'มีนัดหมาย (Booked)'}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   </TutorDashboardShell>;
 }

@@ -392,3 +392,54 @@ main.dashboard-root {
     scroll-behavior:auto!important;
   }
 }
+
+/* F-S1-05: Dynamic Occupancy & Schedule Bookings */
+.badge-occupied {
+  background: #fff7ed;
+  color: #a43e14;
+  border: 1px solid #f47736;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+.badge-unoccupied {
+  background: #eef2f7;
+  color: #172137;
+  border: 1px solid #c6d2e3;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+.badge-booked {
+  background: #eef2f7;
+  color: #172137;
+  border: 1px solid #c6d2e3;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+.badge-past {
+  background: #f1f3f6;
+  color: #58697f;
+  border: 1px solid #d4dbe4;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+.customer-booking-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
