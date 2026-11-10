@@ -13,7 +13,7 @@
     "dev": "npm run dev -w @nuttiew/api & npm run dev -w @nuttiew/web",
     "build": "npm run build -w @nuttiew/api && npm run build -w @nuttiew/web",
     "typecheck": "npm run typecheck --workspaces",
-    "test": "npm run test -w @nuttiew/api",
+    "test": "npm run test -w @nuttiew/api && npm run test -w @nuttiew/web",
     "test:stress":"node scripts/stress.mjs", "test:e2e":"playwright test", "test:db": "npm run test:db -w @nuttiew/api",
     "db:generate": "npm run db:generate -w @nuttiew/api",
     "db:migrate": "npm run db:migrate -w @nuttiew/api",

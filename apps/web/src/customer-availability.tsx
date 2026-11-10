@@ -1,14 +1,23 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { bangkokClock, bangkokDayKey, bangkokLongDate } from './tutor-calendar.js';
+import {
+  DEFAULT_VISIBLE_TIME_GROUPS,
+  WEEKDAY_LABELS_MON_FIRST,
+  bangkokLongDateFromDayKey,
+  buildAvailabilityCalendarIndex,
+  buildMonthGrid,
+  computeOfferDurationMinutes,
+  formatBangkokMonthYear,
+  groupDayOffersByExactInterval,
+  monthKeyFromDayKey,
+  shiftMonthKey,
+  sliceVisibleTimeGroups,
+  type CustomerAvailabilityOffer,
+} from './customer-availability-calendar.js';
 import './tutor-dashboard.css';
 import './customer-availability.css';
 
-export type CustomerAvailabilityOffer = {
-  slotId: string;
-  tutorRef: string;
-  startsAt: string;
-  endsAt: string;
-};
+export type { CustomerAvailabilityOffer };
 
 type AvailabilityResponse = {
   data: CustomerAvailabilityOffer[];
@@ -304,31 +313,6 @@ function isUnknownCommitError(error: unknown): boolean {
   );
 }
 
-type DateGroup = {
-  dayKey: string;
-  dateLabel: string;
-  items: CustomerAvailabilityOffer[];
-};
-
-function groupOffersByBangkokDate(offers: CustomerAvailabilityOffer[]): DateGroup[] {
-  const groups: DateGroup[] = [];
-  for (const offer of offers) {
-    const start = new Date(offer.startsAt);
-    const dayKey = bangkokDayKey(start);
-    const last = groups[groups.length - 1];
-    if (last && last.dayKey === dayKey) {
-      last.items.push(offer);
-    } else {
-      groups.push({
-        dayKey,
-        dateLabel: bangkokLongDate(start),
-        items: [offer],
-      });
-    }
-  }
-  return groups;
-}
-
 export function CustomerAvailability({
   accountId,
   sessionBinding,
@@ -371,6 +355,11 @@ export function CustomerAvailability({
   const [detailError, setDetailError] = useState('');
   const [bookingBanner, setBookingBanner] = useState<BookingBannerState | null>(null);
   const [unknownOutcome, setUnknownOutcome] = useState<UnknownBookingOutcome | null>(null);
+  const [viewedMonthKey, setViewedMonthKey] = useState<string | null>(null);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [expandedTimeKeys, setExpandedTimeKeys] = useState<Record<string, boolean>>({});
+  const [showAllTimeGroups, setShowAllTimeGroups] = useState(false);
+  const [calendarLiveMessage, setCalendarLiveMessage] = useState('');
 
   const version = useRef(0);
   const csrfVersion = useRef(0);
@@ -384,6 +373,8 @@ export function CustomerAvailability({
   const pendingDetailGet = useRef<AbortController | null>(null);
   const selectedRef = useRef<string | null>(null);
   const unknownOutcomeRef = useRef<UnknownBookingOutcome | null>(null);
+  const selectedDayRef = useRef<string | null>(null);
+  const viewedMonthRef = useRef<string | null>(null);
   const submittingRef = useRef(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
@@ -417,6 +408,13 @@ export function CustomerAvailability({
     selectedRef.current = null;
     setSelectedSlotId(null);
     setSelectedOfferSnapshot(null);
+    selectedDayRef.current = null;
+    setSelectedDayKey(null);
+    viewedMonthRef.current = null;
+    setViewedMonthKey(null);
+    setExpandedTimeKeys({});
+    setShowAllTimeGroups(false);
+    setCalendarLiveMessage('');
     setStaleNotice('');
     setHasConfirmedResponse(false);
     setCsrfToken(null);
@@ -525,8 +523,7 @@ export function CustomerAvailability({
         if (
           previousSelected !== null &&
           !matchedOffer &&
-          !unknownOutcomeRef.current &&
-          !preserveBanner
+          !unknownOutcomeRef.current
         ) {
           selectedRef.current = null;
           setSelectedSlotId(null);
@@ -537,6 +534,56 @@ export function CustomerAvailability({
         } else {
           if (matchedOffer) setSelectedOfferSnapshot(matchedOffer);
           if (!preserveBanner) setStaleNotice('');
+        }
+        const nextIndex = buildAvailabilityCalendarIndex(result.data, result.meta.evaluatedAt);
+        if (result.data.length === 0) {
+          selectedDayRef.current = null;
+          setSelectedDayKey(null);
+          viewedMonthRef.current = null;
+          setViewedMonthKey(null);
+          setExpandedTimeKeys({});
+          setShowAllTimeGroups(false);
+          setCalendarLiveMessage('ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก');
+        } else {
+          const initialDay = nextIndex.earliestDayKey!;
+          const initialMonth = nextIndex.earliestMonthKey!;
+          if (selectedDayRef.current === null) {
+            selectedDayRef.current = initialDay;
+            setSelectedDayKey(initialDay);
+            viewedMonthRef.current = initialMonth;
+            setViewedMonthKey(initialMonth);
+            setExpandedTimeKeys({});
+            setShowAllTimeGroups(false);
+            const initialCount = nextIndex.offersByDay.get(initialDay)?.length ?? 0;
+            setCalendarLiveMessage(
+              `เลือกวันที่ ${bangkokLongDateFromDayKey(initialDay)} พบ ${initialCount} ช่วงเวลา`,
+            );
+          } else {
+            const activeDay = selectedDayRef.current;
+            const activeMonth =
+              viewedMonthRef.current &&
+              (!nextIndex.minMonthKey || viewedMonthRef.current >= nextIndex.minMonthKey) &&
+              (!nextIndex.maxMonthKey || viewedMonthRef.current <= nextIndex.maxMonthKey)
+                ? viewedMonthRef.current
+                : initialMonth;
+            viewedMonthRef.current = activeMonth;
+            setViewedMonthKey(activeMonth);
+            if (monthKeyFromDayKey(activeDay) === activeMonth) {
+              const updatedCount = nextIndex.offersByDay.get(activeDay)?.length ?? 0;
+              setCalendarLiveMessage(
+                updatedCount > 0
+                  ? `เลือกวันที่ ${bangkokLongDateFromDayKey(activeDay)} พบ ${updatedCount} ช่วงเวลา`
+                  : `วันที่ ${bangkokLongDateFromDayKey(activeDay)} ไม่มีช่วงเวลาว่างแล้ว`,
+              );
+            } else {
+              const mCount = nextIndex.monthOfferCount(activeMonth);
+              setCalendarLiveMessage(
+                mCount > 0
+                  ? `แสดงปฏิทินเดือน ${formatBangkokMonthYear(activeMonth)} มี ${mCount} ช่วงเวลา`
+                  : `เดือน ${formatBangkokMonthYear(activeMonth)} ยังไม่มีช่วงเวลาว่าง`,
+              );
+            }
+          }
         }
         setOffers(result.data);
         setEvaluatedAt(result.meta.evaluatedAt);
@@ -552,6 +599,13 @@ export function CustomerAvailability({
         } else if (!controller.signal.aborted) {
           setOffers([]);
           setEvaluatedAt(null);
+          selectedDayRef.current = null;
+          setSelectedDayKey(null);
+          viewedMonthRef.current = null;
+          setViewedMonthKey(null);
+          setExpandedTimeKeys({});
+          setShowAllTimeGroups(false);
+          setCalendarLiveMessage('');
           setHasConfirmedResponse(false);
           setListError('ไม่สามารถโหลดช่วงเวลาติวที่พร้อมให้เลือกได้ กรุณาลองใหม่');
           queueMicrotask(() => errorRef.current?.focus());
@@ -894,7 +948,201 @@ export function CustomerAvailability({
     (selectedSlotId !== null
       ? (offers.find(item => item.slotId === selectedSlotId) ?? selectedOfferSnapshot)
       : null);
-  const dateGroups = groupOffersByBangkokDate(offers);
+
+  const calendarIndex = useMemo(
+    () => buildAvailabilityCalendarIndex(offers, evaluatedAt),
+    [offers, evaluatedAt],
+  );
+  const effectiveMonthKey = viewedMonthKey ?? calendarIndex.earliestMonthKey;
+  const effectiveDayKey = selectedDayKey ?? calendarIndex.earliestDayKey;
+  const monthCells = useMemo(
+    () =>
+      effectiveMonthKey
+        ? buildMonthGrid(effectiveMonthKey, calendarIndex.offersByDay)
+        : [],
+    [effectiveMonthKey, calendarIndex],
+  );
+  const monthOfferCount = effectiveMonthKey
+    ? calendarIndex.monthOfferCount(effectiveMonthKey)
+    : 0;
+  const isSelectedDayInViewedMonth =
+    Boolean(effectiveDayKey) &&
+    Boolean(effectiveMonthKey) &&
+    monthKeyFromDayKey(effectiveDayKey!) === effectiveMonthKey;
+  const dayOffers =
+    isSelectedDayInViewedMonth && effectiveDayKey
+      ? (calendarIndex.offersByDay.get(effectiveDayKey) ?? [])
+      : [];
+  const dayTimeGroups = useMemo(
+    () => groupDayOffersByExactInterval(dayOffers),
+    [dayOffers],
+  );
+  const { visibleGroups: visibleTimeGroups, hiddenCount: hiddenTimeGroupCount } =
+    sliceVisibleTimeGroups(
+      dayTimeGroups,
+      showAllTimeGroups,
+      DEFAULT_VISIBLE_TIME_GROUPS,
+    );
+
+  const prevMonthCandidate = effectiveMonthKey
+    ? shiftMonthKey(effectiveMonthKey, -1)
+    : null;
+  const nextMonthCandidate = effectiveMonthKey
+    ? shiftMonthKey(effectiveMonthKey, 1)
+    : null;
+  const canGoPrevMonth = Boolean(
+    prevMonthCandidate &&
+      calendarIndex.minMonthKey &&
+      prevMonthCandidate >= calendarIndex.minMonthKey,
+  );
+  const canGoNextMonth = Boolean(
+    nextMonthCandidate &&
+      calendarIndex.maxMonthKey &&
+      nextMonthCandidate <= calendarIndex.maxMonthKey,
+  );
+
+  const handleChangeMonth = (delta: -1 | 1) => {
+    if (!effectiveMonthKey) return;
+    const candidate = shiftMonthKey(effectiveMonthKey, delta);
+    if (calendarIndex.minMonthKey && candidate < calendarIndex.minMonthKey) return;
+    if (calendarIndex.maxMonthKey && candidate > calendarIndex.maxMonthKey) return;
+    viewedMonthRef.current = candidate;
+    setViewedMonthKey(candidate);
+    setExpandedTimeKeys({});
+    setShowAllTimeGroups(false);
+    const countInMonth = calendarIndex.monthOfferCount(candidate);
+    const label = formatBangkokMonthYear(candidate);
+    setCalendarLiveMessage(
+      countInMonth > 0
+        ? `แสดงปฏิทินเดือน ${label} มี ${countInMonth} ช่วงเวลา`
+        : `เดือน ${label} ยังไม่มีช่วงเวลาว่าง`,
+    );
+  };
+
+  const handleSelectDay = (dayKey: string) => {
+    const countForDay = calendarIndex.offersByDay.get(dayKey)?.length ?? 0;
+    if (countForDay === 0) return;
+    selectedDayRef.current = dayKey;
+    setSelectedDayKey(dayKey);
+    const targetMonth = monthKeyFromDayKey(dayKey);
+    viewedMonthRef.current = targetMonth;
+    setViewedMonthKey(targetMonth);
+    setExpandedTimeKeys({});
+    setShowAllTimeGroups(false);
+    setCalendarLiveMessage(
+      `เลือกวันที่ ${bangkokLongDateFromDayKey(dayKey)} พบ ${countForDay} ช่วงเวลา`,
+    );
+  };
+
+  const toggleTimeGroup = (groupKey: string) => {
+    setExpandedTimeKeys(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
+
+  const renderSelectedOfferSummary = () => {
+    if (!activeOffer) return null;
+    return (
+      <section
+        id="selected-offer-summary"
+        className="availability-surface selected-summary-surface"
+        aria-labelledby="selected-offer-heading"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="selected-summary-copy">
+          <span className="availability-step-kicker">3. ตรวจสรุปและยืนยันการจอง</span>
+          <h2 id="selected-offer-heading">
+            {unknownOutcome
+              ? 'รอการยืนยันผลการจองช่วงเวลาติว'
+              : 'ยืนยันการจองช่วงเวลาติว — ช่วงเวลาที่เลือกไว้'}
+          </h2>
+          <p className="selected-summary-details">
+            {bangkokLongDate(new Date(activeOffer.startsAt))} •{' '}
+            {bangkokClock(new Date(activeOffer.startsAt))}–
+            {bangkokClock(new Date(activeOffer.endsAt))} น.
+            {bangkokDayKey(new Date(activeOffer.startsAt)) !==
+              bangkokDayKey(new Date(activeOffer.endsAt)) &&
+              ' (สิ้นสุดในวันถัดไป)'}{' '}
+            • รหัสอ้างอิงติวเตอร์: {activeOffer.tutorRef}
+          </p>
+          {unknownOutcome ? (
+            <p className="selection-not-booking-note" role="alert">
+              ยังไม่สามารถยืนยันผลการจองได้จากเซิร์ฟเวอร์ กรุณาส่งคำขอเดิมซ้ำเพื่อตรวจสอบหรือยืนยันรหัสการจองเดิมก่อนเลือกช่วงเวลาอื่น
+            </p>
+          ) : (
+            <p className="selection-not-booking-note">
+              การเลือกช่วงเวลานี้ยังไม่ใช่การจอง และยังไม่ได้ล็อกสิทธิ์จนกว่าจะยืนยันการจองในขั้นตอนถัดไป
+            </p>
+          )}
+          {csrfError && (
+            <p
+              id="booking-csrf-error"
+              data-testid="booking-csrf-error"
+              className="selection-not-booking-note"
+              role="alert"
+            >
+              {csrfError}
+            </p>
+          )}
+        </div>
+        <div className="selected-summary-actions">
+          {unknownOutcome ? (
+            <>
+              <button
+                type="button"
+                className="confirm-booking-button"
+                disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
+                onClick={() => void confirmSelectedBooking(activeOffer)}
+              >
+                {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ส่งคำขอเดิมอีกครั้ง'}
+              </button>
+              {csrfError && (
+                <button
+                  type="button"
+                  className="clear-selection-button"
+                  disabled={csrfLoading || submittingBooking || logoutBusy}
+                  onClick={() => void loadCsrfBootstrap()}
+                >
+                  เตรียมการจองอีกครั้ง
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="confirm-booking-button"
+                disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
+                onClick={() => void confirmSelectedBooking(activeOffer)}
+              >
+                {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ยืนยันการจอง'}
+              </button>
+              {csrfError && (
+                <button
+                  type="button"
+                  className="clear-selection-button"
+                  disabled={csrfLoading || submittingBooking || logoutBusy}
+                  onClick={() => void loadCsrfBootstrap()}
+                >
+                  เตรียมการจองอีกครั้ง
+                </button>
+              )}
+              <button
+                type="button"
+                className="clear-selection-button"
+                disabled={submittingBooking}
+                onClick={() => selectOffer(null)}
+              >
+                ยกเลิกการเลือก
+              </button>
+            </>
+          )}
+        </div>
+      </section>
+    );
+  };
 
   return (
     <div className="customer-app">
@@ -1109,7 +1357,8 @@ export function CustomerAvailability({
               <h2 className="dashboard-kicker">ยินดีต้อนรับ</h2>
               <h1 id="availability-heading">เลือกช่วงเวลาติว</h1>
               <p className="availability-helper">
-                เวลาที่แสดงเป็นเวลาประเทศไทย <strong>Asia/Bangkok (UTC+07:00)</strong>
+                เลือกวันที่สะดวก แล้วเลือกช่วงเวลา • เวลาที่แสดงเป็นเวลาประเทศไทย{' '}
+                <strong>Asia/Bangkok (UTC+07:00)</strong>
               </p>
               {evaluatedAt && !listError && (
                 <p className="availability-evaluated-at">
@@ -1180,103 +1429,6 @@ export function CustomerAvailability({
               </div>
             )}
 
-          {activeOffer && !loading && !listError && (
-            <section
-              id="selected-offer-summary"
-              className="availability-surface selected-summary-surface"
-              aria-labelledby="selected-offer-heading"
-              role="status"
-              aria-live="polite"
-            >
-              <div className="selected-summary-copy">
-                <h2 id="selected-offer-heading">
-                  {unknownOutcome ? 'รอการยืนยันผลการจองช่วงเวลาติว' : 'ยืนยันการจองช่วงเวลาติว — ช่วงเวลาที่เลือกไว้'}
-                </h2>
-                <p className="selected-summary-details">
-                  {bangkokLongDate(new Date(activeOffer.startsAt))} •{' '}
-                  {bangkokClock(new Date(activeOffer.startsAt))}–
-                  {bangkokClock(new Date(activeOffer.endsAt))} น.
-                  {bangkokDayKey(new Date(activeOffer.startsAt)) !==
-                    bangkokDayKey(new Date(activeOffer.endsAt)) &&
-                    ' (สิ้นสุดในวันถัดไป)'}{' '}
-                  • รหัสอ้างอิงติวเตอร์: {activeOffer.tutorRef}
-                </p>
-                {unknownOutcome ? (
-                  <p className="selection-not-booking-note" role="alert">
-                    ยังไม่สามารถยืนยันผลการจองได้จากเซิร์ฟเวอร์ กรุณาส่งคำขอเดิมซ้ำเพื่อตรวจสอบหรือยืนยันรหัสการจองเดิมก่อนเลือกช่วงเวลาอื่น
-                  </p>
-                ) : (
-                  <p className="selection-not-booking-note">
-                    การเลือกช่วงเวลานี้ยังไม่ใช่การจอง และยังไม่ได้ล็อกสิทธิ์จนกว่าจะยืนยันการจองในขั้นตอนถัดไป
-                  </p>
-                )}
-                {csrfError && (
-                  <p
-                    id="booking-csrf-error"
-                    data-testid="booking-csrf-error"
-                    className="selection-not-booking-note"
-                    role="alert"
-                  >
-                    {csrfError}
-                  </p>
-                )}
-              </div>
-              <div className="selected-summary-actions">
-                {unknownOutcome ? (
-                  <>
-                    <button
-                      type="button"
-                      className="confirm-booking-button"
-                      disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
-                      onClick={() => void confirmSelectedBooking(activeOffer)}
-                    >
-                      {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ส่งคำขอเดิมอีกครั้ง'}
-                    </button>
-                    {csrfError && (
-                      <button
-                        type="button"
-                        className="clear-selection-button"
-                        disabled={csrfLoading || submittingBooking || logoutBusy}
-                        onClick={() => void loadCsrfBootstrap()}
-                      >
-                        เตรียมการจองอีกครั้ง
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      className="confirm-booking-button"
-                      disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
-                      onClick={() => void confirmSelectedBooking(activeOffer)}
-                    >
-                      {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ยืนยันการจอง'}
-                    </button>
-                    {csrfError && (
-                      <button
-                        type="button"
-                        className="clear-selection-button"
-                        disabled={csrfLoading || submittingBooking || logoutBusy}
-                        onClick={() => void loadCsrfBootstrap()}
-                      >
-                        เตรียมการจองอีกครั้ง
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="clear-selection-button"
-                      disabled={submittingBooking}
-                      onClick={() => selectOffer(null)}
-                    >
-                      ยกเลิกการเลือก
-                    </button>
-                  </>
-                )}
-              </div>
-            </section>
-          )}
-
           <section id="availability-section" aria-labelledby="availability-heading">
             {loading ? (
               <div className="availability-surface availability-loading" role="status">
@@ -1300,105 +1452,386 @@ export function CustomerAvailability({
                   โหลดอีกครั้ง
                 </button>
               </div>
+            ) : logoutBusy || logoutError ? (
+              <div className="availability-surface availability-uncertain" role="status">
+                <p className="availability-uncertain-copy">
+                  {logoutBusy
+                    ? 'กำลังออกจากระบบ…'
+                    : 'ยังไม่สามารถยืนยันการออกจากระบบได้ ข้อมูลช่วงเวลาถูกซ่อนไว้เพื่อความปลอดภัย'}
+                </p>
+                {logoutError && (
+                  <button
+                    type="button"
+                    className="retry-button"
+                    onClick={() => void refresh(true)}
+                  >
+                    ตรวจสอบเซสชันอีกครั้ง
+                  </button>
+                )}
+              </div>
             ) : offers.length === 0 ? (
-              hasConfirmedResponse && !logoutBusy && !logoutError ? (
-                <div className="availability-surface availability-empty" role="status">
-                  <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก</p>
-                </div>
-              ) : logoutBusy || logoutError ? (
-                <div className="availability-surface availability-uncertain" role="status">
-                  <p className="availability-uncertain-copy">
-                    {logoutBusy
-                      ? 'กำลังออกจากระบบ…'
-                      : 'ยังไม่สามารถยืนยันการออกจากระบบได้ ข้อมูลช่วงเวลาถูกซ่อนไว้เพื่อความปลอดภัย'}
-                  </p>
-                  {logoutError && (
-                    <button
-                      type="button"
-                      className="retry-button"
-                      onClick={() => void refresh(true)}
-                    >
-                      ตรวจสอบเซสชันอีกครั้ง
-                    </button>
-                  )}
-                </div>
+              hasConfirmedResponse ? (
+                <>
+                  <div className="availability-surface availability-empty" role="status">
+                    <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก</p>
+                  </div>
+                  {renderSelectedOfferSummary()}
+                </>
               ) : null
             ) : (
-              <div className="availability-surface">
-                <div className="availability-list-header" role="status">
-                  <span>รายการช่วงเวลาที่พร้อมให้เลือกตามลำดับเวลาเริ่ม</span>
-                  <span className="availability-count-badge">
-                    {offers.length} ช่วงเวลา
-                  </span>
-                </div>
-                {dateGroups.map(group => (
-                  <div className="availability-date-group" key={group.dayKey}>
-                    <h2 className="availability-date-heading">{group.dateLabel}</h2>
-                    <ul
-                      className="availability-offer-list"
-                      aria-label={`ช่วงเวลาติววันที่ ${group.dateLabel}`}
+              <div className="availability-workspace-container">
+                <div className="availability-workspace">
+                  <div className="availability-calendar-pane">
+                    <section
+                      className="availability-surface availability-calendar-card"
+                      aria-labelledby="calendar-month-heading"
                     >
-                      {group.items.map(offer => {
-                        const start = new Date(offer.startsAt);
-                        const end = new Date(offer.endsAt);
-                        const crossMidnight =
-                          bangkokDayKey(start) !== bangkokDayKey(end);
-                        const isSelected = selectedSlotId === offer.slotId;
-                        const lockedToOtherUnknown =
-                          unknownOutcome !== null && unknownOutcome.slotId !== offer.slotId;
-                        return (
-                          <li
-                            key={offer.slotId}
-                            data-testid="availability-offer"
-                            data-offer-slot-id={offer.slotId}
-                            data-tutor-ref={offer.tutorRef}
-                            className={
-                              'availability-offer-row' +
-                              (isSelected ? ' availability-offer-selected' : '')
-                            }
+                      <div className="calendar-card-header">
+                        <span className="availability-step-kicker">1. เลือกวันที่</span>
+                        <div className="calendar-month-title-row">
+                          <h2 id="calendar-month-heading" data-testid="calendar-month-heading">
+                            {effectiveMonthKey ? formatBangkokMonthYear(effectiveMonthKey) : ''}
+                          </h2>
+                          <span
+                            className="calendar-month-count-chip"
+                            data-testid="calendar-month-offer-count"
                           >
-                            <div className="availability-offer-main">
-                              <div className="offer-hours">
-                                <time dateTime={offer.startsAt}>
-                                  {bangkokClock(start)}
-                                </time>
-                                <span aria-hidden="true">–</span>
-                                <time dateTime={offer.endsAt}>
-                                  {bangkokClock(end)}
-                                </time>
-                                {crossMidnight && (
-                                  <span className="offer-next-day">
-                                    สิ้นสุดในวันถัดไป
-                                  </span>
-                                )}
-                              </div>
-                              <div className="offer-date-line">
-                                {bangkokLongDate(start)} • 60 นาที (Asia/Bangkok)
-                              </div>
-                              <div className="offer-tutor-ref">
-                                รหัสอ้างอิงติวเตอร์: <span>{offer.tutorRef}</span>
-                              </div>
-                              {isSelected && (
-                                <div className="offer-selected-status">
-                                  สถานะ: เลือกไว้แล้ว (ยังไม่ใช่การจอง)
-                                </div>
-                              )}
-                            </div>
+                            {monthOfferCount > 0 ? `มี ${monthOfferCount} ช่วงเวลา` : 'ไม่มีช่วงเวลา'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="calendar-nav-row" aria-label="เปลี่ยนเดือนบนปฏิทิน">
+                        <button
+                          type="button"
+                          className="calendar-nav-button"
+                          data-testid="calendar-prev-month"
+                          disabled={!canGoPrevMonth}
+                          onClick={() => handleChangeMonth(-1)}
+                        >
+                          เดือนก่อนหน้า
+                        </button>
+                        <button
+                          type="button"
+                          className="calendar-nav-button"
+                          data-testid="calendar-next-month"
+                          disabled={!canGoNextMonth}
+                          onClick={() => handleChangeMonth(1)}
+                        >
+                          เดือนถัดไป
+                        </button>
+                      </div>
+
+                      <div className="calendar-weekdays" aria-hidden="true">
+                        {WEEKDAY_LABELS_MON_FIRST.map(label => (
+                          <span key={label} className="calendar-weekday-cell">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="calendar-day-grid" data-testid="calendar-day-grid">
+                        {monthCells.map(cell => {
+                          if (cell.kind === 'spacer') {
+                            return (
+                              <div
+                                key={cell.key}
+                                className="calendar-day-spacer"
+                                aria-hidden="true"
+                              />
+                            );
+                          }
+                          const isEmptyDay = cell.offerCount === 0;
+                          const isSelected = !isEmptyDay && cell.dayKey === effectiveDayKey;
+                          return (
                             <button
+                              key={cell.key}
                               type="button"
-                              className="offer-select-button"
-                              aria-pressed={isSelected}
-                              disabled={submittingBooking || lockedToOtherUnknown}
-                              onClick={() => selectOffer(offer.slotId)}
+                              data-testid={`calendar-day-${cell.dayKey}`}
+                              data-day-key={cell.dayKey}
+                              data-offer-count={cell.offerCount}
+                              disabled={isEmptyDay}
+                              aria-pressed={isEmptyDay ? undefined : isSelected}
+                              aria-label={cell.ariaLabel}
+                              className={
+                                'calendar-day-button' +
+                                (isEmptyDay ? ' calendar-day-empty' : ' calendar-day-available') +
+                                (isSelected ? ' calendar-day-selected' : '')
+                              }
+                              onClick={() => handleSelectDay(cell.dayKey)}
                             >
-                              {isSelected ? 'เลือกช่วงเวลานี้แล้ว' : 'เลือกช่วงเวลานี้'}
+                              <span className="calendar-day-num">{cell.dayNumber}</span>
+                              {isEmptyDay ? (
+                                <span className="calendar-day-zero" aria-hidden="true">
+                                  —
+                                </span>
+                              ) : (
+                                <span className="calendar-day-offers">
+                                  <span className="calendar-day-offers-count">
+                                    {cell.offerCount}
+                                  </span>
+                                  <span className="calendar-day-offers-unit">ช่วงเวลา</span>
+                                </span>
+                              )}
+                              {isSelected && (
+                                <span className="calendar-day-selected-cue" aria-hidden="true">
+                                  เลือกอยู่
+                                </span>
+                              )}
                             </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                          );
+                        })}
+                      </div>
+
+                      <p
+                        className="availability-live-region"
+                        data-testid="calendar-live-status"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        {calendarLiveMessage}
+                      </p>
+                    </section>
                   </div>
-                ))}
+
+                  <div className="availability-day-pane">
+                    <section
+                      className="availability-surface availability-day-card"
+                      aria-labelledby="selected-day-heading"
+                    >
+                      {monthOfferCount === 0 ? (
+                        <>
+                          <div className="availability-day-header">
+                            <div className="availability-day-header-copy">
+                              <span className="availability-step-kicker">2. เลือกช่วงเวลา</span>
+                              <h2 id="selected-day-heading">
+                                {effectiveMonthKey ? formatBangkokMonthYear(effectiveMonthKey) : ''}
+                              </h2>
+                            </div>
+                            <span className="availability-count-badge">0 ช่วงเวลา</span>
+                          </div>
+                          <div
+                            className="availability-day-empty-panel"
+                            data-testid="calendar-month-empty"
+                            role="status"
+                          >
+                            <p className="availability-day-empty-title">
+                              ยังไม่มีช่วงเวลาว่างในเดือนที่เลือก
+                            </p>
+                            <p className="availability-day-empty-copy">
+                              กรุณาใช้ปุ่มเดือนก่อนหน้าหรือเดือนถัดไปเพื่อเลือกวันที่มีช่วงเวลาเปิดรับ
+                            </p>
+                          </div>
+                        </>
+                      ) : !isSelectedDayInViewedMonth || !effectiveDayKey ? (
+                        <>
+                          <div className="availability-day-header">
+                            <div className="availability-day-header-copy">
+                              <span className="availability-step-kicker">2. เลือกช่วงเวลา</span>
+                              <h2 id="selected-day-heading">
+                                {effectiveMonthKey ? formatBangkokMonthYear(effectiveMonthKey) : ''}
+                              </h2>
+                            </div>
+                            <span className="availability-count-badge">
+                              {monthOfferCount} ช่วงเวลาในเดือนนี้
+                            </span>
+                          </div>
+                          <div
+                            className="availability-day-empty-panel"
+                            data-testid="calendar-select-day-prompt"
+                            role="status"
+                          >
+                            <p className="availability-day-empty-title">
+                              กรุณาเลือกวันที่จากปฏิทิน
+                            </p>
+                            <p className="availability-day-empty-copy">
+                              เดือนนี้มีทั้งหมด {monthOfferCount} ช่วงเวลาว่าง กดเลือกวันที่ที่แสดงจำนวนช่วงเวลาเพื่อดูรายการเวลา
+                            </p>
+                          </div>
+                        </>
+                      ) : dayOffers.length === 0 ? (
+                        <>
+                          <div className="availability-day-header">
+                            <div className="availability-day-header-copy">
+                              <span className="availability-step-kicker">2. เลือกช่วงเวลา</span>
+                              <h2 id="selected-day-heading">
+                                {bangkokLongDateFromDayKey(effectiveDayKey)}
+                              </h2>
+                            </div>
+                            <span className="availability-count-badge">0 ช่วงเวลา</span>
+                          </div>
+                          <div
+                            className="availability-day-empty-panel"
+                            data-testid="calendar-day-empty"
+                            role="status"
+                          >
+                            <p className="availability-day-empty-title">
+                              ยังไม่มีช่วงเวลาว่างในวันที่เลือก
+                            </p>
+                            <p className="availability-day-empty-copy">
+                              ช่วงเวลาในวันที่ {bangkokLongDateFromDayKey(effectiveDayKey)} อาจถูกจองแล้ว กรุณาเลือกวันอื่นที่มีช่วงเวลาว่างในปฏิทิน
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="availability-day-header">
+                            <div className="availability-day-header-copy">
+                              <span className="availability-step-kicker">2. เลือกช่วงเวลา</span>
+                              <h2 id="selected-day-heading" data-testid="selected-day-heading">
+                                {bangkokLongDateFromDayKey(effectiveDayKey)}
+                              </h2>
+                              <p className="availability-day-subtitle">
+                                จัดกลุ่มตามเวลาเริ่ม–สิ้นสุดจริง (Asia/Bangkok) • กดเพื่อดูตัวเลือก
+                              </p>
+                            </div>
+                            <span
+                              className="availability-count-badge"
+                              data-testid="day-offer-count-badge"
+                            >
+                              {dayOffers.length} ช่วงเวลา
+                            </span>
+                          </div>
+
+                          <div className="time-group-list" data-testid="time-group-list">
+                            {visibleTimeGroups.map(group => {
+                              const isExpanded = Boolean(expandedTimeKeys[group.key]);
+                              const durationMinutes = computeOfferDurationMinutes(group.items[0]);
+                              const hasSelectedOffer =
+                                selectedSlotId !== null &&
+                                group.items.some(item => item.slotId === selectedSlotId);
+                              return (
+                                <div
+                                  key={group.key}
+                                  className={
+                                    'time-group-item' + (isExpanded ? ' time-group-expanded' : '')
+                                  }
+                                  data-testid="time-group-item"
+                                  data-time-group-key={group.key}
+                                >
+                                  <button
+                                    type="button"
+                                    className="time-group-toggle"
+                                    data-testid="time-group-toggle"
+                                    aria-expanded={isExpanded}
+                                    onClick={() => toggleTimeGroup(group.key)}
+                                  >
+                                    <span className="time-group-main">
+                                      <span className="time-group-clock">
+                                        {group.startClock}–{group.endClock} น.
+                                      </span>
+                                      {group.crossMidnight && (
+                                        <span className="offer-next-day">สิ้นสุดในวันถัดไป</span>
+                                      )}
+                                      {hasSelectedOffer && (
+                                        <span className="time-group-selected-tag">เลือกอยู่</span>
+                                      )}
+                                    </span>
+                                    <span className="time-group-meta">
+                                      <span className="time-group-duration">
+                                        {durationMinutes} นาที
+                                      </span>
+                                      <span className="time-group-count">
+                                        {group.items.length} ตัวเลือก
+                                      </span>
+                                      <span className="time-group-chevron" aria-hidden="true">
+                                        {isExpanded ? '▴' : '▾'}
+                                      </span>
+                                    </span>
+                                  </button>
+
+                                  {isExpanded && (
+                                    <ul
+                                      className="availability-offer-list"
+                                      aria-label={`ช่วงเวลาติว ${group.startClock}–${group.endClock} น. วันที่ ${group.dateLabel}`}
+                                    >
+                                      {group.items.map(offer => {
+                                        const start = new Date(offer.startsAt);
+                                        const end = new Date(offer.endsAt);
+                                        const crossMidnight =
+                                          bangkokDayKey(start) !== bangkokDayKey(end);
+                                        const isSelected = selectedSlotId === offer.slotId;
+                                        const lockedToOtherUnknown =
+                                          unknownOutcome !== null &&
+                                          unknownOutcome.slotId !== offer.slotId;
+                                        const offerMinutes = computeOfferDurationMinutes(offer);
+                                        return (
+                                          <li
+                                            key={offer.slotId}
+                                            data-testid="availability-offer"
+                                            data-offer-slot-id={offer.slotId}
+                                            data-tutor-ref={offer.tutorRef}
+                                            className={
+                                              'availability-offer-row' +
+                                              (isSelected ? ' availability-offer-selected' : '')
+                                            }
+                                          >
+                                            <div className="availability-offer-main">
+                                              <div className="offer-hours">
+                                                <time dateTime={offer.startsAt}>
+                                                  {bangkokClock(start)}
+                                                </time>
+                                                <span aria-hidden="true">–</span>
+                                                <time dateTime={offer.endsAt}>
+                                                  {bangkokClock(end)}
+                                                </time>
+                                                {crossMidnight && (
+                                                  <span className="offer-next-day">
+                                                    สิ้นสุดในวันถัดไป
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <div className="offer-date-line">
+                                                {bangkokLongDate(start)} • {offerMinutes} นาที
+                                                {' '}(Asia/Bangkok)
+                                              </div>
+                                              <div className="offer-tutor-ref">
+                                                รหัสอ้างอิงติวเตอร์: <span>{offer.tutorRef}</span>
+                                              </div>
+                                              {isSelected && (
+                                                <div className="offer-selected-status">
+                                                  สถานะ: เลือกไว้แล้ว (ยังไม่ใช่การจอง)
+                                                </div>
+                                              )}
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="offer-select-button"
+                                              aria-pressed={isSelected}
+                                              disabled={submittingBooking || lockedToOtherUnknown}
+                                              onClick={() => selectOffer(offer.slotId)}
+                                            >
+                                              {isSelected ? 'เลือกช่วงเวลานี้แล้ว' : 'เลือกช่วงเวลานี้'}
+                                            </button>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {hiddenTimeGroupCount > 0 && (
+                            <div className="time-group-more-wrap">
+                              <button
+                                type="button"
+                                className="show-more-times-button"
+                                data-testid="show-more-times-btn"
+                                onClick={() => setShowAllTimeGroups(true)}
+                              >
+                                ดูเวลาเพิ่มเติม (อีก {hiddenTimeGroupCount} ช่วงเวลา)
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </section>
+
+                    {renderSelectedOfferSummary()}
+                  </div>
+                </div>
               </div>
             )}
           </section>

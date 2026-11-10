@@ -1,8 +1,6 @@
 /*
- * F-S1-03 Customer Availability shared NutTiew design system (OD-AV-08).
- * Shares brand, typography, navy/orange/canvas/surface tokens, focus ring and
- * responsive navigation patterns with Tutor Dashboard while using a light,
- * readable single-column scheduling layout without nested cards.
+ * F-S1-03 Customer Availability shared NutTiew design system (OD-AV-08)
+ * with Option A Date-First Monthly Calendar workspace (#44).
  */
 .customer-app {
   --customer-navy: #202b44;
@@ -124,7 +122,7 @@
 
 .customer-inner {
   width: 100%;
-  max-width: 960px;
+  max-width: 1080px;
   padding: 32px clamp(16px, 3vw, 40px) 24px;
   margin: 0 auto;
 }
@@ -133,12 +131,14 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 16px 24px;
   margin: 0 0 24px;
 }
 
 .availability-hero-copy {
   min-width: 0;
+  flex: 1 1 360px;
 }
 
 .customer-app h1 {
@@ -165,7 +165,9 @@
 
 .customer-app .availability-refresh-button,
 .customer-app .retry-button,
-.customer-app .clear-selection-button {
+.customer-app .clear-selection-button,
+.customer-app .calendar-nav-button,
+.customer-app .show-more-times-button {
   padding: 10px 16px;
   background: #ffffff;
   color: var(--customer-ink);
@@ -177,8 +179,18 @@
 
 .customer-app .availability-refresh-button:hover,
 .customer-app .retry-button:hover,
-.customer-app .clear-selection-button:hover {
+.customer-app .clear-selection-button:hover,
+.customer-app .calendar-nav-button:hover:not(:disabled),
+.customer-app .show-more-times-button:hover {
   background: #eff3f9;
+}
+
+.customer-app .calendar-nav-button:disabled {
+  opacity: 1;
+  background: #f4f6fa;
+  color: #53657d;
+  border-color: var(--customer-control-border);
+  cursor: not-allowed;
 }
 
 .availability-surface {
@@ -188,10 +200,386 @@
   min-width: 0;
 }
 
-.selected-summary-surface {
-  border-left: 4px solid var(--customer-orange);
-  padding: 20px 24px;
+.availability-step-kicker {
+  display: inline-block;
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--customer-orange-dark);
+}
+
+.availability-workspace-container {
+  container-type: inline-size;
+  width: 100%;
+  min-width: 0;
+}
+
+.availability-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+@container (min-width: 680px) {
+  .availability-workspace {
+    grid-template-columns: minmax(356px, 40%) minmax(0, 1fr);
+    gap: 20px;
+  }
+}
+
+.availability-calendar-pane,
+.availability-day-pane {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.availability-day-pane {
+  container-type: inline-size;
+}
+
+.availability-calendar-card {
+  padding: 18px 12px 16px;
+}
+
+.calendar-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.calendar-month-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.calendar-month-title-row h2 {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: var(--customer-ink);
+}
+
+.calendar-month-count-chip {
+  font-size: 0.78rem;
+  font-weight: 750;
+  color: #1f3d5e;
+  background: #eaf0f9;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-nav-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.customer-app .calendar-nav-button {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: 0.84rem;
+  text-align: center;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.calendar-weekday-cell {
+  text-align: center;
+  font-size: 0.76rem;
+  font-weight: 750;
+  color: var(--customer-muted);
+  padding: 4px 0;
+}
+
+.calendar-day-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.calendar-day-spacer {
+  min-height: 58px;
+}
+
+.customer-app .calendar-day-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 44px;
+  min-height: 58px;
+  padding: 5px 2px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--customer-ink);
+  border: 1px solid var(--customer-control-border);
+  text-align: center;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.customer-app .calendar-day-button.calendar-day-available:hover {
+  background: #eff3f9;
+  border-color: var(--customer-navy);
+}
+
+.customer-app .calendar-day-button.calendar-day-selected,
+.customer-app .calendar-day-button[aria-pressed="true"] {
+  background: var(--customer-navy);
+  color: #ffffff;
+  border: 2px solid var(--customer-navy-deep);
+}
+
+.customer-app .calendar-day-button.calendar-day-selected:hover,
+.customer-app .calendar-day-button[aria-pressed="true"]:hover {
+  background: #2b3a5b;
+}
+
+.customer-app .calendar-day-button.calendar-day-empty:disabled {
+  opacity: 1;
+  background: #f4f6fa;
+  color: #53657d;
+  border: 1px dashed var(--customer-control-border);
+  cursor: not-allowed;
+}
+
+.calendar-day-num {
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-day-offers {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.05;
+  max-width: 100%;
+}
+
+.calendar-day-offers-count {
+  font-size: 0.74rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #1f3d5e;
+}
+
+.calendar-day-offers-unit {
+  font-size: 0.56rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  color: var(--customer-muted);
+}
+
+.calendar-day-selected .calendar-day-offers-count {
+  color: #ffffff;
+}
+
+.calendar-day-selected .calendar-day-offers-unit {
+  color: #e6ebf5;
+}
+
+.calendar-day-zero {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #53657d;
+  line-height: 1.1;
+}
+
+.calendar-day-selected-cue {
+  font-size: 0.54rem;
+  font-weight: 750;
+  line-height: 1.1;
+  color: #ffbd94;
+  white-space: nowrap;
+}
+
+.availability-live-region {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--customer-border);
+  color: var(--customer-ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.45;
+  min-height: 36px;
+}
+
+.availability-day-card {
+  padding: 20px 22px;
+}
+
+.availability-day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--customer-border);
   margin-bottom: 16px;
+}
+
+.availability-day-header-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.availability-day-header-copy h2 {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 800;
+  color: var(--customer-ink);
+}
+
+.availability-day-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--customer-muted);
+  line-height: 1.5;
+}
+
+.availability-day-empty-panel {
+  border: 1px dashed var(--customer-control-border);
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.availability-day-empty-title {
+  margin: 0 0 6px;
+  font-size: 0.96rem;
+  font-weight: 750;
+  color: var(--customer-ink);
+}
+
+.availability-day-empty-copy {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--customer-muted);
+  line-height: 1.55;
+}
+
+.time-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.time-group-item {
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.customer-app .time-group-toggle {
+  width: 100%;
+  min-height: 48px;
+  padding: 11px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #ffffff;
+  color: var(--customer-ink);
+  border: 1px solid var(--customer-control-border);
+  border-radius: 8px;
+  text-align: left;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.customer-app .time-group-toggle:hover {
+  background: #eff3f9;
+  border-color: var(--customer-navy);
+}
+
+.customer-app .time-group-toggle[aria-expanded="true"] {
+  background: #f4f7fc;
+  border-color: var(--customer-navy);
+}
+
+.time-group-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.time-group-clock {
+  font-size: 1.02rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--customer-ink);
+}
+
+.time-group-selected-tag {
+  font-size: 0.74rem;
+  font-weight: 750;
+  color: #1b5e40;
+  background: #e4f3e8;
+  border: 1px solid #96c4a8;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.time-group-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--customer-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.time-group-count {
+  font-weight: 750;
+  color: #1f3d5e;
+  background: #eaf0f9;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+.time-group-chevron {
+  font-size: 0.88rem;
+  color: var(--customer-ink);
+}
+
+.time-group-more-wrap {
+  margin-top: 14px;
+}
+
+.customer-app .show-more-times-button {
+  width: 100%;
+  min-height: 44px;
+  font-weight: 750;
+}
+
+.selected-summary-surface {
+  position: static;
+  border-left: 4px solid var(--customer-orange);
+  padding: 20px 22px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -242,7 +630,7 @@
 
 .selected-summary-copy {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 240px;
 }
 
 .selected-summary-copy h2 {
@@ -277,7 +665,8 @@
 }
 
 .availability-loading,
-.availability-empty {
+.availability-empty,
+.availability-uncertain {
   padding: 28px 24px;
   color: var(--customer-muted);
 }
@@ -309,15 +698,6 @@
   font-weight: 600;
 }
 
-.availability-list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--customer-border);
-}
-
 .availability-count-badge {
   font-size: 0.82rem;
   font-weight: 750;
@@ -325,28 +705,16 @@
   background: #eaf0f9;
   padding: 6px 12px;
   border-radius: 8px;
-}
-
-.availability-date-group {
-  padding: 16px 24px 8px;
-  border-top: 1px solid var(--customer-border);
-}
-
-.availability-date-group:first-of-type {
-  border-top: 0;
-}
-
-.availability-date-heading {
-  font-size: 1rem;
-  font-weight: 750;
-  color: var(--customer-ink);
-  margin: 0 0 8px;
+  white-space: nowrap;
 }
 
 .availability-offer-list {
   list-style: none;
-  margin: 0;
-  padding: 0;
+  margin: 8px 0 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--customer-border);
+  border-radius: 8px;
+  background: #fafbfd;
 }
 
 .availability-offer-row {
@@ -354,7 +722,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 16px 0;
+  padding: 14px 0;
   border-top: 1px solid #ecf0f5;
   min-width: 0;
 }
@@ -373,7 +741,7 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: 1.12rem;
+  font-size: 1.08rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--customer-ink);
@@ -429,6 +797,17 @@
   border-color: #a43e14;
 }
 
+@container (max-width: 420px) {
+  .availability-offer-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .customer-app .offer-select-button {
+    width: 100%;
+  }
+}
+
 @media (max-width: 800px) {
   .customer-app {
     display: block;
@@ -471,23 +850,30 @@
 
 @media (max-width: 620px) {
   .customer-inner {
-    padding: 20px 16px 16px;
+    padding: 18px 10px 16px;
   }
   .availability-hero {
     flex-direction: column;
     gap: 16px;
   }
+  .availability-hero-copy {
+    flex: 0 0 auto;
+    width: 100%;
+  }
   .customer-app .availability-refresh-button {
     width: 100%;
   }
+  .availability-calendar-card {
+    padding: 16px 10px 14px;
+  }
+  .availability-day-card,
   .selected-summary-surface,
-  .availability-date-group,
-  .availability-list-header,
   .availability-loading,
   .availability-empty,
+  .availability-uncertain,
   .availability-error {
-    padding-left: 16px;
-    padding-right: 16px;
+    padding-left: 14px;
+    padding-right: 14px;
   }
   .availability-offer-row {
     flex-direction: column;
@@ -503,6 +889,42 @@
     width: 100%;
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (max-width: 374px) {
+  .customer-inner {
+    padding: 16px 8px 14px;
+  }
+  .availability-calendar-card {
+    padding: 14px 8px 12px;
+  }
+  .calendar-day-spacer {
+    min-height: 54px;
+  }
+  .customer-app .calendar-day-button {
+    min-width: 0;
+    min-height: 54px;
+    padding: 4px 1px;
+  }
+  .calendar-day-offers-count {
+    font-size: 0.7rem;
+  }
+  .calendar-day-offers-unit {
+    font-size: 0.48rem;
+  }
+  .calendar-day-selected-cue {
+    font-size: 0.46rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .customer-app *,
+  .customer-app *::before,
+  .customer-app *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

@@ -389,4 +389,73 @@ describe('F-S1-03 Customer Availability real PostgreSQL integration (AVA-01..10,
     console.info('AVA14_BENCHMARK', JSON.stringify({ samples: sorted.length, p50Ms: p50, p95Ms: p95, maxMs: max }));
     expect(Number.isFinite(p95)).toBe(true);
   });
+
+  it('AVA-14 records reproducible 500+ seeded offer latency and payload size against PostgreSQL', async () => {
+    const tView500 = new Date(Date.now() + 240 * 86_400_000);
+    tView500.setUTCHours(2, 0, 0, 0);
+    const benchT1Id = await createUser(`avail-500-t1-${marker}@example.test`, 'Tutor');
+    const benchT2Id = await createUser(`avail-500-t2-${marker}@example.test`, 'Tutor');
+
+    try {
+      await ownerPool.query(
+        `INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle")
+         SELECT
+           CASE WHEN gs % 2 = 0 THEN $1::uuid ELSE $2::uuid END,
+           $3::timestamptz + ((2 + ((gs / 2) / 10)) * INTERVAL '1 day') + (((gs / 2) % 10) * INTERVAL '1 hour'),
+           $3::timestamptz + ((2 + ((gs / 2) / 10)) * INTERVAL '1 day') + (((gs / 2) % 10 + 1) * INTERVAL '1 hour'),
+           'Offered'
+         FROM generate_series(0, 519) AS gs`,
+        [benchT1Id, benchT2Id, tView500.toISOString()],
+      );
+
+      const benchApp = await createApp(runtimePool, {
+        origin,
+        csrfKey: readKey('AUTH_CSRF_HMAC_KEY'),
+        rateKey: readKey('AUTH_RATE_KEY'),
+        production: false,
+        trustedProxies: ['::ffff:127.0.0.1', '127.0.0.1', '::1'],
+        availabilityClock: () => tView500,
+      });
+
+      for (let i = 0; i < 5; i++) {
+        const warm = await request(benchApp).get('/api/v1/customer/availability').set('Cookie', customer1Cookie);
+        expect(warm.status).toBe(200);
+        expect((warm.body.data as unknown[]).length).toBeGreaterThanOrEqual(520);
+      }
+
+      const samplesMs: number[] = [];
+      let rowCount = 0;
+      let payloadBytes = 0;
+      for (let i = 0; i < 30; i++) {
+        const t0 = performance.now();
+        const res = await request(benchApp).get('/api/v1/customer/availability').set('Cookie', customer1Cookie);
+        const elapsed = performance.now() - t0;
+        expect(res.status).toBe(200);
+        rowCount = (res.body.data as unknown[]).length;
+        payloadBytes = Buffer.byteLength(res.text, 'utf8');
+        samplesMs.push(Number(elapsed.toFixed(2)));
+      }
+      const sorted = [...samplesMs].sort((a, b) => a - b);
+      const p50 = sorted[Math.floor(sorted.length * 0.5)];
+      const p95 = sorted[Math.ceil(sorted.length * 0.95) - 1];
+      const max = sorted[sorted.length - 1];
+      console.info(
+        'AVA14_BENCHMARK_500',
+        JSON.stringify({
+          samples: sorted.length,
+          rows: rowCount,
+          payloadBytes,
+          p50Ms: p50,
+          p95Ms: p95,
+          maxMs: max,
+        }),
+      );
+      expect(rowCount).toBeGreaterThanOrEqual(520);
+      expect(Number.isFinite(p95)).toBe(true);
+    } finally {
+      await ownerPool
+        .query('UPDATE "User" SET "isActive"=false WHERE "id" = ANY($1::uuid[])', [[benchT1Id, benchT2Id]])
+        .catch(() => {});
+    }
+  }, 30_000);
 });

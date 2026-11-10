@@ -93,3 +93,64 @@ Initial hosted CI run [#42495839211](https://github.com/Tanaboonnnnn/CPE334-NutT
 
 ### 3. [P3] Implementation guide terminology correction
 - **Resolution (`docs/features/F-S1-03/implementation.md` & `verification-ledger.md`):** Removed unsupported reference to `onInvalidateSelection` (retaining transient UI selection only; server-side revalidation is owned by #16), and corrected cross-tab notification description from `BroadcastChannel` to `window.localStorage` `storage` events (`nuttiew-auth-changed`).
+
+## Issue #44 Stage 2 (Part F) — Option A Monthly Calendar UX Follow-up (2026-11-10)
+
+**Issue:** [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44) (UX follow-up linked to [#15](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15) & [#16](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/16)).
+**Branch:** `feature/44-customer-calendar-ux` based on `sprint1` `567ec1cc6ba17c9145568296631e99c4e4518aa1` (Stage 1 docs-only Part E amendment PR [#45](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/45)).
+**Scope:** Stage 2 Part F React/CSS implementation of Option A — Date-First Monthly Calendar ([`customer-availability-calendar.ts`](../../../apps/web/src/customer-availability-calendar.ts), [`customer-availability.tsx`](../../../apps/web/src/customer-availability.tsx), [`customer-availability.css`](../../../apps/web/src/customer-availability.css)), unit tests wired to root `npm test` ([`customer-availability-calendar.test.ts`](../../../apps/web/test/customer-availability-calendar.test.ts)), `AVA-14` `500+` seeded PostgreSQL latency benchmark ([`availability.db.test.ts`](../../../apps/api/test/availability.db.test.ts)), `UX-CAL-01..10` Playwright Edge verification ([`availability.calendar.spec.ts`](../../../e2e/availability.calendar.spec.ts) & [`availability-calendar-helper.ts`](../../../e2e/availability-calendar-helper.ts)), and impacted regression selector updates (`e2e/availability.spec.ts`, `e2e/booking.spec.ts`, `e2e/sprint1.journey.spec.ts`).
+**Unchanged boundaries:** Zero changes to `apps/api/src/` (retains unfiltered `GET /api/v1/customer/availability`, `400 INVALID_INPUT` on query params, `OD-002` 60-day `T_view` horizon, `OD-AV-02` opaque `tutorRef`, `F-S1-04` booking/CSRF/SQL guarantees, `F-S1-05` `การจองของฉัน` tab) and zero changes to Deliverable 1 ([#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) / PR [#43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43), `docs/evidence/sprint1/*.png`).
+**Execution environment:** 2026-11-10 (Asia/Bangkok), local Windows, Node **v24.14.0**, PostgreSQL **17.2** (`btree_gist` **1.7**), Prisma Client **7.10.1**, Vitest **4.1.12**, Microsoft Edge Playwright **1.64.1**.
+
+### Observed local verification outcomes
+
+| Command | Actual result | Status |
+|---|---|---|
+| `npm test` | 5 Vitest unit files, **33 passed / 0 failed** (29 `@nuttiew/api` + 4 `@nuttiew/web` `customer-availability-calendar.test.ts`) | **PASS** |
+| `npm run typecheck` | `@nuttiew/api` (`tsc --noEmit`) and `@nuttiew/web` (`tsc -b`) exit 0 | **PASS** |
+| `npm run build` | `@nuttiew/api` (`tsc`) and `@nuttiew/web` (`tsc -b && vite build`) exit 0 | **PASS** |
+| `npm run test:db` | 14 PostgreSQL integration files sequentially against local PG 17.2, **107 passed / 0 failed** (Auth 30, Slot/Race A/Restart 13, BDF 26, Customer Availability 9, Exclusive Booking 14, Retrieval 15) | **PASS** |
+| `npx --workspace=@nuttiew/api vitest run test/availability.db.test.ts` | Isolated run, **9 passed / 0 failed** (`AVA-01..10, 14..18` including `AVA14_BENCHMARK` + `AVA14_BENCHMARK_500`) | **PASS** |
+| `npm run test:e2e -- --reporter=line` | All 12 Microsoft Edge Playwright specs, **68 passed / 0 failed** (`auth.a11y` 2, `auth.matrix` 2, `auth` 7, `auth.stale` 4, `availability.calendar` 4, `availability` 7, `booking` 3, `retrieval` 6, `slots` 7, `sprint1.journey` 1, `tutor.dashboard` 25); `docs/evidence/sprint1/*.png` restored with `git checkout -- docs/evidence/sprint1/` immediately after E2E run | **PASS** |
+| `git diff --check` | Exit 0; zero trailing-whitespace or conflict markers | **PASS** |
+| GitHub Actions CI (`Unit / types / build`, `PostgreSQL 18`, `Microsoft Edge E2E`) | Pending live PR trigger after branch push; check exact-head run on PR checks before review sign-off | **PENDING (Hosted CI)** |
+| Manual human WCAG 2.2 AA & screen-reader audit | Not executed in automated suite | **NOT RUN** |
+
+### Phase 1 vs Phase 2 profiling evidence (`AVA-14` with `500+` seeded PostgreSQL rows)
+
+Added a `520`-Slot real PostgreSQL benchmark (`generate_series(0, 519)` across two active Tutors within `T_view` + 2..28 days) to `apps/api/test/availability.db.test.ts` (`AVA14_BENCHMARK_500`):
+
+- **Isolated single-file run:** 5 warm-up + 30 measured sequential `GET /api/v1/customer/availability` calls returning **`520` rows (`90,591` UTF-8 bytes)**: **`p50 = 9.45 ms`**, **`p95 = 10.75 ms`**, **`max = 12.71 ms`** (`AVA14_BENCHMARK` baseline: 40 samples, `p50 = 6.12 ms`, `p95 = 6.90 ms`, `max = 7.38 ms`).
+- **Full concurrent 14-file `npm run test:db` run:** 30 measured calls returning `520` rows (`90,591` bytes): **`p50 = 30.05 ms`**, **`p95 = 41.66 ms`**, **`max = 48.14 ms`** (`AVA14_BENCHMARK` baseline: `p50 = 19.16 ms`, `p95 = 31.80 ms`, `max = 34.60 ms`).
+- **Engineering conclusion:** Even at 520 live offers against PostgreSQL with the non-owner runtime role, `p95 <= 41.66 ms` is `< 2.1%` of the `2,000 ms` non-blocking reference. Per the Settled Contract Boundary in [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44), **Phase 1 client-side calendar indexing remains sufficient**, and no Phase 2 query/pagination API amendment (`?from`/`?to`/`?page`) is warranted.
+
+### BEFORE vs AFTER visual and responsive layout evidence (`UX-CAL-09`)
+
+- **BEFORE (`feature/15` baseline screenshots `customer-availability-320/375/768/1280.png`):** Rendered `dateGroups.map(...group.items.map(...))` simultaneously for all eligible dates, producing multi-screen vertical scrolling across repeated identical times (`08:00`, `09:00`, ...) when populated with hundreds of offers.
+- **AFTER (`UX-CAL-08/09` genuine PostgreSQL captures `after-calendar-dense-500plus-1280.png`, `after-calendar-320/375/768/800/801/1280/selected-1280.png`):**
+  - Renders Step 1 (`1. เลือกวันที่`) 7-column Mon–Sun monthly calendar + Step 2 (`2. เลือกช่วงเวลา`) collapsed exact `(startsAt, endsAt)` time groups (`<= 6` visible initially + `"ดูเวลาเพิ่มเติม"`) + non-sticky `position: static` Step 3 (`#selected-offer-summary`) inline directly below the Step 2 day card.
+  - Uses CSS Container Queries on `.availability-workspace-container` (`@container (min-width: 680px)`) and `.availability-day-pane` (`@container (max-width: 420px)`):
+    - **`768px`, `800px` (sidebar collapsed) and `1280px` (sidebar open):** Balanced 2-column grid (`minmax(356px, 40%) minmax(0, 1fr)`); day pane container stacks individual offer rows cleanly without time wrapping at `768/800px`.
+    - **`801px` (narrow sidebar-open transition), `375px`, and `320px`:** Single-column vertical reflow (`Calendar -> Day Time Groups -> Non-sticky Summary`); `availability-hero` wraps cleanly at `801px` (`box.x + box.width <= width - 8`), and `@media (max-width: 620px)` resets `.availability-hero-copy { flex: 0 0 auto; width: 100% }` so no artificial vertical flex-basis gap appears above `"โหลดข้อมูลล่าสุด"`.
+  - Measured `documentElement.scrollWidth <= window.innerWidth` (`overflow = false`) at **`320, 375, 640 (200% zoom), 768, 800, 801, 1280` CSS px**; all controls and `>= 375px` calendar day tiles measure `>= 44×44 CSS px`, while `320px` day tiles measure `>= 36×44 CSS px` cleanly exceeding `WCAG 2.2 AA SC 2.5.8` (`24×24px`).
+
+### `UX-CAL-01..10` STS verification matrix
+
+| STS ID | Trace | Verification method | Observed result | Status |
+|---|---|---|---|---|
+| **UX-CAL-01** | `FR-S1-08`, `AC-S1-15`, `OD-AV-03` | Unit (`customer-availability-calendar.test.ts`) + real 522-row PostgreSQL Edge E2E (`availability.calendar.spec.ts`) | Renders monthly grid opened to earliest month/day; mounts `0` offer `<li data-testid="availability-offer">` rows initially; Step 2 shows `<= 6` collapsed time groups + `"ดูเวลาเพิ่มเติม (อีก 6 ช่วงเวลา)"`; zero period filter chips; expanding reveals all 12 groups without extra HTTP calls/query params | **PASS** |
+| **UX-CAL-02** | `FR-S1-08/09`, `AC-S1-15/18`, `OD-002` | Unit (`daysInMonth`, `shiftMonthKey`, `buildAvailabilityCalendarIndex`) + controlled DTO `T_view` Edge E2E | Opens earliest eligible month (`พฤศจิกายน 2026`), navigates `Nov -> Dec (empty) -> Jan` (`มกราคม 2027`) within `OD-002` 60-day horizon without browser clock; Dec shows empty-month notice distinct from global empty; badge counts total offers (`3 ช่วงเวลา` across 2 Tutors, not `2`); verifies `2028-02-29` leap year | **PASS** |
+| **UX-CAL-03** | `FR-S1-08`, `AC-S1-15`, `OD-AV-02/03`, `BR-S1-06` | Unit (`groupDayOffersByExactInterval`) + E2E (`UX-CAL-01/03`, `UX-CAL-02/03/07`) | Keys strictly on `${startsAt}|${endsAt}` (keeps `10:15–11:15` vs `10:15–11:45` separate, computes `60` vs `90 นาที`); preserves exact server order (`startsAt ASC, tutorRef ASC, slotId ASC`); exposes opaque `tutorRef` + distinct `slotId`s only | **PASS** |
+| **UX-CAL-04** | `FR-S1-10/18`, `AC-S1-17`, `BR-S1-21` | E2E (`UX-CAL-04/06` with isolated `customer2Email` + `dedicatedBookSlotId`) | Month/day/time clicks never issue `POST` and retain `#selected-offer-summary` inline across day switches; non-unknown vanished selection on refresh clears selection and sets `staleNotice`; `unknownOutcome` stays locked across day changes and empty `data: []` until retry reconciles `201` | **PASS** |
+| **UX-CAL-05** | `FR-S1-10..18`, `BOOK-01..33`, `RET-03/06` | Real PostgreSQL Edge E2E (`booking.spec.ts` 3/3, `retrieval.spec.ts` 6/6, `sprint1.journey.spec.ts` 1/1) via shared `availability-calendar-helper.ts` | Confirms `201 Created`, `200` replay, `409 SLOT_UNAVAILABLE`/`CUSTOMER_OVERLAP`, `422 BOOKING_NOT_ELIGIBLE`, `503 BOOKING_OUTCOME_UNKNOWN` recovery, `การจองของฉัน` retrieval/modal, and cross-Customer `404` isolation without weakening assertions | **PASS** |
+| **UX-CAL-06** | `FR-S1-18`, `BR-S1-17/20`, `NFR-S1-01/08` | E2E (`UX-CAL-04/06` + `availability.spec.ts` `AVA-06/07/09/10/12` 7/7) | Fail-closed throughout: day empty (`calendar-day-empty`) and month empty (`calendar-month-empty`) remain distinct from global `data: []`; initial/retry `503` and malformed 200 DTO hide calendar grid completely; session mismatch, `401`/`403`, and logout uncertainty clear calendar state cleanly | **PASS** |
+| **UX-CAL-07** | `AC-S1-18`, `BR-S1-12`, `Q29` | Unit (`16:30Z` vs `17:00Z/17:30Z`) + `UTC` and `America/Los_Angeles` Edge contexts (`UX-CAL-02/03/07` & `AVA-04`) | Calendar day bucket, header, `HH:mm–HH:mm น.` interval, and `สิ้นสุดในวันถัดไป` badge remain invariant across `Asia/Bangkok`, `UTC`, and `America/Los_Angeles` browser timezones | **PASS** |
+| **UX-CAL-08** | `NFR-S1-09`, `VAL-033`, `OD-AV-08` | Automated Edge E2E + CSS telemetry (`UX-CAL-08/09`, `AVA-13/19`) | Keyboard `Tab`/`Enter` day activation, `3px solid rgb(170, 69, 25)` offset `3px` outline, concise `aria-live="polite"` (`^เลือกวันที่ .+ พบ \d+ ช่วงเวลา$`), computed sRGB contrast (`>= 4.5:1` text / `>= 3:1` UI), `@media (prefers-reduced-motion: reduce)` (`<= 0.001s`), `200%` zoom (`640×450`, `overflow = false`). **Manual human WCAG 2.2 AA audit remains NOT RUN.** | **PARTIAL (Automated browser checks PASS; manual human WCAG audit NOT RUN)** |
+| **UX-CAL-09** | `NFR-S1-09`, `OD-AV-08`, `AVA-*`, `BOOK-*`, `RET-*` | Real PostgreSQL Edge E2E captures (`320/375/768/800/801/1280px`) + full 68-test Edge suite | Zero horizontal overflow, verified 1-col / 2-col container geometry, `position: static` `#selected-offer-summary` strictly below Step 2 card, measured control target boxes & right-edge bounds, all 12 Playwright specs (**68/68**) passing | **PASS** |
+| **UX-CAL-10** | `NFR-S1-07/10/12`, `OD-AV-07` | Full local suite (`33/33` unit, `typecheck`, `build`, `107/107` PG 17 DB, `68/68` Edge E2E, `AVA14_BENCHMARK_500`) + hosted GitHub Actions CI pending PR HEAD | All local automated checks PASS and documented here; **hosted GitHub Actions CI (`PostgreSQL 18` + `Ubuntu 24.04` + `Edge`) stays PENDING until PR HEAD run finishes.** | **LOCAL PASS / HOSTED CI PENDING** |
+
+### Open gates and remaining actions
+
+- **Manual human WCAG 2.2 AA & screen-reader inspection:** **NOT RUN.** Automated Edge measurements never substitute for manual human sign-off.
+- **`OD-AV-02` positive `tutorDisplayName` path:** Remains **BLOCKED** pending Tutor consent, publication sign-off, and forward-only migration; opaque `tutorRef` is strictly enforced.
+- **Peer review & integration:** Open PR from `feature/44-customer-calendar-ux` to `sprint1` linking `#44`, await hosted CI PASS on exact PR HEAD, and request independent human review from `@Tanaboonnnnn`.
