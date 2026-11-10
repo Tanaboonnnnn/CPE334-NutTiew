@@ -1,0 +1,80 @@
+name: Build Illustrated D1 PDF
+
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - 'scripts/build-d1-illustrated.py'
+      - '.github/workflows/build-d1-illustrated.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-document:
+    name: Rebuild & validate self-contained D1 PDF
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: docs/52-d1-complete-illustrated
+          fetch-depth: 1
+
+      - name: Prepare Python, Thai fonts, and PDF dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-core libpango-1.0-0 libpangoft2-1.0-0
+          python3 -m pip install --upgrade --quiet pymupdf weasyprint pillow markdown-it-py
+
+      - name: Fetch authentic Login PR51 visual evidence
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin 3c0cb1b771740fe96ec0ccba0cfbaac531692af1
+          mkdir -p build/d1
+          for file in login-after-1280.png login-after-375.png login-after-error-1280.png; do
+            git show FETCH_HEAD:docs/evidence/login-theme/"$file" > build/d1/"$file"
+            test -s build/d1/"$file"
+          done
+
+      - name: Build and audit full illustrated PDF
+        run: |
+          set -euo pipefail
+          python3 scripts/build-d1-illustrated.py
+          python3 - <<'PY'
+          import fitz
+          from pathlib import Path
+          p=Path("docs/deliverables/CPE334_Deliverable1_NutTiew.pdf")
+          d=fitz.open(p)
+          print("PAGES",len(d),"BOOKMARKS",len(d.get_toc()),"SIZE",p.stat().st_size)
+          assert len(d)>230
+          assert len(d.get_toc())>=7
+          assert any("3c0cb1b" in x.get_text() for x in d[:5])
+          assert not any(len(x.get_text().strip())<15 and len(x.get_images())==0 for x in d)
+          PY
+
+      - name: Upload verified PDF and sources for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuttiew-d1-illustrated-complete
+          path: |
+            docs/deliverables/CPE334_Deliverable1_NutTiew.pdf
+            build/d1/summary.pdf
+            build/d1/build-summary.txt
+            build/d1/summary.html
+          if-no-files-found: error
+          retention-days: 10
+
+      - name: Commit updated PDF only to the PR head
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/deliverables/CPE334_Deliverable1_NutTiew.pdf
+          if git diff --cached --quiet; then
+            echo "No PDF change"
+          else
+            git commit -m "docs(d1): bundle complete contracts and refreshed visual evidence [skip ci]"
+            git push origin HEAD:"$GITHUB_HEAD_REF"
+          fi
