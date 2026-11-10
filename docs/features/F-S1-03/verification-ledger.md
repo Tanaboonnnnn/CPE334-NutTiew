@@ -149,8 +149,20 @@ Added a `520`-Slot real PostgreSQL benchmark (`generate_series(0, 519)` across t
 | **UX-CAL-09** | `NFR-S1-09`, `OD-AV-08`, `AVA-*`, `BOOK-*`, `RET-*` | Real PostgreSQL Edge E2E captures (`320/375/768/800/801/1280px`) + full 68-test Edge suite | Zero horizontal overflow, verified 1-col / 2-col container geometry, `position: static` `#selected-offer-summary` strictly below Step 2 card, measured control target boxes & right-edge bounds, all 12 Playwright specs (**68/68**) passing | **PASS** |
 | **UX-CAL-10** | `NFR-S1-07/10/12`, `OD-AV-07` | Full local suite (`34/34` unit, `typecheck`, `build`, `107/107` PG 17 DB, `68/68` Edge E2E, `AVA14_BENCHMARK_500`) + hosted GitHub Actions CI pending PR HEAD | All local automated checks PASS and documented here; **hosted GitHub Actions CI (`PostgreSQL 18` + `Ubuntu 24.04` + `Edge`) stays PENDING until PR HEAD run finishes.** | **LOCAL PASS / HOSTED CI PENDING** |
 
+### PR #47 requested-changes remediation — 2026-11-10 (Asia/Bangkok)
+
+**Reviewer:** `@Tanaboonnnnn` ([PR #47 REQUEST_CHANGES](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47#pullrequestreview-5842174567) / [inline comment](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47#discussion_r4525120282) on `41f909631770f60d69ad3515e7e282696eb0e6af`). Preceding baseline hosted CI run [#42816258676](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42816258676) passed `3/3` on `41f9096` (Unit/TS/build `34`, PostgreSQL 18 `107` incl. `520`-row `p95 = 16.57 ms`, Edge E2E `68`).
+
+- **Defect (`[P2 | Accessibility / keyboard focus]`):** Activating `ดูเวลาเพิ่มเติม` via `Enter` / `Space` / click set `showAllTimeGroups(true)`, reducing `hiddenTimeGroupCount` to `0` and unmounting `[data-testid="show-more-times-btn"]` while focused without moving focus (`document.activeElement` fell back to `BODY`).
+- **Resolution (`apps/web/src/customer-availability.tsx`):** Added `pendingFocusGroupKeyRef`, `timeGroupToggleRefs`, `handleShowMoreTimeGroups()`, and a post-commit `useEffect` that transfers keyboard focus directly to the first newly revealed time-group toggle (`dayTimeGroups[DEFAULT_VISIBLE_TIME_GROUPS]`), while clearing stale pending focus keys on month/day navigation, `clearProtectedState()`, and error/empty resets.
+- **TDD RED -> GREEN (`e2e/availability.calendar.spec.ts` `UX-CAL-08/09`):**
+  - **RED:** Added keyboard focus continuity assertions before fixing `customer-availability.tsx`; failed cleanly in Microsoft Edge at `expect(activeAfterEnter).toEqual({ tag: 'BUTTON', testId: 'time-group-toggle' })` with `Received: { tag: 'BODY', testId: null }`.
+  - **GREEN:** After applying the `customer-availability.tsx` focus transfer, `e2e/availability.calendar.spec.ts` passed **`4/4`** verifying both `Enter` (`1280px`) and `Space` (`375px` sticky mobile header, `boundingBox.y >= 69`), `:focus-visible` (`3px solid rgb(170, 69, 25)` offset `3px`), and sequential `Tab` traversal (`15:30` -> `16:45` -> `18:00` -> expanded offer CTA).
+- **Full post-remediation local suite:** `npm test` **34/34**, `npm run typecheck` **PASS**, `npm run build` **PASS**, `npm run test:db` **14/14 files (107/107 tests)**, `npm run test:e2e -- --reporter=line` **68/68** (with `docs/evidence/sprint1/*.png` restored via `git checkout -- docs/evidence/sprint1/`).
+- **Hosted GitHub Actions CI on new remediation HEAD:** **PENDING** push to PR [#47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47).
+
 ### Open gates and remaining actions
 
 - **Manual human WCAG 2.2 AA & screen-reader inspection:** **NOT RUN.** Automated Edge measurements never substitute for manual human sign-off.
 - **`OD-AV-02` positive `tutorDisplayName` path:** Remains **BLOCKED** pending Tutor consent, publication sign-off, and forward-only migration; opaque `tutorRef` is strictly enforced.
-- **Peer review & integration:** Open PR from `feature/44-customer-calendar-ux` to `sprint1` linking `#44`, await hosted CI PASS on exact PR HEAD, and request independent human review from `@Tanaboonnnnn`.
+- **Peer review & integration:** Re-request `@Tanaboonnnnn` review on open PR [#47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47) targeting `sprint1` once hosted CI finishes PASS on the new remediation HEAD.

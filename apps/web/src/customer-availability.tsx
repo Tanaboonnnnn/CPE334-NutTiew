@@ -377,6 +377,8 @@ export function CustomerAvailability({
   const viewedMonthRef = useRef<string | null>(null);
   const submittingRef = useRef(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const pendingFocusGroupKeyRef = useRef<string | null>(null);
+  const timeGroupToggleRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   const shortId = accountId.replaceAll('-', '').slice(-8);
 
@@ -396,6 +398,7 @@ export function CustomerAvailability({
   };
 
   const clearProtectedState = () => {
+    pendingFocusGroupKeyRef.current = null;
     sessionEpoch.current++;
     csrfVersion.current++;
     bookingsVersion.current++;
@@ -541,6 +544,7 @@ export function CustomerAvailability({
           setSelectedDayKey(null);
           viewedMonthRef.current = null;
           setViewedMonthKey(null);
+          pendingFocusGroupKeyRef.current = null;
           setExpandedTimeKeys({});
           setShowAllTimeGroups(false);
           setCalendarLiveMessage('ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก');
@@ -558,6 +562,7 @@ export function CustomerAvailability({
             setSelectedDayKey(initialDay);
             viewedMonthRef.current = initialMonth;
             setViewedMonthKey(initialMonth);
+            pendingFocusGroupKeyRef.current = null;
             setExpandedTimeKeys({});
             setShowAllTimeGroups(false);
             const initialCount = nextIndex.offersByDay.get(initialDay)?.length ?? 0;
@@ -608,6 +613,7 @@ export function CustomerAvailability({
           setSelectedDayKey(null);
           viewedMonthRef.current = null;
           setViewedMonthKey(null);
+          pendingFocusGroupKeyRef.current = null;
           setExpandedTimeKeys({});
           setShowAllTimeGroups(false);
           setCalendarLiveMessage('');
@@ -1013,6 +1019,7 @@ export function CustomerAvailability({
     if (calendarIndex.maxMonthKey && candidate > calendarIndex.maxMonthKey) return;
     viewedMonthRef.current = candidate;
     setViewedMonthKey(candidate);
+    pendingFocusGroupKeyRef.current = null;
     setExpandedTimeKeys({});
     setShowAllTimeGroups(false);
     const countInMonth = calendarIndex.monthOfferCount(candidate);
@@ -1032,6 +1039,7 @@ export function CustomerAvailability({
     const targetMonth = monthKeyFromDayKey(dayKey);
     viewedMonthRef.current = targetMonth;
     setViewedMonthKey(targetMonth);
+    pendingFocusGroupKeyRef.current = null;
     setExpandedTimeKeys({});
     setShowAllTimeGroups(false);
     setCalendarLiveMessage(
@@ -1045,6 +1053,22 @@ export function CustomerAvailability({
       [groupKey]: !prev[groupKey],
     }));
   };
+
+  const handleShowMoreTimeGroups = () => {
+    const firstRevealedGroup = dayTimeGroups[DEFAULT_VISIBLE_TIME_GROUPS];
+    pendingFocusGroupKeyRef.current = firstRevealedGroup?.key ?? null;
+    setShowAllTimeGroups(true);
+  };
+
+  useEffect(() => {
+    const targetKey = pendingFocusGroupKeyRef.current;
+    if (!showAllTimeGroups || !targetKey) return;
+    const targetButton = timeGroupToggleRefs.current.get(targetKey);
+    pendingFocusGroupKeyRef.current = null;
+    if (targetButton && document.contains(targetButton)) {
+      targetButton.focus();
+    }
+  }, [showAllTimeGroups, visibleTimeGroups]);
 
   const renderSelectedOfferSummary = () => {
     if (!activeOffer) return null;
@@ -1716,6 +1740,13 @@ export function CustomerAvailability({
                                 >
                                   <button
                                     type="button"
+                                    ref={el => {
+                                      if (el) {
+                                        timeGroupToggleRefs.current.set(group.key, el);
+                                      } else {
+                                        timeGroupToggleRefs.current.delete(group.key);
+                                      }
+                                    }}
                                     className="time-group-toggle"
                                     data-testid="time-group-toggle"
                                     aria-expanded={isExpanded}
@@ -1824,7 +1855,7 @@ export function CustomerAvailability({
                                 type="button"
                                 className="show-more-times-button"
                                 data-testid="show-more-times-btn"
-                                onClick={() => setShowAllTimeGroups(true)}
+                                onClick={handleShowMoreTimeGroups}
                               >
                                 ดูเวลาเพิ่มเติม (อีก {hiddenTimeGroupCount} ช่วงเวลา)
                               </button>

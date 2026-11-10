@@ -639,6 +639,69 @@ test.describe('F-S1-03 UX-CAL-01..10 Customer Availability Option A Monthly Cale
       outlineOffset: '3px',
     });
 
+    // PR #47 accessibility fix: keyboard Enter & Space on show-more transfers focus to 1st newly revealed group toggle (index 6)
+    const showMoreBtn = page.getByTestId('show-more-times-btn');
+    await expect(showMoreBtn).toBeVisible();
+    await showMoreBtn.focus();
+    await expect(showMoreBtn).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('show-more-times-btn')).toHaveCount(0);
+    await expect(page.getByTestId('time-group-item')).toHaveCount(9);
+
+    const activeAfterEnter = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName ?? null,
+      testId: document.activeElement?.getAttribute('data-testid') ?? null,
+    }));
+    expect(activeAfterEnter).toEqual({ tag: 'BUTTON', testId: 'time-group-toggle' });
+
+    const firstRevealedToggle = page.getByTestId('time-group-toggle').nth(6);
+    await expect(firstRevealedToggle).toBeFocused();
+    await expect(firstRevealedToggle).toContainText('15:30');
+    const revealedFocusRing = await firstRevealedToggle.evaluate(el => {
+      const s = getComputedStyle(el);
+      return {
+        focusVisible: el.matches(':focus-visible'),
+        outlineStyle: s.outlineStyle,
+        outlineColor: s.outlineColor,
+        outlineWidth: s.outlineWidth,
+        outlineOffset: s.outlineOffset,
+      };
+    });
+    expect(revealedFocusRing).toEqual({
+      focusVisible: true,
+      outlineStyle: 'solid',
+      outlineColor: 'rgb(170, 69, 25)',
+      outlineWidth: '3px',
+      outlineOffset: '3px',
+    });
+
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('time-group-toggle').nth(7)).toBeFocused();
+    await expect(page.getByTestId('time-group-toggle').nth(7)).toContainText('16:45');
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('time-group-toggle').nth(8)).toBeFocused();
+    await expect(page.getByTestId('time-group-toggle').nth(8)).toContainText('18:00');
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('time-group-toggle').nth(8)).toHaveAttribute('aria-expanded', 'true');
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('time-group-item').nth(8).locator('.offer-select-button')).toBeFocused();
+
+    // Reset collapsed state via day switch & verify Space activation at 375px sticky mobile header
+    await selectCalendarDay(page, cleanDay2);
+    await selectCalendarDay(page, cleanDay1);
+    await page.setViewportSize({ width: 375, height: 720 });
+    await expect(showMoreBtn).toBeVisible();
+    await showMoreBtn.focus();
+    await expect(showMoreBtn).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(page.getByTestId('time-group-item')).toHaveCount(9);
+    await expect(firstRevealedToggle).toBeFocused();
+    const mobileRevealedBox = await firstRevealedToggle.boundingBox();
+    expect(mobileRevealedBox).not.toBeNull();
+    expect(mobileRevealedBox!.y).toBeGreaterThanOrEqual(69);
+    await page.keyboard.press('Tab');
+    await expect(page.getByTestId('time-group-toggle').nth(7)).toBeFocused();
+
     // Reduced motion check & 200% zoom viewport check (640x450)
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const transitionDuration = await firstDayCell.evaluate(el => getComputedStyle(el).transitionDuration);
