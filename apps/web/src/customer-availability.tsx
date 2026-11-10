@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { bangkokClock, bangkokDayKey, bangkokLongDate } from './tutor-calendar.js';
+import { CustomerAvailabilityCalendar } from './customer-calendar.js';
 import './tutor-dashboard.css';
 import './customer-availability.css';
 
@@ -302,31 +303,6 @@ function isUnknownCommitError(error: unknown): boolean {
       error.message === 'HTTP_502' ||
       error.message === 'HTTP_504')
   );
-}
-
-type DateGroup = {
-  dayKey: string;
-  dateLabel: string;
-  items: CustomerAvailabilityOffer[];
-};
-
-function groupOffersByBangkokDate(offers: CustomerAvailabilityOffer[]): DateGroup[] {
-  const groups: DateGroup[] = [];
-  for (const offer of offers) {
-    const start = new Date(offer.startsAt);
-    const dayKey = bangkokDayKey(start);
-    const last = groups[groups.length - 1];
-    if (last && last.dayKey === dayKey) {
-      last.items.push(offer);
-    } else {
-      groups.push({
-        dayKey,
-        dateLabel: bangkokLongDate(start),
-        items: [offer],
-      });
-    }
-  }
-  return groups;
 }
 
 export function CustomerAvailability({
@@ -894,7 +870,103 @@ export function CustomerAvailability({
     (selectedSlotId !== null
       ? (offers.find(item => item.slotId === selectedSlotId) ?? selectedOfferSnapshot)
       : null);
-  const dateGroups = groupOffersByBangkokDate(offers);
+  const selectionSummary = activeOffer && !loading && !listError ? (
+            <section
+              id="selected-offer-summary"
+              className="availability-surface selected-summary-surface"
+              aria-labelledby="selected-offer-heading"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="selected-summary-copy">
+                <h2 id="selected-offer-heading">
+                  {unknownOutcome ? 'รอการยืนยันผลการจองช่วงเวลาติว' : 'ยืนยันการจองช่วงเวลาติว — ช่วงเวลาที่เลือกไว้'}
+                </h2>
+                <p className="selected-summary-details">
+                  {bangkokLongDate(new Date(activeOffer.startsAt))} •{' '}
+                  {bangkokClock(new Date(activeOffer.startsAt))}–
+                  {bangkokClock(new Date(activeOffer.endsAt))} น.
+                  {bangkokDayKey(new Date(activeOffer.startsAt)) !==
+                    bangkokDayKey(new Date(activeOffer.endsAt)) &&
+                    ' (สิ้นสุดในวันถัดไป)'}{' '}
+                  • รหัสอ้างอิงติวเตอร์: {activeOffer.tutorRef}
+                </p>
+                {unknownOutcome ? (
+                  <p className="selection-not-booking-note" role="alert">
+                    ยังไม่สามารถยืนยันผลการจองได้จากเซิร์ฟเวอร์ กรุณาส่งคำขอเดิมซ้ำเพื่อตรวจสอบหรือยืนยันรหัสการจองเดิมก่อนเลือกช่วงเวลาอื่น
+                  </p>
+                ) : (
+                  <p className="selection-not-booking-note">
+                    การเลือกช่วงเวลานี้ยังไม่ใช่การจอง และยังไม่ได้ล็อกสิทธิ์จนกว่าจะยืนยันการจองในขั้นตอนถัดไป
+                  </p>
+                )}
+                {csrfError && (
+                  <p
+                    id="booking-csrf-error"
+                    data-testid="booking-csrf-error"
+                    className="selection-not-booking-note"
+                    role="alert"
+                  >
+                    {csrfError}
+                  </p>
+                )}
+              </div>
+              <div className="selected-summary-actions">
+                {unknownOutcome ? (
+                  <>
+                    <button
+                      type="button"
+                      className="confirm-booking-button"
+                      disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
+                      onClick={() => void confirmSelectedBooking(activeOffer)}
+                    >
+                      {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ส่งคำขอเดิมอีกครั้ง'}
+                    </button>
+                    {csrfError && (
+                      <button
+                        type="button"
+                        className="clear-selection-button"
+                        disabled={csrfLoading || submittingBooking || logoutBusy}
+                        onClick={() => void loadCsrfBootstrap()}
+                      >
+                        เตรียมการจองอีกครั้ง
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="confirm-booking-button"
+                      disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
+                      onClick={() => void confirmSelectedBooking(activeOffer)}
+                    >
+                      {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ยืนยันการจอง'}
+                    </button>
+                    {csrfError && (
+                      <button
+                        type="button"
+                        className="clear-selection-button"
+                        disabled={csrfLoading || submittingBooking || logoutBusy}
+                        onClick={() => void loadCsrfBootstrap()}
+                      >
+                        เตรียมการจองอีกครั้ง
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="clear-selection-button"
+                      disabled={submittingBooking}
+                      onClick={() => selectOffer(null)}
+                    >
+                      ยกเลิกการเลือก
+                    </button>
+                  </>
+                )}
+              </div>
+            </section>
+  ) : null;
+
 
   return (
     <div className="customer-app">
@@ -1109,7 +1181,7 @@ export function CustomerAvailability({
               <h2 className="dashboard-kicker">ยินดีต้อนรับ</h2>
               <h1 id="availability-heading">เลือกช่วงเวลาติว</h1>
               <p className="availability-helper">
-                เวลาที่แสดงเป็นเวลาประเทศไทย <strong>Asia/Bangkok (UTC+07:00)</strong>
+                เลือกวันที่สะดวก แล้วเลือกช่วงเวลา · เวลาที่แสดงเป็นเวลาประเทศไทย <strong>Asia/Bangkok (UTC+07:00)</strong>
               </p>
               {evaluatedAt && !listError && (
                 <p className="availability-evaluated-at">
@@ -1180,103 +1252,6 @@ export function CustomerAvailability({
               </div>
             )}
 
-          {activeOffer && !loading && !listError && (
-            <section
-              id="selected-offer-summary"
-              className="availability-surface selected-summary-surface"
-              aria-labelledby="selected-offer-heading"
-              role="status"
-              aria-live="polite"
-            >
-              <div className="selected-summary-copy">
-                <h2 id="selected-offer-heading">
-                  {unknownOutcome ? 'รอการยืนยันผลการจองช่วงเวลาติว' : 'ยืนยันการจองช่วงเวลาติว — ช่วงเวลาที่เลือกไว้'}
-                </h2>
-                <p className="selected-summary-details">
-                  {bangkokLongDate(new Date(activeOffer.startsAt))} •{' '}
-                  {bangkokClock(new Date(activeOffer.startsAt))}–
-                  {bangkokClock(new Date(activeOffer.endsAt))} น.
-                  {bangkokDayKey(new Date(activeOffer.startsAt)) !==
-                    bangkokDayKey(new Date(activeOffer.endsAt)) &&
-                    ' (สิ้นสุดในวันถัดไป)'}{' '}
-                  • รหัสอ้างอิงติวเตอร์: {activeOffer.tutorRef}
-                </p>
-                {unknownOutcome ? (
-                  <p className="selection-not-booking-note" role="alert">
-                    ยังไม่สามารถยืนยันผลการจองได้จากเซิร์ฟเวอร์ กรุณาส่งคำขอเดิมซ้ำเพื่อตรวจสอบหรือยืนยันรหัสการจองเดิมก่อนเลือกช่วงเวลาอื่น
-                  </p>
-                ) : (
-                  <p className="selection-not-booking-note">
-                    การเลือกช่วงเวลานี้ยังไม่ใช่การจอง และยังไม่ได้ล็อกสิทธิ์จนกว่าจะยืนยันการจองในขั้นตอนถัดไป
-                  </p>
-                )}
-                {csrfError && (
-                  <p
-                    id="booking-csrf-error"
-                    data-testid="booking-csrf-error"
-                    className="selection-not-booking-note"
-                    role="alert"
-                  >
-                    {csrfError}
-                  </p>
-                )}
-              </div>
-              <div className="selected-summary-actions">
-                {unknownOutcome ? (
-                  <>
-                    <button
-                      type="button"
-                      className="confirm-booking-button"
-                      disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
-                      onClick={() => void confirmSelectedBooking(activeOffer)}
-                    >
-                      {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ส่งคำขอเดิมอีกครั้ง'}
-                    </button>
-                    {csrfError && (
-                      <button
-                        type="button"
-                        className="clear-selection-button"
-                        disabled={csrfLoading || submittingBooking || logoutBusy}
-                        onClick={() => void loadCsrfBootstrap()}
-                      >
-                        เตรียมการจองอีกครั้ง
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      className="confirm-booking-button"
-                      disabled={submittingBooking || csrfLoading || !csrfToken || logoutBusy}
-                      onClick={() => void confirmSelectedBooking(activeOffer)}
-                    >
-                      {submittingBooking ? 'กำลังยืนยันการจอง…' : 'ยืนยันการจอง'}
-                    </button>
-                    {csrfError && (
-                      <button
-                        type="button"
-                        className="clear-selection-button"
-                        disabled={csrfLoading || submittingBooking || logoutBusy}
-                        onClick={() => void loadCsrfBootstrap()}
-                      >
-                        เตรียมการจองอีกครั้ง
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="clear-selection-button"
-                      disabled={submittingBooking}
-                      onClick={() => selectOffer(null)}
-                    >
-                      ยกเลิกการเลือก
-                    </button>
-                  </>
-                )}
-              </div>
-            </section>
-          )}
-
           <section id="availability-section" aria-labelledby="availability-heading">
             {loading ? (
               <div className="availability-surface availability-loading" role="status">
@@ -1302,9 +1277,12 @@ export function CustomerAvailability({
               </div>
             ) : offers.length === 0 ? (
               hasConfirmedResponse && !logoutBusy && !logoutError ? (
+                <>
                 <div className="availability-surface availability-empty" role="status">
                   <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก</p>
                 </div>
+                  {selectionSummary}
+                </>
               ) : logoutBusy || logoutError ? (
                 <div className="availability-surface availability-uncertain" role="status">
                   <p className="availability-uncertain-copy">
@@ -1324,82 +1302,15 @@ export function CustomerAvailability({
                 </div>
               ) : null
             ) : (
-              <div className="availability-surface">
-                <div className="availability-list-header" role="status">
-                  <span>รายการช่วงเวลาที่พร้อมให้เลือกตามลำดับเวลาเริ่ม</span>
-                  <span className="availability-count-badge">
-                    {offers.length} ช่วงเวลา
-                  </span>
-                </div>
-                {dateGroups.map(group => (
-                  <div className="availability-date-group" key={group.dayKey}>
-                    <h2 className="availability-date-heading">{group.dateLabel}</h2>
-                    <ul
-                      className="availability-offer-list"
-                      aria-label={`ช่วงเวลาติววันที่ ${group.dateLabel}`}
-                    >
-                      {group.items.map(offer => {
-                        const start = new Date(offer.startsAt);
-                        const end = new Date(offer.endsAt);
-                        const crossMidnight =
-                          bangkokDayKey(start) !== bangkokDayKey(end);
-                        const isSelected = selectedSlotId === offer.slotId;
-                        const lockedToOtherUnknown =
-                          unknownOutcome !== null && unknownOutcome.slotId !== offer.slotId;
-                        return (
-                          <li
-                            key={offer.slotId}
-                            data-testid="availability-offer"
-                            data-offer-slot-id={offer.slotId}
-                            data-tutor-ref={offer.tutorRef}
-                            className={
-                              'availability-offer-row' +
-                              (isSelected ? ' availability-offer-selected' : '')
-                            }
-                          >
-                            <div className="availability-offer-main">
-                              <div className="offer-hours">
-                                <time dateTime={offer.startsAt}>
-                                  {bangkokClock(start)}
-                                </time>
-                                <span aria-hidden="true">–</span>
-                                <time dateTime={offer.endsAt}>
-                                  {bangkokClock(end)}
-                                </time>
-                                {crossMidnight && (
-                                  <span className="offer-next-day">
-                                    สิ้นสุดในวันถัดไป
-                                  </span>
-                                )}
-                              </div>
-                              <div className="offer-date-line">
-                                {bangkokLongDate(start)} • 60 นาที (Asia/Bangkok)
-                              </div>
-                              <div className="offer-tutor-ref">
-                                รหัสอ้างอิงติวเตอร์: <span>{offer.tutorRef}</span>
-                              </div>
-                              {isSelected && (
-                                <div className="offer-selected-status">
-                                  สถานะ: เลือกไว้แล้ว (ยังไม่ใช่การจอง)
-                                </div>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              className="offer-select-button"
-                              aria-pressed={isSelected}
-                              disabled={submittingBooking || lockedToOtherUnknown}
-                              onClick={() => selectOffer(offer.slotId)}
-                            >
-                              {isSelected ? 'เลือกช่วงเวลานี้แล้ว' : 'เลือกช่วงเวลานี้'}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
-              </div>
+              <CustomerAvailabilityCalendar
+                offers={offers}
+                evaluatedAt={evaluatedAt!}
+                selectedSlotId={selectedSlotId}
+                unknownSlotId={unknownOutcome?.slotId ?? null}
+                submittingBooking={submittingBooking}
+                onSelectOffer={selectOffer}
+                summary={selectionSummary}
+              />
             )}
           </section>
 
