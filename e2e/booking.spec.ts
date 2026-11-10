@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openAvailabilityOffer } from './helpers/open-availability-offer.js';
 import { Pool } from 'pg';
 import argon2 from 'argon2';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -134,6 +135,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
 
     // 1. Select slot1Id and confirm (201 Created)
     const offer1 = page.locator(`[data-offer-slot-id="${slot1Id}"]`);
+    await openAvailabilityOffer(page, slot1Id);
     await expect(offer1).toBeVisible();
     await offer1.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
 
@@ -159,9 +161,12 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     // 2. Select slot2Id, trigger 503 BOOKING_OUTCOME_UNKNOWN after server commit (BOOK-15)
     const offer2 = page.locator(`[data-offer-slot-id="${slot2Id}"]`);
     const offer3 = page.locator(`[data-offer-slot-id="${slot3Id}"]`);
+    await openAvailabilityOffer(page, slot2Id);
     await expect(offer2).toBeVisible();
+    await openAvailabilityOffer(page, slot3Id);
     await expect(offer3).toBeVisible();
 
+    await openAvailabilityOffer(page, slot2Id);
     await offer2.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
     interceptUnknown = true;
     await page.locator('#selected-offer-summary').getByRole('button', { name: 'ยืนยันการจอง' }).click();
@@ -170,6 +175,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await expect(page.getByText('รอการยืนยันผลการจองช่วงเวลาติว')).toBeVisible();
     const retrySameBtn = page.getByRole('button', { name: 'ส่งคำขอเดิมอีกครั้ง' });
     await expect(retrySameBtn).toBeVisible();
+    await openAvailabilityOffer(page, slot3Id);
     await expect(offer3.getByRole('button', { name: 'เลือกช่วงเวลานี้' })).toBeDisabled();
 
     // Click "ส่งคำขอเดิมอีกครั้ง" -> sends exact same {"slotId": slot2Id} and receives 200 OK with original Booking ID!
@@ -189,6 +195,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
 
     await signIn(page, customer1Email);
     const offerConflict = page.locator(`[data-offer-slot-id="${slotConflictId}"]`);
+    await openAvailabilityOffer(page, slotConflictId);
     await expect(offerConflict).toBeVisible();
     await offerConflict.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
 
@@ -217,6 +224,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
 
     // Now test 422 BOOKING_NOT_ELIGIBLE response handling
     const offerCutoff = page.locator(`[data-offer-slot-id="${slotCutoffId}"]`);
+    await openAvailabilityOffer(page, slotCutoffId);
     await expect(offerCutoff).toBeVisible();
     await offerCutoff.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
 
@@ -267,6 +275,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await signIn(page, customer1Email);
     // Availability 200 offers must still render despite CSRF 503!
     const offerCsrf = page.locator(`[data-offer-slot-id="${slotCsrfRecoverId}"]`);
+    await openAvailabilityOffer(page, slotCsrfRecoverId);
     await expect(offerCsrf).toBeVisible();
     await expect(page.locator('#availability-error')).toHaveCount(0);
 
@@ -337,6 +346,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toHaveCount(0);
 
     const offerAfterRebootstrap = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
+    await openAvailabilityOffer(page, slotLateId);
     await expect(offerAfterRebootstrap).toBeVisible();
     await offerAfterRebootstrap.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
     await expect(
@@ -419,6 +429,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     });
 
     const offerForB2 = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
+    await openAvailabilityOffer(page, slotLateId);
     await expect(offerForB2).toBeVisible();
     await offerForB2.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
     await page.locator('#selected-offer-summary').getByRole('button', { name: 'ยืนยันการจอง' }).click();
@@ -430,6 +441,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     // 5. BOOK-29: Start a Booking POST under Session A, hold its 201 response, logout / switch session, then release A's late 201 -> never displayed!
     await signIn(page, customer1Email, false);
     const offerLate = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
+    await openAvailabilityOffer(page, slotLateId);
     await expect(offerLate).toBeVisible();
     await offerLate.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
 
