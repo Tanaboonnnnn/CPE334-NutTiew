@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openAvailabilityOffer } from './helpers/open-availability-offer.js';
 import { Pool } from 'pg';
 import argon2 from 'argon2';
 import { randomBytes } from 'node:crypto';
@@ -132,6 +133,7 @@ test.describe('Sprint 1 End-to-End Vertical Journey (F-S1-01..05)', () => {
 
     // Verify available slot card appears
     const slotCard = page.locator(`[data-offer-slot-id="${createdSlotId}"]`);
+    await openAvailabilityOffer(page, createdSlotId);
     await slotCard.scrollIntoViewIfNeeded();
     await expect(slotCard).toBeVisible();
     await expect(slotCard.getByRole('button', { name: 'เลือกช่วงเวลานี้' })).toBeVisible();
@@ -268,6 +270,7 @@ test.describe('Sprint 1 End-to-End Vertical Journey (F-S1-01..05)', () => {
     await expect(page.getByRole('heading', { name: 'เลือกช่วงเวลาติว' })).toBeVisible();
 
     const raceOffer = page.locator(`[data-offer-slot-id="${raceSlotId}"]`);
+    await openAvailabilityOffer(page, raceSlotId);
     await raceOffer.scrollIntoViewIfNeeded();
     await expect(raceOffer).toBeVisible();
     await raceOffer.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
