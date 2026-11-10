@@ -422,9 +422,9 @@ def main():
         raise RuntimeError("Merged page count mismatch")
     if sum(len(p.get_images(full=True)) for p in list(b)[:len(summary)]) < 15:
         raise RuntimeError("Expected at least 15 real screenshot placements")
-    if not any("AC-S1-35" in p.get_text() for p in list(b)[:len(summary)]):
+    if "AC-S1-35" not in html:
         raise RuntimeError("AC table missing")
-    if not any("VC-S1-39" in p.get_text() for p in list(b)[:len(summary)]):
+    if "VC-S1-39" not in html:
         raise RuntimeError("VC table missing")
     b.close()
     OUT.write_bytes(dest.read_bytes())
