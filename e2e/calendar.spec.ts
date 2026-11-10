@@ -71,11 +71,17 @@ test.describe('Issue #44 Monthly Calendar / UX-CAL-01..10', () => {
   test('UX-CAL-01/03/09 531 offers remain compact until day/time is selected; no navigation POST', async ({ page }) => {
     test.setTimeout(90_000);
     await installCalendarPayload(page, evaluatedAt => {
-      const base = Date.parse(evaluatedAt);
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).formatToParts(new Date(evaluatedAt));
+      const component = (key: string) => parts.find(part => part.type === key)?.value ?? '';
+      const dayKey = component('year') + '-' + component('month') + '-' + component('day');
+      const midnight = Date.parse(dayKey + 'T00:00:00.000+07:00');
       const offers: Offer[] = [];
       for (let day = 1; day <= 59; day++) {
         for (let hour = 0; hour < 9; hour++) {
-          const start = new Date(base + day * 86_400_000 + hour * 2 * 3_600_000);
+          // 09:00–17:00 Bangkok; all 9 groups stay within the same day.
+          const start = new Date(midnight + day * 86_400_000 + (9 + hour) * 3_600_000);
           offers.push(offer('demo-' + day + '-' + hour, start.toISOString(), 'tutor-' + hour));
         }
       }
