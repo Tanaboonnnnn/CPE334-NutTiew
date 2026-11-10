@@ -6,8 +6,8 @@
 - **Assigned Theme:** Theme 1 — Appointment & Scheduling
 - **Repository URL:** [https://github.com/Tanaboonnnnn/CPE334-NutTiew](https://github.com/Tanaboonnnnn/CPE334-NutTiew)
 - **Integration Staging Base SHA:** `9d24fca` on branch `sprint1`
-- **Verified Code & DB Baseline SHA:** `0efa30b` on branch `docs/18-deliverable-1-integration` ([PR #43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43))
-- **Verified GitHub Actions CI Run:** [Run 42672763881 (Attempt 2)](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42672763881) — 3/3 Jobs PASS (`Unit / types / build`, `PostgreSQL 18 / Auth / Slot / Race A`, `Microsoft Edge / Auth / Tutor UI E2E`)
+- **Verified Code & DB Baseline SHA:** `808b906` on branch `docs/18-deliverable-1-integration` ([PR #43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43))
+- **Verified GitHub Actions CI Run:** [Run 42783770373](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42783770373) — 3/3 Jobs PASS (`Unit / types / build`, `PostgreSQL 18 / Auth / Slot / Race A`, `Microsoft Edge / Auth / Tutor UI E2E`)
 - **Target Release Branch:** `main` (Pending teammate review and approval of PR #43; followed by reviewed `sprint1 -> main` release PR and immutable tag)
 - **Course Handout Deadline:** 8 November 2026, 23:59 ICT *(subsequent PR remediation & final submission timing transparently documented below)*
 - **Report Compilation Date:** 10 November 2026 (Asia/Bangkok)
@@ -5419,7 +5419,7 @@ Automated verification was executed across both local Windows 11 (Node v24.14.0,
 > **Accounting & CI Incident Transparency Notes:**
 > 1. **No Double-Counting:** The 64-test browser suite (`npx playwright test`) already executes `e2e/sprint1.journey.spec.ts` as test `[39/64]`. The true count of unique automated tests is **199** (29 + 106 + 64).
 > 2. **CI Workflow Run Diagnosis (#42672763881):** On commit `0efa30b`, GitHub Actions Run [#42672763881 Attempt 1](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42672763881) concluded `failure` because GitHub Actions transiently failed to dispatch the `PostgreSQL 18 / Auth / Slot / Race A` job (0 job entries/logs created, while `Unit / types / build` and `Microsoft Edge E2E` passed). Re-running the exact same workflow without file edits on Attempt 2 dispatched all 3 jobs and passed **3/3 GREEN**.
-> 3. **Exact Verified Baseline Recorded:** The table above reflects both local execution on PG 17.2 (`npm run test:db` 106/106 PASS) and verified GitHub Actions CI ([Run 42672763881 (Attempt 2)](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42672763881) on SHA `0efa30b`, **3/3 jobs PASS**).
+> 3. **Exact Verified Baseline Recorded:** The table above reflects local execution (Unit 29/29, PG 17.2 DB 106/106, typecheck, build) and verified GitHub Actions CI ([Run 42783770373](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42783770373) on SHA `808b906`, **3/3 jobs PASS**). The subsequent metadata-sync commit on PR #43 updates only the cited verified baseline SHA/CI-Run fields and regenerated Deliverable 1 Markdown/PDF without modifying `apps/`, `e2e/`, migrations, Part A–E contracts, or `README.md`, and is independently gated on 3/3 GREEN CI.
 
 ---
 
