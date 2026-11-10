@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { config as loadEnv } from 'dotenv';
+import { expandDayTimeGroupAndLocateOffer } from './availability-calendar-helper';
 loadEnv({ path: '.env', quiet: true });
 
 const evidenceDir = resolve(process.cwd(), 'docs/evidence/sprint1');
@@ -130,8 +131,8 @@ test.describe('Sprint 1 End-to-End Vertical Journey (F-S1-01..05)', () => {
     await signIn(page, customer1Email);
     await expect(page.getByRole('heading', { name: 'เลือกช่วงเวลาติว' })).toBeVisible();
 
-    // Verify available slot card appears
-    const slotCard = page.locator(`[data-offer-slot-id="${createdSlotId}"]`);
+    // Verify available slot card appears inside selected calendar day & expanded time group
+    const slotCard = await expandDayTimeGroupAndLocateOffer(page, futureDay, createdSlotId, slotStartTime);
     await slotCard.scrollIntoViewIfNeeded();
     await expect(slotCard).toBeVisible();
     await expect(slotCard.getByRole('button', { name: 'เลือกช่วงเวลานี้' })).toBeVisible();
@@ -267,7 +268,7 @@ test.describe('Sprint 1 End-to-End Vertical Journey (F-S1-01..05)', () => {
     await signIn(page, customer2Email);
     await expect(page.getByRole('heading', { name: 'เลือกช่วงเวลาติว' })).toBeVisible();
 
-    const raceOffer = page.locator(`[data-offer-slot-id="${raceSlotId}"]`);
+    const raceOffer = await expandDayTimeGroupAndLocateOffer(page, raceDay, raceSlotId, '13:00');
     await raceOffer.scrollIntoViewIfNeeded();
     await expect(raceOffer).toBeVisible();
     await raceOffer.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();

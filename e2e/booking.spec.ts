@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import argon2 from 'argon2';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { config as loadEnv } from 'dotenv';
+import { expandDayTimeGroupAndLocateOffer } from './availability-calendar-helper';
 loadEnv({ path: '.env', quiet: true });
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -133,7 +134,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await signIn(page, customer1Email);
 
     // 1. Select slot1Id and confirm (201 Created)
-    const offer1 = page.locator(`[data-offer-slot-id="${slot1Id}"]`);
+    const offer1 = await expandDayTimeGroupAndLocateOffer(page, dayTarget, slot1Id, '09:00');
     await expect(offer1).toBeVisible();
     await offer1.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
 
@@ -157,8 +158,8 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await expect(page.locator(`[data-offer-slot-id="${slot1Id}"]`)).toHaveCount(0);
 
     // 2. Select slot2Id, trigger 503 BOOKING_OUTCOME_UNKNOWN after server commit (BOOK-15)
-    const offer2 = page.locator(`[data-offer-slot-id="${slot2Id}"]`);
-    const offer3 = page.locator(`[data-offer-slot-id="${slot3Id}"]`);
+    const offer3 = await expandDayTimeGroupAndLocateOffer(page, dayTarget, slot3Id, '13:00');
+    const offer2 = await expandDayTimeGroupAndLocateOffer(page, dayTarget, slot2Id, '11:00');
     await expect(offer2).toBeVisible();
     await expect(offer3).toBeVisible();
 
@@ -188,7 +189,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     const slotCutoffId = await createOfferedSlot(tutorBId, '17:00');
 
     await signIn(page, customer1Email);
-    const offerConflict = page.locator(`[data-offer-slot-id="${slotConflictId}"]`);
+    const offerConflict = await expandDayTimeGroupAndLocateOffer(page, dayTarget, slotConflictId, '15:00');
     await expect(offerConflict).toBeVisible();
     await offerConflict.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
 
@@ -216,7 +217,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await expect(page.locator(`[data-offer-slot-id="${slotConflictId}"]`)).toHaveCount(0);
 
     // Now test 422 BOOKING_NOT_ELIGIBLE response handling
-    const offerCutoff = page.locator(`[data-offer-slot-id="${slotCutoffId}"]`);
+    const offerCutoff = await expandDayTimeGroupAndLocateOffer(page, dayTarget, slotCutoffId, '17:00');
     await expect(offerCutoff).toBeVisible();
     await offerCutoff.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
 
@@ -266,7 +267,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
 
     await signIn(page, customer1Email);
     // Availability 200 offers must still render despite CSRF 503!
-    const offerCsrf = page.locator(`[data-offer-slot-id="${slotCsrfRecoverId}"]`);
+    const offerCsrf = await expandDayTimeGroupAndLocateOffer(page, dayTarget, slotCsrfRecoverId, '21:00');
     await expect(offerCsrf).toBeVisible();
     await expect(page.locator('#availability-error')).toHaveCount(0);
 
@@ -336,7 +337,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
     await expect(page.getByRole('heading', { name: 'เลือกช่วงเวลาติว' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toHaveCount(0);
 
-    const offerAfterRebootstrap = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
+    const offerAfterRebootstrap = await expandDayTimeGroupAndLocateOffer(page, dayTarget, slotLateId, '19:00');
     await expect(offerAfterRebootstrap).toBeVisible();
     await offerAfterRebootstrap.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
     await expect(
@@ -418,7 +419,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
       });
     });
 
-    const offerForB2 = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
+    const offerForB2 = await expandDayTimeGroupAndLocateOffer(page, dayTarget, slotLateId, '19:00');
     await expect(offerForB2).toBeVisible();
     await offerForB2.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
     await page.locator('#selected-offer-summary').getByRole('button', { name: 'ยืนยันการจอง' }).click();
@@ -429,7 +430,7 @@ test.describe('F-S1-04 Customer Booking Confirmation UI & Edge E2E (BOOK-01..BOO
 
     // 5. BOOK-29: Start a Booking POST under Session A, hold its 201 response, logout / switch session, then release A's late 201 -> never displayed!
     await signIn(page, customer1Email, false);
-    const offerLate = page.locator(`[data-offer-slot-id="${slotLateId}"]`);
+    const offerLate = await expandDayTimeGroupAndLocateOffer(page, dayTarget, slotLateId, '19:00');
     await expect(offerLate).toBeVisible();
     await offerLate.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
 
