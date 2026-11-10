@@ -1,6 +1,14 @@
 # F-S1-03 — Customer Availability Discovery Feature SDS (Part E)
 
-> **Part E documentation contract only.** Issue #15; provisional owner @Chxtamos; independent peer reviewer @Tanaboonnnnn. Decision states below reflect the peer-review decision record in PR #32 comment [#6683929084](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32#issuecomment-6683929084). These are engineering/design decisions, not new stakeholder business rules. This change does not implement UI/API code, add a migration, execute tests or close the issue.
+> **2026-11-10 UX-only Option A amendment proposed (Issue #44, pending peer acceptance):** Replace only the Customer Availability page's simultaneous full-list presentation (`dateGroups.map(...)`) with **Option A — Date-First Monthly Calendar (Progressive Disclosure)** as requested in [Issue #15 comment #6763909620](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15#issuecomment-6763909620). See [dated UX decision](ui-decision-2026-11-10.md), [amended UI contract](ui-spec.md), and [`UX-CAL-01..10` STS](tests.md#2-ux-calendar-planned-sts). This follow-up is separate from Deliverable 1 ([#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) / PR [#43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43)).
+>
+> **Unchanged domain/security contract:** `GET /api/v1/customer/availability` remains unfiltered with zero query parameters (`BR-S1-20`, `OD-AV-03`), returning exact DTO allowlist (`slotId`, `tutorRef`, `startsAt`, `endsAt`, `meta.evaluatedAt`, `Cache-Control: no-store`), single PostgreSQL `T_view`, `OD-AV-01..08`, `OD-AV-02` display-name gate, `F-S1-04` CSRF/Session Binding/`T_elig`/SERIALIZABLE Booking safety, and `F-S1-05` `การจองของฉัน` tab.
+>
+> **`OD-002` conflict & provenance reconciliation:** [docs/srs.md](../../srs.md#13-open-decisions-and-approval-gates) and historical Part E (`PR #32`) §4/§5 below originally recorded `OD-002` (maximum advance horizon) as `OPEN`. Subsequently, [Issue #15 comments #6685976712 / #6721920473](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15#issuecomment-6685976712) and merged Part F [PR #37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37) (`apps/api/src/availability.ts`, `AVA-03`) confirmed and implemented **`OD-002 = 60 days`** evaluated at database `T_view` (`Slot.startsAt <= view_clock.evaluated_at + INTERVAL '60 days'`). Month navigation uses validated server offers + `meta.evaluatedAt` dynamically, never browser-clock filtering or hardcoded 2–3 month limits.
+>
+> **Mandatory sequential gate (Two-PR Gate):** Obtain independent peer review from @Tanaboonnnnn and merge this docs-only Part E amendment into `sprint1` before branching any Part F React/CSS/test implementation PR under Issue [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44). Historical `#15` baseline Part E/Part F artifacts remain merged via [PR #32](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32) and [PR #37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37).
+
+> **Historical baseline Part E note (PR #32):** Issue #15; provisional owner @Chxtamos; independent peer reviewer @Tanaboonnnnn. Decision states below reflect the peer-review decision record in PR #32 comment [#6683929084](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32#issuecomment-6683929084). These are engineering/design decisions, not new stakeholder business rules. This change does not implement UI/API code, add a migration, execute tests or close the issue.
 
 ## 1. Authority and scope
 
@@ -127,3 +135,18 @@ Whole-product trace anchors: FR-008/009, NFR-007/009/010, VAL-006/009/033/036, V
 - [ ] Open separate code-only PR into sprint1 and obtain peer review.
 
 **Verification boundary:** this Part E change is documentation only. No build, API test, migration, Booking query, browser E2E, performance benchmark or accessibility audit is claimed as run or passed.
+
+## 8. UX follow-up amendment gate (Issue #44)
+
+### Issue #44 Part E — docs-only UX amendment
+- [ ] Updated Option A specs cross-linked consistently across [UX decision 2026-11-10](ui-decision-2026-11-10.md), [UI spec](ui-spec.md), [STS](tests.md#2-ux-calendar-planned-sts), this SDS, and [F-S1-04 UI cross-reference](../F-S1-04/ui-spec.md).
+- [ ] Resolved Part E design choices explicitly recorded: 6 default time groups + `ดูเวลาเพิ่มเติม`, no morning/afternoon/evening filter chips, and non-sticky inline `#selected-offer-summary` placed directly after the day's time list.
+- [ ] Phase 1 boundary preserved: `GET /api/v1/customer/availability` uses zero query parameters (`400 INVALID_INPUT` on unknown query), unchanged DTO/privacy allowlist, unchanged `F-S1-04` CSRF/Session Binding/`T_elig`/SERIALIZABLE locking, and unchanged `F-S1-05` `การจองของฉัน` tab.
+- [ ] `OD-002` (`60 days` at DB `T_view` vs initial `PR #32` / `docs/srs.md` `OPEN` status) reconciled with provenance instead of silent overwrite.
+- [ ] `UX-CAL-01..10` planned without renumbering `AC-S1-01..35` or `AVA-01..19`; no `apps/`, `e2e/`, or schema files touched.
+- [ ] Docs-only PR targets `sprint1`, links `#44` (and references `#15`/`#16`), requests @Tanaboonnnnn peer review, and waits open for approval before any Part F code begins.
+
+### Issue #44 Part F — separate implementation PR
+- [ ] Branch fresh from merged `sprint1` only after Part E acceptance and implement client-side Option A monthly calendar & CSS responsive layout in `apps/web/src/customer-availability.tsx` / `.css`.
+- [ ] Execute `UX-CAL-01..10` plus full `AVA-*`, `BOOK-*`, and `RET-*` regressions against real PostgreSQL and Microsoft Edge (`320/375/768/1280` CSS px screenshots, `500+` seeded offers, cross-year & leap-year checks, `UTC`/`America/Los_Angeles` tz checks, failed-GET/malformed-DTO/logout/unknown-outcome checks) on exact CI HEAD.
+- [ ] Distinguish automated checks cleanly from manual human WCAG 2.2 AA audit (**NOT RUN** unless performed by human reviewer).
