@@ -339,6 +339,9 @@ test.describe('F-S1-03 UX-CAL-01..10 Customer Availability Option A Monthly Cale
         await expect(page.getByTestId('calendar-month-heading')).toHaveText('กุมภาพันธ์ 2028');
         await expect(page.getByTestId('calendar-day-2028-02-29')).toHaveAttribute('data-offer-count', '1');
         await expect(page.getByTestId('calendar-day-2028-02-29')).toBeEnabled();
+        await expect(page.getByTestId('calendar-day-2028-02-29')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.getByTestId('selected-day-heading')).toContainText('29 ');
+        await expect(page.getByTestId('selected-day-heading')).toContainText('2028');
       } finally {
         await ctx.close();
       }
@@ -501,6 +504,7 @@ test.describe('F-S1-03 UX-CAL-01..10 Customer Availability Option A Monthly Cale
     // Return to cleanDay1 for rich Step 2 UI screenshot (collapsed >6 groups first at 1280)
     await selectCalendarDay(page, cleanDay1);
     await page.setViewportSize({ width: 1280, height: 900 });
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: 'test-results/after-calendar-1280.png', fullPage: true });
 
     // Expand 08:00 group and select cleanDay1PrimarySlotId to check Step 3 placement & responsive widths
@@ -564,6 +568,7 @@ test.describe('F-S1-03 UX-CAL-01..10 Customer Availability Option A Monthly Cale
         expect(box!.x + box!.width, `Control clipped right edge at ${width}px`).toBeLessThanOrEqual(width - 8);
       }
 
+      await page.evaluate(() => window.scrollTo(0, 0));
       const shotName = width === 1280 ? 'after-calendar-selected-1280.png' : `after-calendar-${width}.png`;
       await page.screenshot({ path: `test-results/${shotName}`, fullPage: true });
     }

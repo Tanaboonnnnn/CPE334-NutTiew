@@ -131,6 +131,41 @@ describe('Customer Availability Option A calendar & grouping pure helpers', () =
     const expanded = sliceVisibleTimeGroups(groups, true);
     expect(expanded.visibleGroups).toHaveLength(8);
     expect(expanded.hiddenCount).toBe(0);
+
+    // Non-adjacent identical (startsAt, endsAt) interleaved with a different-duration slot starting at the same time
+    const interleaved = groupDayOffersByExactInterval([
+      makeOffer('x1', 'tutor-a', '2026-11-12T02:00:00.000Z', '2026-11-12T03:00:00.000Z'),
+      makeOffer('x2', 'tutor-b', '2026-11-12T02:00:00.000Z', '2026-11-12T03:30:00.000Z'),
+      makeOffer('x3', 'tutor-c', '2026-11-12T02:00:00.000Z', '2026-11-12T03:00:00.000Z'),
+    ]);
+    expect(interleaved).toHaveLength(2);
+    expect(interleaved[0].items.map(x => x.slotId)).toEqual(['x1', 'x3']);
+    expect(computeOfferDurationMinutes(interleaved[0].items[0])).toBe(60);
+    expect(interleaved[1].items.map(x => x.slotId)).toEqual(['x2']);
+    expect(computeOfferDurationMinutes(interleaved[1].items[0])).toBe(90);
+  });
+
+  it('handles a dense 520-offer single-day spike cleanly with exact offer count and 6-group collapse', () => {
+    const denseDayOffers: CustomerAvailabilityOffer[] = [];
+    for (let h = 0; h < 10; h++) {
+      const start = new Date(`2026-11-29T${String(8 + h).padStart(2, '0')}:00:00.000+07:00`).toISOString();
+      const end = new Date(`2026-11-29T${String(9 + h).padStart(2, '0')}:00:00.000+07:00`).toISOString();
+      for (let t = 0; t < 52; t++) {
+        denseDayOffers.push(makeOffer(`spike-${h}-${t}`, `tutor-${String(t).padStart(2, '0')}`, start, end));
+      }
+    }
+    expect(denseDayOffers).toHaveLength(520);
+
+    const idx = buildAvailabilityCalendarIndex(denseDayOffers, '2026-11-28T05:00:00.000Z');
+    expect(idx.earliestDayKey).toBe('2026-11-29');
+    expect(idx.offersByDay.get('2026-11-29')).toHaveLength(520);
+
+    const groups = groupDayOffersByExactInterval(idx.offersByDay.get('2026-11-29') ?? []);
+    expect(groups).toHaveLength(10);
+    expect(groups[0].items).toHaveLength(52);
+    const collapsed = sliceVisibleTimeGroups(groups, false);
+    expect(collapsed.visibleGroups).toHaveLength(6);
+    expect(collapsed.hiddenCount).toBe(4);
   });
 
   it('buckets UTC instants into Asia/Bangkok days accurately across 16:30Z vs 17:30Z boundary and handles empty offer index', () => {

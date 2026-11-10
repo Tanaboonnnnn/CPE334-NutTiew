@@ -846,6 +846,9 @@
     display: grid;
     margin-top: 0;
   }
+  .customer-app :is(a, button, [tabindex="0"], section, h1, h2) {
+    scroll-margin-top: 84px;
+  }
 }
 
 @media (max-width: 620px) {

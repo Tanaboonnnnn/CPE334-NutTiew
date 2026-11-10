@@ -547,7 +547,13 @@ export function CustomerAvailability({
         } else {
           const initialDay = nextIndex.earliestDayKey!;
           const initialMonth = nextIndex.earliestMonthKey!;
-          if (selectedDayRef.current === null) {
+          const activeDay = selectedDayRef.current;
+          const activeDayMonth = activeDay ? monthKeyFromDayKey(activeDay) : null;
+          const activeDayOutsideHorizon =
+            activeDayMonth !== null &&
+            ((nextIndex.minMonthKey !== null && activeDayMonth < nextIndex.minMonthKey) ||
+              (nextIndex.maxMonthKey !== null && activeDayMonth > nextIndex.maxMonthKey));
+          if (activeDay === null || activeDayOutsideHorizon) {
             selectedDayRef.current = initialDay;
             setSelectedDayKey(initialDay);
             viewedMonthRef.current = initialMonth;
@@ -559,7 +565,6 @@ export function CustomerAvailability({
               `เลือกวันที่ ${bangkokLongDateFromDayKey(initialDay)} พบ ${initialCount} ช่วงเวลา`,
             );
           } else {
-            const activeDay = selectedDayRef.current;
             const activeMonth =
               viewedMonthRef.current &&
               (!nextIndex.minMonthKey || viewedMonthRef.current >= nextIndex.minMonthKey) &&
