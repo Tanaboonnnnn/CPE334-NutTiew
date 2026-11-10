@@ -1,6 +1,8 @@
 # F-S1-04 — Customer Booking Confirmation UI Specification (Part E)
 
 > **Part E UI contract only; no component, route or browser test is implemented.** This flow completes the selection hand-off from [F-S1-03 Availability](../F-S1-03/ui-spec.md); it does not turn selection into a reservation until the server commits.
+>
+> **2026-11-10 UX Follow-up Cross-Reference (Issue #44, pending peer review):** Customer availability browsing in [F-S1-03](../F-S1-03/ui-spec.md) and [UX Decision 2026-11-10](../F-S1-03/ui-decision-2026-11-10.md) is proposed to adopt Option A (Date-First Monthly Calendar). All `F-S1-04` confirmation, CSRF + post-CSRF `/auth/me` binding recheck, server `T_elig` revalidation, `201`/`200` natural-key replay, `409`/`422`/`503` handling, `UnknownBookingOutcome` replacement lockout across calendar switches, and privacy rules remain **unchanged**; `#selected-offer-summary` sits as a non-sticky inline card directly after the selected day's time list without obscuring controls or focus (`WCAG 2.2 SC 2.4.11`).
 
 ## 1. Screen and shared design system
 
