@@ -1,6 +1,8 @@
+@import './tokens.css';
+
 /*
  * 2026-11-05 owner-selected Tutorix-inspired direction.
- * Scoped to .tutor-app; the approved Auth/Customer palette is unchanged.
+ * Uses canonical --nuttiew-* design tokens shared with Auth and Customer views.
  * Orange is used with dark ink on buttons so it never relies on low-contrast
  * white-on-orange. Visible status text always accompanies colored surfaces.
  */
@@ -13,16 +15,16 @@ main.dashboard-root {
   padding: 0;
 }
 .tutor-app {
-  --tutor-navy: #202b44;
-  --tutor-navy-deep: #172137;
-  --tutor-orange: #f47736;
-  --tutor-orange-dark: #a43e14;
-  --tutor-canvas: #f7f8fb;
-  --tutor-ink: #263244;
-  --tutor-muted: #58697f;
-  --tutor-border: #e0e6ef;
-  --tutor-focus: #aa4519;
-  --tutor-control-border: #66778a; /* 4.59:1 on white; >4:1 on hover #eff3f9 */
+  --tutor-navy: var(--nuttiew-navy);
+  --tutor-navy-deep: var(--nuttiew-navy-deep);
+  --tutor-orange: var(--nuttiew-orange);
+  --tutor-orange-dark: var(--nuttiew-orange-dark);
+  --tutor-canvas: var(--nuttiew-canvas);
+  --tutor-ink: var(--nuttiew-ink-tutor);
+  --tutor-muted: var(--nuttiew-muted-subtle);
+  --tutor-border: var(--nuttiew-border);
+  --tutor-focus: var(--nuttiew-focus);
+  --tutor-control-border: var(--nuttiew-control-border); /* 4.59:1 on white; >4:1 on hover #eff3f9 */
   --tutor-radius: 13px;
   display: grid;
   grid-template-columns: 245px minmax(0, 1fr);
@@ -30,7 +32,7 @@ main.dashboard-root {
   width: 100%;
   background: var(--tutor-canvas);
   color: var(--tutor-ink);
-  font-family: 'Noto Sans Thai', 'Sarabun', system-ui, sans-serif;
+  font-family: var(--nuttiew-font-sans);
 }
 .tutor-app *, .tutor-app *::before, .tutor-app *::after {box-sizing:border-box}
 .tutor-app button, .tutor-app input {
@@ -246,51 +248,51 @@ main.dashboard-root {
   justify-content:center;
   min-height:100vh;
   padding:24px;
-  background:#f7f8fb;
+  background:var(--nuttiew-canvas);
 }
 .tutor-session-guard {
   width:min(100%,530px);
   padding:clamp(22px,4vw,38px);
-  background:#fff;
-  border:1px solid #cad4e1;
-  border-radius:14px;
-  box-shadow:0 12px 32px rgba(32,43,68,.08);
-  color:#263244;
+  background:var(--nuttiew-surface);
+  border:1px solid var(--nuttiew-card-border);
+  border-radius:var(--nuttiew-radius-card);
+  box-shadow:var(--nuttiew-shadow-card);
+  color:var(--nuttiew-ink-tutor);
   line-height:1.65;
 }
 .tutor-session-guard .session-guard-brand {
   font-size:1rem;
   font-weight:800;
-  color:#202b44;
+  color:var(--nuttiew-navy);
   letter-spacing:.03em;
   margin:0 0 15px;
 }
 .tutor-session-guard h1 {
   font-size:clamp(1.35rem,3vw,1.8rem);
   margin:0 0 14px;
-  color:#202b44;
+  color:var(--nuttiew-navy);
 }
 .tutor-session-guard [role="alert"] {
-  color:#9c2424;
-  border:1px solid #dca4a4;
-  border-radius:8px;
+  color:var(--nuttiew-error);
+  border:1px solid var(--nuttiew-error-border);
+  border-radius:var(--nuttiew-radius-input);
   padding:10px 13px;
-  background:#fff3f3;
+  background:var(--nuttiew-error-bg);
 }
 .session-guard-actions {display:flex;flex-wrap:wrap;gap:12px;margin-top:20px}
 .tutor-session-guard button {
   min-height:44px;
   min-width:44px;
   padding:11px 17px;
-  background:#f47736;
-  color:#172137;
-  border:1px solid #d96123;
-  border-radius:9px;
+  background:var(--nuttiew-orange);
+  color:var(--nuttiew-navy-deep);
+  border:1px solid var(--nuttiew-orange-border);
+  border-radius:var(--nuttiew-radius-control);
   font-weight:700;
   cursor:pointer;
 }
 .tutor-session-guard button:focus-visible,.tutor-session-guard h1:focus-visible {
-  outline:3px solid #aa4519;
+  outline:3px solid var(--nuttiew-focus);
   outline-offset:3px;
 }
 .tutor-session-guard button:disabled {opacity:.6;cursor:not-allowed}
@@ -308,13 +310,13 @@ main.dashboard-root {
 .agenda-color-mark {width:5px;min-width:5px;align-self:stretch;border-radius:8px;border:0}
 .agenda-row-main {min-width:0;flex:1}
 .tutor-app .slot-item-date {color:#5d7087;font-size:.8rem}
-.tutor-app .slot-item-hours {font-size:1.08rem;display:flex;align-items:center;gap:9px;font-weight:800;font-variant-numeric:tabular-nums;color:#213852}
+.tutor-app .slot-item-hours {font-size:1.08rem;display:flex;align-items:center;gap:9px;font-weight:800;font-variant-numeric:tabular-nums;color:#213852;white-space:nowrap}
 .tutor-app .slot-item-hours>span {color:#8b98aa}
 .agenda-next-day {font-size:.71rem;color:#805027}
 .tutor-app .slot-tags {display:flex;justify-content:flex-end;flex-wrap:wrap;gap:7px}
 .tutor-app .slot-tags span {font-size:.73rem;color:#265745;background:#e7f4ed;border:1px solid #b9d9c7;padding:6px 10px;line-height:1.4;border-radius:18px}
 .tutor-app .slot-tags span:last-child {color:#4e5c71;background:#f2f5f9;border-color:#dce4ee}
-.tutor-app .empty-slots {border:1px dashed #bac7d9;background:#f8fafc;padding:22px;margin:9px 0;color:#566a84;border-radius:10px}
+.tutor-app .empty-slots {border:1px dashed #bac7d9;background:#f8fafc;padding:22px;margin:9px 0;color:#566a84;border-radius:10px;text-align:center}
 .loading-agenda {margin-top:19px;padding:25px;color:#536982}
 .dashboard-list-error {background:#fff;border:1px solid #e5c5c5;border-radius:11px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:13px 20px;margin-top:19px}
 .dashboard-list-error .error {margin:0}

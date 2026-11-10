@@ -32,13 +32,36 @@ test('AUTH-15 automated 320/375/768/1280px targets, contrast and keyboard focus'
   }
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   const styles=await page.evaluate(()=>{
-   const input=document.querySelector('input')!,button=document.querySelector('form button[type=submit]')!,panel=document.querySelector('.panel')!;
-   const ci=getComputedStyle(input),cb=getComputedStyle(button),cp=getComputedStyle(panel),body=getComputedStyle(document.documentElement);
-   return {inputBorder:ci.borderTopColor,inputBg:ci.backgroundColor,buttonText:cb.color,buttonBg:cb.backgroundColor,panelBg:cp.backgroundColor,canvasBg:body.backgroundColor};
+   const input=document.querySelector('input')!,button=document.querySelector('form button[type=submit]')!,secondary=document.querySelector('form button.secondary')!,panel=document.querySelector('.panel')!,heading=document.querySelector('.panel h1')!;
+   const ci=getComputedStyle(input),cb=getComputedStyle(button),cs=getComputedStyle(secondary),cp=getComputedStyle(panel),ch=getComputedStyle(heading),body=getComputedStyle(document.documentElement);
+   return {
+    inputBorder:ci.borderTopColor,
+    inputBg:ci.backgroundColor,
+    inputColor:ci.color,
+    buttonText:cb.color,
+    buttonBg:cb.backgroundColor,
+    secondaryText:cs.color,
+    secondaryBg:cs.backgroundColor,
+    secondaryBorder:cs.borderTopColor,
+    panelBg:cp.backgroundColor,
+    headingColor:ch.color,
+    canvasBg:body.backgroundColor
+   };
   });
+  expect(styles.canvasBg).toBe('rgb(247, 248, 251)');
+  expect(styles.panelBg).toBe('rgb(255, 255, 255)');
+  expect(styles.headingColor).toBe('rgb(32, 43, 68)');
+  expect(styles.inputColor).toBe('rgb(23, 33, 55)');
+  expect(styles.buttonBg).toBe('rgb(244, 119, 54)');
+  expect(styles.buttonText).toBe('rgb(23, 33, 55)');
+  expect(styles.secondaryBg).toBe('rgb(255, 255, 255)');
+  expect(styles.secondaryText).toBe('rgb(32, 43, 68)');
+  expect(styles.secondaryBorder).toBe('rgb(102, 119, 138)');
   expect(contrast(styles.inputBorder,styles.inputBg)).toBeGreaterThanOrEqual(3);
   expect(contrast(styles.inputBorder,styles.canvasBg)).toBeGreaterThanOrEqual(3);
   expect(contrast(styles.buttonText,styles.buttonBg)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(styles.secondaryText,styles.secondaryBg)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(styles.secondaryBorder,styles.panelBg)).toBeGreaterThanOrEqual(3);
   await page.keyboard.press('Tab');
   await expect(page.getByLabel('อีเมล')).toBeFocused();
   const focus=await page.getByLabel('อีเมล').evaluate(el=>({
@@ -48,6 +71,7 @@ test('AUTH-15 automated 320/375/768/1280px targets, contrast and keyboard focus'
   }));
   expect(focus.width).toBeGreaterThanOrEqual(2);
   expect(focus.style).not.toBe('none');
+  expect(focus.color).toBe('rgb(170, 69, 25)');
   expect(contrast(focus.color,styles.inputBg)).toBeGreaterThanOrEqual(3);
  }
 });
@@ -58,8 +82,22 @@ test('AUTH-15 wrong-password error is announced and linked to invalid input',asy
  await page.getByLabel('อีเมล').fill(email);
  await page.getByLabel('รหัสผ่าน').fill('WrongPassword#2026');
  await page.getByRole('button',{name:'เข้าสู่ระบบ'}).click();
- await expect(page.getByRole('alert')).toBeVisible();
+ const alert=page.getByRole('alert');
+ await expect(alert).toBeVisible();
  await expect(page.getByLabel('อีเมล')).toHaveAttribute('aria-invalid','true');
  await expect(page.getByLabel('อีเมล')).toHaveAttribute('aria-describedby','auth-error');
  await expect(page.getByLabel('อีเมล')).toBeFocused();
+ const alertStyles=await page.evaluate(()=>{
+  const el=document.getElementById('auth-error')!;
+  const cs=getComputedStyle(el);
+  const input=document.getElementById('email')!;
+  const ci=getComputedStyle(input);
+  return {color:cs.color,bg:cs.backgroundColor,inputBorder:ci.borderTopColor,inputBg:ci.backgroundColor};
+ });
+ expect(alertStyles.bg).toBe('rgb(255, 243, 243)');
+ expect(alertStyles.color).toBe('rgb(156, 36, 36)');
+ expect(contrast(alertStyles.color,alertStyles.bg)).toBeGreaterThanOrEqual(4.5);
+ expect(contrast(alertStyles.inputBorder,alertStyles.inputBg)).toBeGreaterThanOrEqual(3);
+ await page.setViewportSize({width:1280,height:800});
+ await page.screenshot({path:'test-results/login-error-1280.png'});
 });
