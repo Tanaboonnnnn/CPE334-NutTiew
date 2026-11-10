@@ -2,7 +2,7 @@ name: Build Illustrated D1 PDF
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     paths:
       - 'scripts/build-d1-illustrated.py'
       - '.github/workflows/build-d1-illustrated.yml'
@@ -37,6 +37,14 @@ jobs:
             git show FETCH_HEAD:docs/evidence/login-theme/"$file" > build/d1/"$file"
             test -s build/d1/"$file"
           done
+
+      - name: Download PR51 verified screenshot artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-edge-report
+          run-id: 42888945331
+          github-token: ${{ github.token }}
+          path: build/d1/ci
 
       - name: Build and audit full illustrated PDF
         run: |
