@@ -285,14 +285,14 @@ def document():
     ap(screenshot_figure_series())
     ap("<h2>F.3 Additional state and responsive evidence</h2>")
     add = [
-        ("Tutor Calendar", "build/d1/dashboard-1280.png", "Tutor เห็นตารางแบบ Calendar และรายการช่วงเวลาที่มีอยู่", "Source: PR51 green CI; same Tutor UI source as sprint1"),
-        ("Tutor 409 Conflict", "build/d1/dashboard-conflict-409.png", "กฎการสร้าง Slot ชนกันปฏิเสธพร้อมข้อความอธิบาย", "Source: PR51 green CI; negative rule screenshot"),
-        ("Customer Availability Calendar", "build/d1/after-calendar-1280.png", "ปฏิทินรายเดือนเปิดวันที่มีช่วงเวลาจองได้และจัดกลุ่มเวลา", "Source: PR51 green CI; Customer flow"),
-        ("Customer Selected Day", "build/d1/after-calendar-selected-1280.png", "เปิดกลุ่มเวลาและเลือกช่วงที่ต้องการโดยยังไม่ถือเป็นการจองสำเร็จ", "Source: PR51 green CI; selected state"),
-        ("Customer mobile", "build/d1/after-calendar-375.png", "การแสดงปฏิทินบนมือถือ 375px โดยไม่อ้างว่าเป็น Manual Screen-Reader review", "Source: PR51 green CI; responsive"),
-        ("Empty availability", "build/d1/customer-availability-empty-1280.png", "ไม่มีช่วงเวลาที่เข้าเกณฑ์ ระบบแสดง Empty State หลัง GET 200 เท่านั้น", "Source: PR51 green CI"),
-        ("API unavailable", "build/d1/customer-availability-error-503.png", "กรณี Service 503 ต้องแสดง Error/Retry ไม่แอบอ้างว่าไม่มีช่วงเวลาว่าง", "Source: PR51 green CI"),
-        ("Tutor uncertain logout", "build/d1/dashboard-logout-uncertain-503.png", "กรณี Logout outcome ไม่แน่ชัด ต้องป้องกันการแสดงข้อมูลส่วนตัว", "Source: PR51 green CI"),
+        ("Tutor Calendar", "build/d1/ci/test-results/dashboard-1280.png", "Tutor เห็นตารางแบบ Calendar และรายการช่วงเวลาที่มีอยู่", "Source: PR51 green CI; same Tutor UI source as sprint1"),
+        ("Tutor 409 Conflict", "build/d1/ci/test-results/dashboard-conflict-409.png", "กฎการสร้าง Slot ชนกันปฏิเสธพร้อมข้อความอธิบาย", "Source: PR51 green CI; negative rule screenshot"),
+        ("Customer Availability Calendar", "build/d1/ci/test-results/after-calendar-1280.png", "ปฏิทินรายเดือนเปิดวันที่มีช่วงเวลาจองได้และจัดกลุ่มเวลา", "Source: PR51 green CI; Customer flow"),
+        ("Customer Selected Day", "build/d1/ci/test-results/after-calendar-selected-1280.png", "เปิดกลุ่มเวลาและเลือกช่วงที่ต้องการโดยยังไม่ถือเป็นการจองสำเร็จ", "Source: PR51 green CI; selected state"),
+        ("Customer mobile", "build/d1/ci/test-results/after-calendar-375.png", "การแสดงปฏิทินบนมือถือ 375px โดยไม่อ้างว่าเป็น Manual Screen-Reader review", "Source: PR51 green CI; responsive"),
+        ("Empty availability", "build/d1/ci/test-results/customer-availability-empty-1280.png", "ไม่มีช่วงเวลาที่เข้าเกณฑ์ ระบบแสดง Empty State หลัง GET 200 เท่านั้น", "Source: PR51 green CI"),
+        ("API unavailable", "build/d1/ci/test-results/customer-availability-error-503.png", "กรณี Service 503 ต้องแสดง Error/Retry ไม่แอบอ้างว่าไม่มีช่วงเวลาว่าง", "Source: PR51 green CI"),
+        ("Tutor uncertain logout", "build/d1/ci/test-results/dashboard-logout-uncertain-503.png", "กรณี Logout outcome ไม่แน่ชัด ต้องป้องกันการแสดงข้อมูลส่วนตัว", "Source: PR51 green CI"),
     ]
     for title, filename, description, origin in add:
         ap(figure(filename, title, description, origin))
