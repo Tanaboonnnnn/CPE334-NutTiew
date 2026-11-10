@@ -36,7 +36,7 @@ Sprint 1 delivers a fully functional, peer-reviewed vertical slice spanning **Re
                                            │ Least-Privilege Database Roles
                                            ▼
                     ┌──────────────────────────────────────────────┐
-                    │         PostgreSQL Database (16+)            │
+                    │         PostgreSQL Database (17 / 18)        │
                     │   Extension: btree_gist                      │
                     │   Triggers: slot_guard_s1, booking_guard_s1  │
                     │   Constraints: GiST Non-Overlap, 60m Fixed   │
@@ -45,8 +45,8 @@ Sprint 1 delivers a fully functional, peer-reviewed vertical slice spanning **Re
 ```
 
 - **Backend:** Node.js 24 LTS, Express 5.x, TypeScript, `pg` connection pool, Prisma ORM (for schema and migrations), Argon2id password hashing, Zod validation.
-- **Frontend:** React 19.x, TypeScript, Vite 7.x, Pure Semantic CSS, WCAG 2.1 AA accessible ARIA tokens.
-- **Database:** PostgreSQL 16+ with `btree_gist` extension, transactional triggers (`slot_guard_s1`, `booking_guard_s1`), exclusion constraints (`offered_slot_no_overlap_per_tutor`, `booked_customer_no_overlap`), and least-privilege runtime role separation.
+- **Frontend:** React 19.x, TypeScript, Vite 7.x, Pure Semantic CSS, WCAG 2.2 AA design targets & accessible ARIA tokens.
+- **Database:** PostgreSQL 17.2 (local) / 18 (CI) with `btree_gist` extension, transactional triggers (`slot_guard_s1`, `booking_guard_s1`), exclusion constraints (`offered_slot_no_overlap_per_tutor`, `booked_customer_no_overlap`), and least-privilege runtime role separation.
 - **Deployment Note:** Production containerization (Docker, GCP Cloud Run) and managed DB (GCP Cloud SQL) are scheduled for **Lab 5** per course syllabus. Sprint 1 is verified locally and on GitHub CI against real PostgreSQL.
 
 ---
@@ -70,80 +70,124 @@ Every feature strictly followed the **Part E (Contract/SDS/STS) first $\longrigh
 ## Local Reproducible Setup
 
 ### 1. Prerequisites
-- **Node.js:** v24.x LTS (strictly `>=24 <25` per `package.json`).
+- **Node.js:** v24.x LTS (strictly `>=24 <25` per [`package.json`](package.json)).
 - **npm:** v10.x+
-- **PostgreSQL:** v16.x or v17.x with `btree_gist` extension available.
+- **PostgreSQL:** v17.x or v18.x (tested locally on PostgreSQL 17.2 and in CI on PostgreSQL 18) with `pgcrypto` and `btree_gist` extensions available.
 
 ### 2. Environment Configuration
-Copy `.env.example` to `.env` in the repository root:
+Copy [`.env.example`](.env.example) to `.env` in the repository root:
 ```bash
 cp .env.example .env
 ```
-Generate secure 32-byte (64+ hex characters) secret keys for HMAC signing and rate limiting:
+Generate two distinct cryptographically random 32-byte (64-hex-character) secret keys for HMAC CSRF signing and rate-limit hashing:
 ```bash
 node -e "console.log('AUTH_CSRF_HMAC_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
 node -e "console.log('AUTH_RATE_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
 ```
-Populate `.env` with the generated keys and your local PostgreSQL connection strings:
+Populate `.env` using the exact variable names expected by [`apps/api/src/config.ts`](apps/api/src/config.ts):
 ```env
-# Database Connections
-# 1. Owner / Migration Role (DDL, Schema creation, Migrations)
-DATABASE_URL="postgresql://nuttiew_owner:owner_password@127.0.0.1:5432/nuttiew?schema=public"
+# 1. Owner / Migration Role (used ONLY by Prisma CLI / migrations; never API runtime)
+DATABASE_URL=postgresql://nuttiew_owner:REPLACE_WITH_OWNER_PASSWORD@127.0.0.1:5432/nuttiew?schema=public
 
-# 2. Non-Owner API Runtime Role (Least Privilege: DML SELECT/INSERT only)
-DATABASE_URL_APP="postgresql://nuttiew_runtime:runtime_password@127.0.0.1:5432/nuttiew?schema=public"
+# 2. Restricted Non-Owner API Runtime Role (required; API startup and db:seed fail closed if missing or identical to DATABASE_URL)
+DATABASE_URL_APP=postgresql://nuttiew_runtime:REPLACE_WITH_RUNTIME_PASSWORD@127.0.0.1:5432/nuttiew?schema=public
 
-# Security & Cryptographic Keys (64+ Hex characters)
-AUTH_CSRF_HMAC_KEY=your_generated_64_hex_chars_here
-AUTH_RATE_KEY=your_different_generated_64_hex_chars_here
-AUTH_CANONICAL_ORIGIN="http://localhost:5173"
-AUTH_CSRF_KEY_VERSION="v1"
+# 3. Cryptographic & Origin Settings
+AUTH_CSRF_HMAC_KEY=REPLACE_WITH_GENERATED_64_HEX_CHARS
+AUTH_RATE_KEY=REPLACE_WITH_DIFFERENT_64_HEX_CHARS
+AUTH_CANONICAL_ORIGIN=http://localhost:5173
+AUTH_CSRF_KEY_VERSION=v1
 
-# Application Settings
-NODE_ENV="development"
+# 4. Server Runtime
+NODE_ENV=development
 PORT=3001
-TZ="Asia/Bangkok"
 ```
 
-### 3. Database Roles & Grants Provisioning
-In your PostgreSQL instance (e.g. via `psql -U postgres`), execute the least-privilege setup:
+### 3. Install Dependencies & Generate Prisma Client
+```bash
+npm ci
+npm run db:generate
+```
+
+### 4. Database Roles, Owner-Created Database, Migrations & Least-Privilege Grants
+Follow this exact order so tables, indexes, and triggers are created by `nuttiew_owner`, and least-privilege permissions are granted to `nuttiew_runtime` **after** the tables exist:
+
+#### Step A: Create Roles, Owner-Owned Database, and Extensions (as PostgreSQL superuser)
+Connect to PostgreSQL as superuser (e.g., `psql -U postgres`):
 ```sql
-CREATE DATABASE nuttiew;
+CREATE ROLE nuttiew_owner WITH LOGIN PASSWORD 'REPLACE_WITH_OWNER_PASSWORD'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
+CREATE ROLE nuttiew_runtime WITH LOGIN PASSWORD 'REPLACE_WITH_RUNTIME_PASSWORD'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
+
+CREATE DATABASE nuttiew OWNER nuttiew_owner;
 \c nuttiew;
+ALTER SCHEMA public OWNER TO nuttiew_owner;
 
--- Create owner role for migrations
-CREATE ROLE nuttiew_owner WITH LOGIN PASSWORD 'owner_password';
-GRANT ALL PRIVILEGES ON DATABASE nuttiew TO nuttiew_owner;
-GRANT ALL ON SCHEMA public TO nuttiew_owner;
+-- Superuser pre-installs extensions once so non-owner migrations pass idempotently
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+```
 
--- Create restricted runtime role for application API
-CREATE ROLE nuttiew_runtime WITH LOGIN PASSWORD 'runtime_password';
+#### Step B: Apply Schema & Security Triggers (as `nuttiew_owner`)
+Ensure `.env` has `DATABASE_URL` set to `nuttiew_owner`, then run:
+```bash
+npm run db:migrate
+```
+This applies all forward-only Prisma/SQL migrations under [`apps/api/prisma/migrations/`](apps/api/prisma/migrations/) as `nuttiew_owner`, installing `User`, `Session`, `AuthAttemptBucket`, `AuthAttemptReservation`, `Slot`, `Booking`, `btree_gist` exclusion constraints, and `SECURITY DEFINER` triggers (`slot_guard_s1`, `booking_guard_s1`).
+
+#### Step C: Grant Least-Privilege Runtime Permissions (after migrations)
+Connect to the `nuttiew` database as `nuttiew_owner` (e.g., `psql -U nuttiew_owner -d nuttiew`) or as superuser `postgres` while connected to `nuttiew`:
+```sql
+
 GRANT CONNECT ON DATABASE nuttiew TO nuttiew_runtime;
 GRANT USAGE ON SCHEMA public TO nuttiew_runtime;
-GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA public TO nuttiew_runtime;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT ON TABLES TO nuttiew_runtime;
+
+-- Auth, session, and rate-limiting tables require SELECT/INSERT/UPDATE/DELETE
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  "User", "Session", "AuthAttemptBucket", "AuthAttemptReservation"
+  TO nuttiew_runtime;
+
+-- Append-only domain tables in Sprint 1: never grant broad UPDATE or DELETE on Slot or Booking
+GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_runtime;
+
+-- PostgreSQL requires UPDATE privilege on at least one column of Slot for SELECT ... FOR UPDATE row locks;
+-- trigger slot_guard_s1() rejects Slot mutations, and runtime holds no table-wide UPDATE/DELETE on Slot/Booking.
+GRANT UPDATE ("id") ON "Slot" TO nuttiew_runtime;
+
+-- Scope future default read-only SELECT access explicitly to tables created by nuttiew_owner
+ALTER DEFAULT PRIVILEGES FOR ROLE nuttiew_owner IN SCHEMA public
+  GRANT SELECT ON TABLES TO nuttiew_runtime;
 ```
 
-### 4. Install Dependencies, Migrate Database & Seed Data
-```bash
-# Install workspace dependencies
-npm install
+*(Optional — test database only, never in production)* To run the full `npm run test:db` suite including `BDF-20..25` direct-SQL trigger-probe checks, provision a separate disposable test database (e.g., `nuttiew_test`) plus an isolated `nuttiew_booking_probe` role matching [`.github/scripts/prepare-test-db.sh`](.github/scripts/prepare-test-db.sh) (`GRANT SELECT ON "Slot"` and `GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON "Booking" TO nuttiew_booking_probe`) and set `DATABASE_URL_BOOKING_PROBE` in `.env`.
 
-# Build TypeScript packages
+### 5. Seed Initial Demo Users
+[`apps/api/prisma/seed.ts`](apps/api/prisma/seed.ts) connects through `DATABASE_URL_APP` (`nuttiew_runtime`) and requires `SEED_EMAIL`, `SEED_PASSWORD` (minimum 12 UTF-8 bytes), and `SEED_ROLE` (`Customer` or `Tutor`) in the environment:
+
+**Bash / macOS / Linux / Git Bash:**
+```bash
+SEED_EMAIL="tutor.demo@example.test" SEED_PASSWORD="REPLACE_WITH_12_PLUS_CHAR_PASSWORD" SEED_ROLE="Tutor" npm run db:seed
+SEED_EMAIL="customer.demo@example.test" SEED_PASSWORD="REPLACE_WITH_12_PLUS_CHAR_PASSWORD" SEED_ROLE="Customer" npm run db:seed
+```
+
+**Windows PowerShell:**
+```powershell
+$env:SEED_EMAIL="tutor.demo@example.test"; $env:SEED_PASSWORD="REPLACE_WITH_12_PLUS_CHAR_PASSWORD"; $env:SEED_ROLE="Tutor"; npm run db:seed
+$env:SEED_EMAIL="customer.demo@example.test"; $env:SEED_PASSWORD="REPLACE_WITH_12_PLUS_CHAR_PASSWORD"; $env:SEED_ROLE="Customer"; npm run db:seed
+Remove-Item Env:SEED_EMAIL, Env:SEED_PASSWORD, Env:SEED_ROLE
+```
+
+### 6. Build & Start Development Servers
+```bash
+# Verify types and build both workspaces
+npm run typecheck
 npm run build
 
-# Apply Prisma migrations (using owner role)
-npm run db:migrate
-
-# Seed demo Tutors and Customers
-npm run db:seed
-```
-
-### 5. Start Development Servers
-Start both Express backend (port 3001) and Vite React web application (port 5173):
-```bash
+# Start Express API (http://localhost:3001) and Vite Web (http://localhost:5173)
 npm run dev
 ```
+*(Windows PowerShell note: run `npm run dev -w @nuttiew/api` and `npm run dev -w @nuttiew/web` in two terminals.)*
 Navigate to `http://localhost:5173` in your browser.
 
 ---
@@ -156,7 +200,7 @@ The repository enforces closed-loop verification across all layers:
 ```bash
 npm test
 ```
-Tests pure domain logic: Bangkok timezone arithmetic, ISO-8601 validation, IP resolution, and error envelope formatting.
+Tests pure domain logic: Bangkok timezone arithmetic, ISO-8601 validation, IP resolution, and runtime credential config boundaries.
 
 ### 2. Static Typecheck & Production Build
 ```bash
@@ -169,10 +213,10 @@ Validates zero TypeScript errors and bundles both `@nuttiew/api` and `@nuttiew/w
 ```bash
 npm run test:db -w @nuttiew/api
 ```
-Executes comprehensive integration tests against genuine PostgreSQL:
-- **Race A:** Concurrent slot creation by the same tutor (`SLOT-10` / `SQLSTATE 23P01`).
-- **Race B:** Concurrent booking on the same offered slot (`BOOK-10` / `SLOT_ALREADY_BOOKED` 409).
-- **Race C:** Concurrent overlapping bookings across different tutors (`BOOK-11` / `CUSTOMER_TIME_OVERLAP` 409).
+Executes comprehensive integration tests against genuine PostgreSQL (`nuttiew_test`):
+- **Race A:** Concurrent slot creation by the same tutor (`SLOT-10/11` / `SQLSTATE 23P01`).
+- **Race B:** Concurrent booking on the same offered slot (`BOOK-10` / `SLOT_UNAVAILABLE` 409).
+- **Race C:** Concurrent overlapping bookings across different tutors (`BOOK-11` / `CUSTOMER_OVERLAP` 409).
 - **Lock Hierarchy:** Pre-index User lock in `booking_guard_s1()` eliminating reverse GiST deadlocks (`BDF-28`).
 - **Q05 Cutoff Drift:** Post-lock eligibility evaluation rejecting late submissions (`BOOK-17`).
 - **Process Restart Durability:** Verification that committed data survives child process termination and pool reconnection (`SLOT-02/14`, `RET-14`).
@@ -181,9 +225,11 @@ Executes comprehensive integration tests against genuine PostgreSQL:
 ```bash
 npx playwright test
 ```
-Executes all 64 browser tests including the end-to-end domain journey (`e2e/sprint1.journey.spec.ts` [test 39/64]).
+Executes all 64 browser tests (against real API + PostgreSQL) including the end-to-end domain journey (`e2e/sprint1.journey.spec.ts` [test 39/64]).
 
-$$\text{Total Distinct Automated Tests: } 29 \text{ (Unit)} + 106 \text{ (DB)} + 64 \text{ (E2E)} = \mathbf{199 \text{ Tests (100\% Clean, Zero Failures)}}$$
+$$\text{Total Distinct Automated Tests: } 29 \text{ (Unit)} + 106 \text{ (DB)} + 64 \text{ (E2E)} = \mathbf{199 \text{ Distinct Tests}}$$
+
+*Note: Always verify CI run status on the exact target PR HEAD (`gh run view <run-id>`) ensuring all 3 workflow jobs (`Unit / types / build`, `PostgreSQL 18 / Auth / Slot / Race A`, `Microsoft Edge / Auth / Tutor UI E2E`) finish `SUCCESS`.*
 
 ---
 
