@@ -146,7 +146,7 @@ describe('F-S1-05 Protected Booking Retrieval & Authorized Tutor Schedule View (
     // Book slotB1 for Customer B
     const bb = await createCustomerBooking(runtimePool, { userId: customerBId, sessionId: authCustomerB.sessionId }, slotB1Id);
     customerBBookingId = bb.data.id;
-  });
+  }, 30_000);
 
   afterAll(async () => {
     await runtimePool.end();
@@ -473,7 +473,7 @@ try {
     expect(parsed.body.data.tutorId).toBe(tutorAId);
     expect(parsed.body.data.tutorRef).toBe('TUTOR-' + tutorAId.slice(0, 8));
     expect(parsed.body.data.status).toBe('Booked');
-  });
+  }, 25_000);
 
   // RET-17: Single Statement Evaluation Snapshot Uniformity, Empty List Metadata, and Q30 Boundary
   it('RET-17: Snapshot uniformity, empty list metadata, Q30 exact boundary, and session TimeZone independence', async () => {

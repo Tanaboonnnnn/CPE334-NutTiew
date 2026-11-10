@@ -1,3 +1,4 @@
+import '../src/config.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';

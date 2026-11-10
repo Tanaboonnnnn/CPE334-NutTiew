@@ -1,48 +1,259 @@
 # CPE334 NutTiew — Tutoring Appointment System
 
-CPE334 Software Engineering group project (Semester 1/2026).
+CPE334 Software Engineering Project (Semester 1/2026)
+**Theme 1:** Appointment & Scheduling — One-to-One Tutoring Appointment System.
 
-**Product:** one-to-one tutoring appointment scheduling (Theme 1 — Appointment & Scheduling).
+---
 
-## Status
+## Sprint 1 Release Status
 
-Requirements discovery Q1–Q32 is closed. **Engineering baseline, system implementation and release are not yet complete.**
-The Master Specification and group theme assignment must be checked with the instructor/TA before final SRS approval.
+Sprint 1 delivers a fully functional, peer-reviewed vertical slice spanning **Responsive Web UI → Express 5 REST API Application → Persistent PostgreSQL Database**. All five planned Sprint 1 features (**F-S1-01** through **F-S1-05**) have been formally specified in Part E contracts, peer-reviewed, implemented in Part F, and verified through comprehensive automated test suites (Unit, Real PostgreSQL Concurrency, and Browser E2E).
 
-## Project documentation
+- **Current Staging / Integration Branch:** `sprint1`
+- **Release Target:** `main` (via reviewed integration PR after PR #43 approval)
+- **CI / Quality Gate:** [NutTiew CI Workflow](.github/workflows/ci.yml) (Node 24, Typecheck, Build, PostgreSQL Integration, Microsoft Edge E2E)
+- **Deliverable 1 Report:** [CPE334 Deliverable 1 Report](docs/deliverables/deliverable-1.md) | [PDF Export](docs/deliverables/CPE334_Deliverable1_NutTiew.pdf)
 
-- [Requirements decision log](docs/requirements/discovery-log.md)
-- [Domain glossary](docs/requirements/CONTEXT.md)
-- [Decision sign-off checklist](docs/requirements/requirements-signoff-checklist.md)
-- [Unapproved TBD register](docs/requirements/requirements-tbd-register.md)
-- [Sprint planning handoff](docs/requirements/github-start-handoff.md)
+---
 
-## Required delivery flow
+## System Architecture & Tech Stack
 
-`main` (accepted release) ← reviewed integration PR from `sprint1` (Sprint 1 staging) ← reviewed feature PRs from `feature/*` branches.
+```
+                    ┌──────────────────────────────────────────────┐
+                    │            Browser Client (React 19)         │
+                    │   Vite 7 + TypeScript + Accessible ARIA UI   │
+                    └──────────────────────┬───────────────────────┘
+                                           │ HTTP / HTTPS (REST API)
+                                           │ HttpOnly Session Cookie + CSRF
+                                           ▼
+                    ┌──────────────────────────────────────────────┐
+                    │           Backend Server (Express 5)         │
+                    │   TypeScript + Zod Schemas + Router Modules  │
+                    │   Role-based Auth (Customer / Tutor)         │
+                    │   Domain Invariant Guards (Bangkok Timezone) │
+                    └──────────────────────┬───────────────────────┘
+                                           │ Connection Pool (pg / Prisma)
+                                           │ Least-Privilege Database Roles
+                                           ▼
+                    ┌──────────────────────────────────────────────┐
+                    │         PostgreSQL Database (17 / 18)        │
+                    │   Extension: btree_gist                      │
+                    │   Triggers: slot_guard_s1, booking_guard_s1  │
+                    │   Constraints: GiST Non-Overlap, 60m Fixed   │
+                    │   Row Locks: User & Slot FOR UPDATE          │
+                    └──────────────────────────────────────────────┘
+```
 
-Every feature must be scoped through SRS/traceability/System SDS and have a versioned Feature SDS, UI/API/data contract (where relevant), Acceptance Criteria, Software Test Specification and Definition of Done **before implementing that feature**.
+- **Backend:** Node.js 24 LTS, Express 5.x, TypeScript, `pg` connection pool, Prisma ORM (for schema and migrations), Argon2id password hashing, Zod validation.
+- **Frontend:** React 19.x, TypeScript, Vite 7.x, Pure Semantic CSS, WCAG 2.2 AA design targets & accessible ARIA tokens.
+- **Database:** PostgreSQL 17.2 (local) / 18 (CI) with `btree_gist` extension, transactional triggers (`slot_guard_s1`, `booking_guard_s1`), exclusion constraints (`offered_slot_no_overlap_per_tutor`, `booked_customer_no_overlap`), and least-privilege runtime role separation.
+- **Deployment Note:** Production containerization (Docker, GCP Cloud Run) and managed DB (GCP Cloud SQL) are scheduled for **Lab 5** per course syllabus. Sprint 1 is verified locally and on GitHub CI against real PostgreSQL.
 
-See the [CPE334 Project Deliverable 1](docs/requirements/requirements-signoff-checklist.md) evidence checklist. Due **8 Nov 2026 23:59 ICT**.
+---
 
-**Do not commit secrets.** 
+## Sprint 1 Feature Inventory & GitHub History
 
-## F-S1-01 Authentication implementation (Issue #13)
+Every feature strictly followed the **Part E (Contract/SDS/STS) first $\longrightarrow$ Peer Review $\longrightarrow$ Part F (Code/Tests) $\longrightarrow$ Peer Review** workflow:
 
-See [Part F implementation and local PostgreSQL setup](docs/features/F-S1-01/implementation.md).
+| Feature ID | Feature Name | Contract / SDS (Part E) | Part E PR | Implementation & Tests (Part F) | Part F PR | GitHub Issue |
+| :--- | :--- | :--- | :---: | :--- | :---: | :---: |
+| **F-S1-01** | Authentication, Sessions & Rate Limiting | [F-S1-01 Spec](docs/features/F-S1-01/specification.md) | [#25](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/25) | [Auth Implementation](docs/features/F-S1-01/implementation.md) | [#26](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/26) | [#13](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/13) |
+| **F-S1-02** | Tutor Slot Availability & Scheduling | [F-S1-02 Spec](docs/features/F-S1-02/specification.md) | [#27](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/27), [#30](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/30) | [Slot Implementation](docs/features/F-S1-02/implementation.md) | [#28](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/28), [#31](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/31) | [#14](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/14) |
+| **Shared** | Booking Data Foundation (Schema & Triggers) | [Data Spec](docs/foundations/booking-data/data-spec.md) | [#34](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/34) | [Foundation Tests](apps/api/test/booking.foundation.db.test.ts) | [#36](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/36), [#40](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/40) | [#33](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/33), [#39](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/39) |
+| **F-S1-03** | Customer Availability Browse & Filter | [F-S1-03 Spec](docs/features/F-S1-03/specification.md) | [#32](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32) | [Availability Web UI](apps/web/src/customer-availability.tsx) | [#37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37) | [#15](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15) |
+| **F-S1-04** | Customer Booking & Race Prevention | [F-S1-04 Spec](docs/features/F-S1-04/specification.md) | [#35](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/35) | [Booking API & UI](docs/features/F-S1-04/implementation.md) | [#38](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/38) | [#16](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/16) |
+| **F-S1-05** | Booking Retrieval & Schedule View | [F-S1-05 Spec](docs/features/F-S1-05/specification.md) | [#41](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/41) | [Retrieval & Schedule UI](docs/features/F-S1-05/implementation.md) | [#42](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/42) | [#17](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/17) |
+| **D1-10** | Sprint 1 Release & Deliverable 1 PDF | [Three-Sprint Plan](docs/sprints/plan.md) | [#24](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/24) | [Deliverable 1 Report](docs/deliverables/deliverable-1.md) | [#43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43) | [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) |
 
-## F-S1-02 Tutor Slot availability implementation (Issue #14)
+---
 
-See [Tutor Slot Part F implementation and PostgreSQL privilege setup](docs/features/F-S1-02/implementation.md).
-Part E contracts are in the same folder. Feature/test evidence is tracked in the
-[Slot verification ledger](docs/features/F-S1-02/verification-ledger.md).
+## Local Reproducible Setup
 
-## Continuous Integration (PR checks)
+### 1. Prerequisites
+- **Node.js:** v24.x LTS (strictly `>=24 <25` per [`package.json`](package.json)).
+- **npm:** v10.x+
+- **PostgreSQL:** v17.x or v18.x (tested locally on PostgreSQL 17.2 and in CI on PostgreSQL 18) with `pgcrypto` and `btree_gist` extensions available.
 
-The [NutTiew CI workflow](.github/workflows/ci.yml) checks pull requests into
-`sprint1` or `main` and pushes to `sprint1`: Node 24 unit/typecheck/build,
-real PostgreSQL 18 Auth/Slot/Race A integration, and Microsoft Edge E2E. It
-uses disposable test-only database services and **never deploys or merges**.
-See the [CI setup/verification notes](docs/features/F-S1-02/implementation.md)
-for check names, expected scope and the distinction between local tests and
-GitHub-hosted results.
+### 2. Environment Configuration
+Copy [`.env.example`](.env.example) to `.env` in the repository root:
+```bash
+cp .env.example .env
+```
+Generate two distinct cryptographically random 32-byte (64-hex-character) secret keys for HMAC CSRF signing and rate-limit hashing:
+```bash
+node -e "console.log('AUTH_CSRF_HMAC_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
+node -e "console.log('AUTH_RATE_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
+```
+Populate `.env` using the exact variable names expected by [`apps/api/src/config.ts`](apps/api/src/config.ts):
+```env
+# 1. Owner / Migration Role (used ONLY by Prisma CLI / migrations; never API runtime)
+DATABASE_URL=postgresql://nuttiew_owner:REPLACE_WITH_OWNER_PASSWORD@127.0.0.1:5432/nuttiew?schema=public
+
+# 2. Restricted Non-Owner API Runtime Role (required; API startup and db:seed fail closed if missing or identical to DATABASE_URL)
+DATABASE_URL_APP=postgresql://nuttiew_runtime:REPLACE_WITH_RUNTIME_PASSWORD@127.0.0.1:5432/nuttiew?schema=public
+
+# 3. Cryptographic & Origin Settings
+AUTH_CSRF_HMAC_KEY=REPLACE_WITH_GENERATED_64_HEX_CHARS
+AUTH_RATE_KEY=REPLACE_WITH_DIFFERENT_64_HEX_CHARS
+AUTH_CANONICAL_ORIGIN=http://localhost:5173
+AUTH_CSRF_KEY_VERSION=v1
+
+# 4. Server Runtime
+NODE_ENV=development
+PORT=3001
+```
+
+### 3. Install Dependencies & Generate Prisma Client
+```bash
+npm ci
+npm run db:generate
+```
+
+### 4. Database Roles, Owner-Created Database, Migrations & Least-Privilege Grants
+Follow this exact order so tables, indexes, and triggers are created by `nuttiew_owner`, and least-privilege permissions are granted to `nuttiew_runtime` **after** the tables exist:
+
+#### Step A: Create Roles, Owner-Owned Database, and Extensions (as PostgreSQL superuser)
+Connect to PostgreSQL as superuser (e.g., `psql -U postgres`):
+```sql
+CREATE ROLE nuttiew_owner WITH LOGIN PASSWORD 'REPLACE_WITH_OWNER_PASSWORD'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
+CREATE ROLE nuttiew_runtime WITH LOGIN PASSWORD 'REPLACE_WITH_RUNTIME_PASSWORD'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION;
+
+CREATE DATABASE nuttiew OWNER nuttiew_owner;
+\c nuttiew;
+ALTER SCHEMA public OWNER TO nuttiew_owner;
+
+-- Superuser pre-installs extensions once so non-owner migrations pass idempotently
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+```
+
+#### Step B: Apply Schema & Security Triggers (as `nuttiew_owner`)
+Ensure `.env` has `DATABASE_URL` set to `nuttiew_owner`, then run:
+```bash
+npm run db:migrate
+```
+This applies all forward-only Prisma/SQL migrations under [`apps/api/prisma/migrations/`](apps/api/prisma/migrations/) as `nuttiew_owner`, installing `User`, `Session`, `AuthAttemptBucket`, `AuthAttemptReservation`, `Slot`, `Booking`, `btree_gist` exclusion constraints, and `SECURITY DEFINER` triggers (`slot_guard_s1`, `booking_guard_s1`).
+
+#### Step C: Grant Least-Privilege Runtime Permissions (after migrations)
+Connect to the `nuttiew` database as `nuttiew_owner` (e.g., `psql -U nuttiew_owner -d nuttiew`) or as superuser `postgres` while connected to `nuttiew`:
+```sql
+
+GRANT CONNECT ON DATABASE nuttiew TO nuttiew_runtime;
+GRANT USAGE ON SCHEMA public TO nuttiew_runtime;
+
+-- Auth, session, and rate-limiting tables require SELECT/INSERT/UPDATE/DELETE
+GRANT SELECT, INSERT, UPDATE, DELETE ON
+  "User", "Session", "AuthAttemptBucket", "AuthAttemptReservation"
+  TO nuttiew_runtime;
+
+-- Append-only domain tables in Sprint 1: never grant broad UPDATE or DELETE on Slot or Booking
+GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_runtime;
+
+-- PostgreSQL requires UPDATE privilege on at least one column of Slot for SELECT ... FOR UPDATE row locks;
+-- trigger slot_guard_s1() rejects Slot mutations, and runtime holds no table-wide UPDATE/DELETE on Slot/Booking.
+GRANT UPDATE ("id") ON "Slot" TO nuttiew_runtime;
+
+-- Scope future default read-only SELECT access explicitly to tables created by nuttiew_owner
+ALTER DEFAULT PRIVILEGES FOR ROLE nuttiew_owner IN SCHEMA public
+  GRANT SELECT ON TABLES TO nuttiew_runtime;
+```
+
+*(Optional — test database only, never in production)* To run the full `npm run test:db` suite including `BDF-20..25` direct-SQL trigger-probe checks, provision a separate disposable test database (e.g., `nuttiew_test`) plus an isolated `nuttiew_booking_probe` role matching [`.github/scripts/prepare-test-db.sh`](.github/scripts/prepare-test-db.sh) (`GRANT SELECT ON "Slot"` and `GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON "Booking" TO nuttiew_booking_probe`) and set `DATABASE_URL_BOOKING_PROBE` in `.env`.
+
+### 5. Seed Initial Demo Users
+[`apps/api/prisma/seed.ts`](apps/api/prisma/seed.ts) connects through `DATABASE_URL_APP` (`nuttiew_runtime`) and requires `SEED_EMAIL`, `SEED_PASSWORD` (minimum 12 UTF-8 bytes), and `SEED_ROLE` (`Customer` or `Tutor`) in the environment:
+
+**Bash / macOS / Linux / Git Bash:**
+```bash
+SEED_EMAIL="tutor.demo@example.test" SEED_PASSWORD="REPLACE_WITH_12_PLUS_CHAR_PASSWORD" SEED_ROLE="Tutor" npm run db:seed
+SEED_EMAIL="customer.demo@example.test" SEED_PASSWORD="REPLACE_WITH_12_PLUS_CHAR_PASSWORD" SEED_ROLE="Customer" npm run db:seed
+```
+
+**Windows PowerShell:**
+```powershell
+$env:SEED_EMAIL="tutor.demo@example.test"; $env:SEED_PASSWORD="REPLACE_WITH_12_PLUS_CHAR_PASSWORD"; $env:SEED_ROLE="Tutor"; npm run db:seed
+$env:SEED_EMAIL="customer.demo@example.test"; $env:SEED_PASSWORD="REPLACE_WITH_12_PLUS_CHAR_PASSWORD"; $env:SEED_ROLE="Customer"; npm run db:seed
+Remove-Item Env:SEED_EMAIL, Env:SEED_PASSWORD, Env:SEED_ROLE
+```
+
+### 6. Build & Start Development Servers
+```bash
+# Verify types and build both workspaces
+npm run typecheck
+npm run build
+
+# Start Express API (http://localhost:3001) and Vite Web (http://localhost:5173)
+npm run dev
+```
+*(Windows PowerShell note: run `npm run dev -w @nuttiew/api` and `npm run dev -w @nuttiew/web` in two terminals.)*
+Navigate to `http://localhost:5173` in your browser.
+
+---
+
+## Verification & Automated Test Suites
+
+The repository enforces closed-loop verification across all layers:
+
+### 1. Fast Unit & Contract Tests (29 Tests)
+```bash
+npm test
+```
+Tests pure domain logic: Bangkok timezone arithmetic, ISO-8601 validation, IP resolution, and runtime credential config boundaries.
+
+### 2. Static Typecheck & Production Build
+```bash
+npm run typecheck
+npm run build
+```
+Validates zero TypeScript errors and bundles both `@nuttiew/api` and `@nuttiew/web`.
+
+### 3. Real PostgreSQL Integration & Concurrency Tests (106 Tests)
+```bash
+npm run test:db -w @nuttiew/api
+```
+Executes comprehensive integration tests against genuine PostgreSQL (`nuttiew_test`):
+- **Race A:** Concurrent slot creation by the same tutor (`SLOT-10/11` / `SQLSTATE 23P01`).
+- **Race B:** Concurrent booking on the same offered slot (`BOOK-10` / `SLOT_UNAVAILABLE` 409).
+- **Race C:** Concurrent overlapping bookings across different tutors (`BOOK-11` / `CUSTOMER_OVERLAP` 409).
+- **Lock Hierarchy:** Pre-index User lock in `booking_guard_s1()` eliminating reverse GiST deadlocks (`BDF-28`).
+- **Q05 Cutoff Drift:** Post-lock eligibility evaluation rejecting late submissions (`BOOK-17`).
+- **Process Restart Durability:** Verification that committed data survives child process termination and pool reconnection (`SLOT-02/14`, `RET-14`).
+
+### 4. Browser End-to-End Tests (64 Tests)
+```bash
+npx playwright test
+```
+Executes all 64 browser tests (against real API + PostgreSQL) including the end-to-end domain journey (`e2e/sprint1.journey.spec.ts` [test 39/64]).
+
+$$\text{Total Distinct Automated Tests: } 29 \text{ (Unit)} + 106 \text{ (DB)} + 64 \text{ (E2E)} = \mathbf{199 \text{ Distinct Tests}}$$
+
+*Note: Always verify CI run status on the exact target PR HEAD (`gh run view <run-id>`) ensuring all 3 workflow jobs (`Unit / types / build`, `PostgreSQL 18 / Auth / Slot / Race A`, `Microsoft Edge / Auth / Tutor UI E2E`) finish `SUCCESS`.*
+
+---
+
+## Course Deliverable 1 Documentation
+
+Complete project documentation is organized in `docs/`:
+- **Part A:** [Whole-Product Software Requirements Specification (SRS)](docs/srs.md)
+- **Part B:** [Feature Inventory](docs/features.md) & [Traceability Matrix](docs/traceability.md)
+- **Part C:** [Whole-Product System Software Design Specification (SDS)](docs/system-sds.md)
+- **Part D:** [Feasible Three-Sprint Delivery Plan](docs/sprints/plan.md)
+- **Part E:** Feature Specifications & STSs ([F-S1-01](docs/features/F-S1-01/), [F-S1-02](docs/features/F-S1-02/), [Shared](docs/foundations/booking-data/), [F-S1-03](docs/features/F-S1-03/), [F-S1-04](docs/features/F-S1-04/), [F-S1-05](docs/features/F-S1-05/))
+- **Part F:** [Sprint 1 Integration & Deliverable 1 Report](docs/deliverables/deliverable-1.md) | [PDF Export](docs/deliverables/CPE334_Deliverable1_NutTiew.pdf)
+
+---
+
+## Team & Contribution Matrix
+
+| Team Member | GitHub Username | Quantitative Contribution | Primary Responsibilities (Sprint 1) |
+| :--- | :--- | :---: | :--- |
+| **Tanboon Teawsawat** | [@Tanaboonnnnn](https://github.com/Tanaboonnnnn) | **50%** | Requirements discovery (Q01–Q32), Whole-product SRS & System SDS architecture, Three-Sprint planning, Project #6 Kanban management, Substantive peer reviews on PRs |
+| **Chxtamos** | [@Chxtamos](https://github.com/Chxtamos) | **50%** | Express 5 API implementation, PostgreSQL schema & GiST exclusion triggers, Concurrency lock ordering, React 19 UI, End-to-End Playwright journey tests, Deliverable 1 report & PDF |
+
+---
+
+## License
+
+Academic project developed for CPE334 Software Engineering, Department of Computer Engineering, KMUTT.
