@@ -49,17 +49,16 @@ function displayMonth(index: number): string {
 }
 
 function groupDayOffers(offers: CustomerAvailabilityOffer[]): TimeGroup[] {
-  const groups: TimeGroup[] = [];
+  // The API orders startsAt/tutorRef/slotId, so offers with the same exact
+  // start/end pair need not be adjacent if tutors expose different durations.
+  const groups = new Map<string, TimeGroup>();
   for (const offer of offers) {
     const key = offer.startsAt + '|' + offer.endsAt;
-    const last = groups[groups.length - 1];
-    if (last && last.key === key) {
-      last.offers.push(offer);
-    } else {
-      groups.push({ key, startsAt: offer.startsAt, endsAt: offer.endsAt, offers: [offer] });
-    }
+    const existing = groups.get(key);
+    if (existing) existing.offers.push(offer);
+    else groups.set(key, { key, startsAt: offer.startsAt, endsAt: offer.endsAt, offers: [offer] });
   }
-  return groups;
+  return [...groups.values()];
 }
 
 export function CustomerAvailabilityCalendar({
