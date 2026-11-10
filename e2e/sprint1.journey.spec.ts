@@ -27,6 +27,8 @@ let customer2Id = '';
 
 const bangkokDayKey = (offsetDays: number): string =>
   new Date(Date.now() + offsetDays * 86_400_000 + 7 * 3_600_000).toISOString().slice(0, 10);
+const bangkokInstant = (dayKey: string, hhmm: string): Date =>
+  new Date(`${dayKey}T${hhmm}:00.000+07:00`);
 
 const futureDay = bangkokDayKey(20); // 20 days ahead
 const slotStartTime = '14:00';
@@ -254,8 +256,8 @@ test.describe('Sprint 1 End-to-End Vertical Journey (F-S1-01..05)', () => {
     // To demonstrate rejection with authentic UI error presentation:
     // Create a new slot, Customer 2 selects it in UI, but in background Customer 1 books it.
     // When Customer 2 confirms, backend returns 409 Conflict.
-    const raceStart = new Date(Date.now() + 21 * 86_400_000);
-    raceStart.setUTCHours(6, 0, 0, 0); // 13:00 Bangkok
+    const raceDay = bangkokDayKey(21);
+    const raceStart = bangkokInstant(raceDay, '13:00');
     const raceEnd = new Date(raceStart.getTime() + 3_600_000);
 
     const raceSlot = await pool.query<{ id: string }>(
@@ -263,7 +265,6 @@ test.describe('Sprint 1 End-to-End Vertical Journey (F-S1-01..05)', () => {
       [tutorId, raceStart, raceEnd],
     );
     const raceSlotId = raceSlot.rows[0].id;
-    const raceDay = bangkokDayKey(21);
 
     await signIn(page, customer2Email);
     await expect(page.getByRole('heading', { name: 'เลือกช่วงเวลาติว' })).toBeVisible();
