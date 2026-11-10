@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openAvailabilityOffer } from './helpers/open-availability-offer.js';
 import { Pool } from 'pg';
 import argon2 from 'argon2';
 import { randomBytes } from 'node:crypto';
@@ -146,36 +147,43 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
     await expect(page.locator(`[data-offer-slot-id="${slotC1BookedAId}"]`)).toHaveCount(0);
     await expect(page.locator(`[data-offer-slot-id="${slotOverlappingC1OnCId}"]`)).toHaveCount(0);
 
-    // Eligible slots for Customer 1 must be rendered
-    const morningA = page.locator(`[data-offer-slot-id="${slotMorningAId}"]`);
-    const morningB = page.locator(`[data-offer-slot-id="${slotMorningBId}"]`);
-    const adjacentB = page.locator(`[data-offer-slot-id="${slotAdjacentAfterBId}"]`);
-    const midnightA = page.locator(`[data-offer-slot-id="${slotCrossMidnightAId}"]`);
+    // A monthly calendar mounts only the chosen day/group, never all eligible rows.
+    const morningA = page.locator('[data-offer-slot-id="' + slotMorningAId + '"]');
+    const morningB = page.locator('[data-offer-slot-id="' + slotMorningBId + '"]');
+    const adjacentB = page.locator('[data-offer-slot-id="' + slotAdjacentAfterBId + '"]');
+    const midnightA = page.locator('[data-offer-slot-id="' + slotCrossMidnightAId + '"]');
 
+    const response = await page.request.get('/api/v1/customer/availability');
+    expect(response.status()).toBe(200);
+    const responseBody = await response.json() as { data: { slotId: string }[] };
+    const returnedIds = responseBody.data.map(item => item.slotId);
+    expect(returnedIds).not.toContain(slotOccupiedAId);
+    expect(returnedIds).not.toContain(slotC1BookedAId);
+    expect(returnedIds).not.toContain(slotOverlappingC1OnCId);
+    expect(returnedIds.filter(id => [slotMorningAId, slotMorningBId, slotAdjacentAfterBId, slotCrossMidnightAId].includes(id)))
+      .toEqual([slotMorningAId, slotMorningBId, slotAdjacentAfterBId, slotCrossMidnightAId]);
+
+    await openAvailabilityOffer(page, slotMorningAId);
     await expect(morningA).toBeVisible();
     await expect(morningB).toBeVisible();
-    await expect(adjacentB).toBeVisible();
-    await expect(midnightA).toBeVisible();
-
-    // Verify Bangkok times and cross-midnight badge
     await expect(morningA).toContainText('10:15');
     await expect(morningA).toContainText('11:15');
     await expect(morningA).toContainText(tutorAId);
+    // Tutor options of the same exact instant pair must remain distinct and ordered.
+    const visibleIds = await page.locator('[data-testid="availability-offer"]').evaluateAll(nodes =>
+      nodes.map(node => node.getAttribute('data-offer-slot-id')),
+    );
+    expect(visibleIds.filter(id => id === slotMorningAId || id === slotMorningBId))
+      .toEqual([slotMorningAId, slotMorningBId]);
+
+    await openAvailabilityOffer(page, slotAdjacentAfterBId);
     await expect(adjacentB).toContainText('15:00');
     await expect(adjacentB).toContainText('16:00');
+
+    await openAvailabilityOffer(page, slotCrossMidnightAId);
     await expect(midnightA).toContainText('23:30');
     await expect(midnightA).toContainText('00:30');
     await expect(midnightA).toContainText('สิ้นสุดในวันถัดไป');
-
-    // AVA-08: Verify deterministic order among our four Customer 1 slots:
-    // morningA (day1 10:15, tutorA) -> morningB (day1 10:15, tutorB) -> adjacentB (day1 15:00, tutorB) -> midnightA (day2 23:30, tutorA)
-    const renderedIds = await page.locator('[data-testid="availability-offer"]').evaluateAll(nodes =>
-      nodes.map(n => n.getAttribute('data-offer-slot-id') ?? ''),
-    );
-    const ourOrder = renderedIds.filter(id =>
-      [slotMorningAId, slotMorningBId, slotAdjacentAfterBId, slotCrossMidnightAId].includes(id),
-    );
-    expect(ourOrder).toEqual([slotMorningAId, slotMorningBId, slotAdjacentAfterBId, slotCrossMidnightAId]);
 
     // AVA-05/18: No email-derived name or private data appears in the page
     const bodyText = await page.locator('body').innerText();
@@ -183,6 +191,7 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
     expect(bodyText).not.toContain('avail-e2e-');
 
     // Select an offer and verify Selected-offer summary states selection is NOT a Booking
+    await openAvailabilityOffer(page, slotMorningAId);
     await morningA.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
     await expect(morningA.getByRole('button', { name: 'เลือกช่วงเวลานี้แล้ว' })).toHaveAttribute('aria-pressed', 'true');
     const summary = page.locator('#selected-offer-summary');
@@ -198,11 +207,14 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
       const tzPage = await ctx.newPage();
       try {
         await signIn(tzPage, customer2Email);
+        await openAvailabilityOffer(tzPage, slotMorningAId);
         await expect(tzPage.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toContainText('10:15');
         await expect(tzPage.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toContainText('11:15');
+        await openAvailabilityOffer(tzPage, slotCrossMidnightAId);
         await expect(tzPage.locator(`[data-offer-slot-id="${slotCrossMidnightAId}"]`)).toContainText('23:30');
         await expect(tzPage.locator(`[data-offer-slot-id="${slotCrossMidnightAId}"]`)).toContainText('00:30');
         // AVA-15/17: Customer 2 DOES see slotOverlappingC1OnCId (14:30-15:30)
+        await openAvailabilityOffer(tzPage, slotOverlappingC1OnCId);
         await expect(tzPage.locator(`[data-offer-slot-id="${slotOverlappingC1OnCId}"]`)).toContainText('14:30');
         await expect(tzPage.locator(`[data-offer-slot-id="${slotOverlappingC1OnCId}"]`)).toContainText('15:30');
       } finally {
@@ -290,6 +302,7 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
     // Refresh to live populated offers
     mode = 'live';
     await page.getByRole('button', { name: 'โหลดข้อมูลล่าสุด' }).click();
+    await openAvailabilityOffer(page, slotMorningAId);
     await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
     await expect(page.getByText('ยังไม่มีช่วงเวลาติวที่พร้อมให้เลือก')).toHaveCount(0);
   });
@@ -348,6 +361,7 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
     // Click retry with valid payload -> recovers smoothly
     mode = 'valid';
     await page.getByRole('button', { name: 'โหลดอีกครั้ง' }).click();
+    await openAvailabilityOffer(page, slotMorningAId);
     await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
     await expect(page.locator('#availability-error')).toHaveCount(0);
   });
@@ -355,6 +369,7 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
   test('AVA-12 holds old Customer 200 across Logout/account switch and rejects mismatched X-NutTiew-Session-Binding', async ({ page }) => {
     await signIn(page, customer1Email);
     const offerA = page.locator(`[data-offer-slot-id="${slotMorningAId}"]`);
+    await openAvailabilityOffer(page, slotMorningAId);
     await expect(offerA).toBeVisible();
     await offerA.getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
     await expect(page.locator('#selected-offer-summary')).toBeVisible();
@@ -400,6 +415,7 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
 
     // Now log back in as Customer 1, select an offer, then deliver a response with mismatched X-NutTiew-Session-Binding
     await signIn(page, customer1Email, false);
+    await openAvailabilityOffer(page, slotMorningAId);
     await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
     await page.locator(`[data-offer-slot-id="${slotMorningAId}"]`).getByRole('button', { name: 'เลือกช่วงเวลานี้' }).click();
     await expect(page.locator('#selected-offer-summary')).toBeVisible();
@@ -424,6 +440,7 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
 
   test('AVA-12 Customer logout failure stays guarded and private; retry succeeds and recheck restores genuine offers', async ({ page }) => {
     await signIn(page, customer1Email);
+    await openAvailabilityOffer(page, slotMorningAId);
     await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
 
     // 1) Inject 503 on logout
@@ -452,6 +469,7 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
     await expect(retryLogoutBtn).toBeVisible();
 
     await recheckBtn.click();
+    await openAvailabilityOffer(page, slotMorningAId);
     await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
     await expect(page.getByText('เข้าสู่ระบบแล้ว')).toBeVisible();
 
@@ -463,11 +481,13 @@ test.describe('F-S1-03 Customer Availability UI / real PostgreSQL & Edge E2E (AV
 
   test('AVA-13/19 responsive viewports 320/375/768/1280px, keyboard selection, target sizes, WCAG contrast and shared Tutor design tokens', async ({ page }) => {
     await signIn(page, customer1Email);
+    await openAvailabilityOffer(page, slotMorningAId);
     await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
 
     for (const width of [320, 375, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
       await expect(page.getByRole('heading', { name: 'เลือกช่วงเวลาติว' })).toBeVisible();
+      await openAvailabilityOffer(page, slotMorningAId);
       await expect(page.locator(`[data-offer-slot-id="${slotMorningAId}"]`)).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
       expect(overflow, `Customer availability horizontal overflow at ${width}px`).toBe(false);
