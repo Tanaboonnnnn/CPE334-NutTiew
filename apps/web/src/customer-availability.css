@@ -1,25 +1,28 @@
+@import './tokens.css';
+
 /*
  * F-S1-03 Customer Availability shared NutTiew design system (OD-AV-08)
  * with Option A Date-First Monthly Calendar workspace (#44).
+ * Consumes canonical --nuttiew-* design tokens from tokens.css.
  */
 .customer-app {
-  --customer-navy: #202b44;
-  --customer-navy-deep: #172137;
-  --customer-orange: #f47736;
-  --customer-orange-dark: #a43e14;
-  --customer-canvas: #f7f8fb;
-  --customer-ink: #172137;
-  --customer-muted: #455a76;
-  --customer-border: #e0e6ef;
-  --customer-focus: #aa4519;
-  --customer-control-border: #66778a;
+  --customer-navy: var(--nuttiew-navy);
+  --customer-navy-deep: var(--nuttiew-navy-deep);
+  --customer-orange: var(--nuttiew-orange);
+  --customer-orange-dark: var(--nuttiew-orange-dark);
+  --customer-canvas: var(--nuttiew-canvas);
+  --customer-ink: var(--nuttiew-ink);
+  --customer-muted: var(--nuttiew-muted);
+  --customer-border: var(--nuttiew-border);
+  --customer-focus: var(--nuttiew-focus);
+  --customer-control-border: var(--nuttiew-control-border);
   display: grid;
   grid-template-columns: 245px minmax(0, 1fr);
   min-height: 100vh;
   width: 100%;
   background: var(--customer-canvas);
   color: var(--customer-ink);
-  font-family: 'Noto Sans Thai', 'Sarabun', system-ui, sans-serif;
+  font-family: var(--nuttiew-font-sans);
 }
 
 .customer-app *,
@@ -942,24 +945,24 @@
   justify-content: center;
   min-height: 100vh;
   padding: 24px;
-  background: #f7f8fb;
+  background: var(--nuttiew-canvas);
 }
 
 .customer-session-guard {
   width: min(100%, 530px);
   padding: clamp(22px, 4vw, 38px);
-  background: #fff;
-  border: 1px solid #cad4e1;
-  border-radius: 14px;
-  box-shadow: 0 12px 32px rgba(32, 43, 68, 0.08);
-  color: #263244;
+  background: var(--nuttiew-surface);
+  border: 1px solid var(--nuttiew-card-border);
+  border-radius: var(--nuttiew-radius-card);
+  box-shadow: var(--nuttiew-shadow-card);
+  color: var(--nuttiew-ink-tutor);
   line-height: 1.65;
 }
 
 .customer-session-guard .session-guard-brand {
   font-size: 1rem;
   font-weight: 800;
-  color: #202b44;
+  color: var(--nuttiew-navy);
   letter-spacing: 0.03em;
   margin: 0 0 15px;
 }
@@ -967,15 +970,15 @@
 .customer-session-guard h1 {
   font-size: clamp(1.35rem, 3vw, 1.8rem);
   margin: 0 0 14px;
-  color: #202b44;
+  color: var(--nuttiew-navy);
 }
 
 .customer-session-guard [role="alert"] {
-  color: #9c2424;
-  border: 1px solid #dca4a4;
-  border-radius: 8px;
+  color: var(--nuttiew-error);
+  border: 1px solid var(--nuttiew-error-border);
+  border-radius: var(--nuttiew-radius-input);
   padding: 10px 13px;
-  background: #fff3f3;
+  background: var(--nuttiew-error-bg);
   margin-bottom: 12px;
 }
 
@@ -983,17 +986,17 @@
   min-height: 44px;
   min-width: 44px;
   padding: 11px 17px;
-  background: #f47736;
-  color: #172137;
-  border: 1px solid #d96123;
-  border-radius: 9px;
+  background: var(--nuttiew-orange);
+  color: var(--nuttiew-navy-deep);
+  border: 1px solid var(--nuttiew-orange-border);
+  border-radius: var(--nuttiew-radius-control);
   font-weight: 700;
   cursor: pointer;
 }
 
 .customer-session-guard button:focus-visible,
 .customer-session-guard h1:focus-visible {
-  outline: 3px solid #aa4519;
+  outline: 3px solid var(--nuttiew-focus);
   outline-offset: 3px;
 }
 

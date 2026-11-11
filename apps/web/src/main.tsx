@@ -426,15 +426,21 @@ function App() {
     );
   }
 
-  return <main><section className="panel">
-    <p className="eyebrow">NutTiew · Authentication</p>
+  return <main className="auth-shell"><section className="panel auth-panel">
+    <div className="auth-brand">
+      <div className="auth-brand-mark" aria-hidden="true">N</div>
+      <div>
+        <strong className="auth-brand-name">NutTiew</strong>
+        <p className="eyebrow">AUTHENTICATION</p>
+      </div>
+    </div>
     <h1>ยินดีต้อนรับ</h1>
     <p className="subtitle">ระบบนัดหมายติวเตอร์สำหรับ Customer และ Tutor</p>
-    {loading ? <p role="status">กำลังตรวจสอบเซสชัน…</p> : user ? <>
+    {loading ? <p className="auth-status" role="status">กำลังตรวจสอบเซสชัน…</p> : user ? <>
       <p className="success" role="status">เข้าสู่ระบบแล้ว</p>
-      <p>บัญชี: <strong>{user.id.replaceAll('-', '').slice(-8)}</strong></p>
-      <p>บทบาท: <strong>{user.role}</strong></p>
-      <button onClick={logout} disabled={busy}>{busy ? 'กำลังออกจากระบบ…' : 'ออกจากระบบ'}</button>
+      <p className="auth-identity-row">บัญชี: <strong>{user.id.replaceAll('-', '').slice(-8)}</strong></p>
+      <p className="auth-identity-row">บทบาท: <strong>{user.role}</strong></p>
+      <button type="button" onClick={logout} disabled={busy}>{busy ? 'กำลังออกจากระบบ…' : 'ออกจากระบบ'}</button>
     </> : <form onSubmit={login} noValidate={false}>
       <label htmlFor="email">อีเมล</label>
       <input id="email" ref={emailRef} type="email" value={email}

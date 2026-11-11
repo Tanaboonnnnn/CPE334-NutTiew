@@ -1,0 +1,52 @@
+/*
+ * Canonical NutTiew UI design tokens shared across Auth/Login (style.css),
+ * Tutor Dashboard (tutor-dashboard.css), and Customer Availability (customer-availability.css).
+ */
+:root {
+  --nuttiew-font-sans: 'Noto Sans Thai', 'Sarabun', system-ui, sans-serif;
+
+  /* Core brand & ink */
+  --nuttiew-navy: #202b44;
+  --nuttiew-navy-deep: #172137;
+  --nuttiew-ink: #172137;
+  --nuttiew-ink-tutor: #263244;
+  --nuttiew-muted: #455a76;
+  --nuttiew-muted-subtle: #58697f;
+
+  /* Primary orange CTA & warm accent */
+  --nuttiew-orange: #f47736;
+  --nuttiew-orange-hover: #ff965d;
+  --nuttiew-orange-border: #d96123;
+  --nuttiew-orange-border-hover: #c25119;
+  --nuttiew-orange-dark: #a43e14;
+
+  /* Surfaces & boundaries */
+  --nuttiew-canvas: #f7f8fb;
+  --nuttiew-surface: #ffffff;
+  --nuttiew-surface-hover: #eff3f9;
+  --nuttiew-surface-muted: #f4f6fa;
+  --nuttiew-border: #e0e6ef;
+  --nuttiew-card-border: #cad4e1;
+  --nuttiew-control-border: #66778a; /* 4.59:1 on #ffffff; 4.29:1 on #f7f8fb */
+
+  /* Focus, radius & shadows */
+  --nuttiew-focus: #aa4519; /* 6.02:1 on #ffffff; 5.64:1 on #f7f8fb */
+  --nuttiew-radius-card: 14px;
+  --nuttiew-radius-control: 9px;
+  --nuttiew-radius-input: 8px;
+  --nuttiew-shadow-card: 0 12px 32px rgba(32, 43, 68, 0.08);
+  --nuttiew-shadow-cta: 0 4px 13px rgba(161, 85, 43, 0.13);
+
+  /* Semantic feedback (WCAG AA compliant; never a page palette) */
+  --nuttiew-error: #9c2424;
+  --nuttiew-error-bg: #fff3f3;
+  --nuttiew-error-border: #dca4a4;
+  --nuttiew-success: #1b6c4b;
+  --nuttiew-success-bg: #eef7f2;
+  --nuttiew-success-border: #b9d9c7;
+
+  font-family: var(--nuttiew-font-sans);
+  color: var(--nuttiew-ink);
+  background: var(--nuttiew-canvas);
+  line-height: 1.5;
+}
