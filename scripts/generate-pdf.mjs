@@ -48,7 +48,7 @@ function loadImageAsset(src, verifyAssets = true) {
 import base64, json, sys, pymupdf
 p = sys.argv[1]
 pix = pymupdf.Pixmap(p)
-if pix.height > pix.width * 2:
+if pix.height > pix.width * 2.5:
     h = min(pix.height, int(pix.width * 1.15))
     sub = pymupdf.Pixmap(pix.colorspace, (0, 0, pix.width, h), pix.alpha)
     sub.copy(pix, (0, 0, pix.width, h))
