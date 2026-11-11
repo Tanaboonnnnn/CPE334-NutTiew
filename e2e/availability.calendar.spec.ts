@@ -24,13 +24,19 @@ let tutorBId = '';
 let customer1Id = '';
 let customer2Id = '';
 
-const bangkokDayKey = (offsetDays: number): string =>
-  new Date(Date.now() + offsetDays * 86_400_000 + 7 * 3_600_000).toISOString().slice(0, 10);
+const suiteNowMs = Date.now();
+const bangkokDayKey = (offsetDays: number, nowMs = suiteNowMs): string =>
+  new Date(nowMs + offsetDays * 86_400_000 + 7 * 3_600_000).toISOString().slice(0, 10);
 const bangkokInstant = (dayKey: string, hhmm: string): Date =>
   new Date(`${dayKey}T${hhmm}:00.000+07:00`);
 
-const cleanDay1 = bangkokDayKey(18);
-const cleanDay2 = bangkokDayKey(19);
+// UX-CAL-04/06 requires cleanDay1 and cleanDay2 to share one Asia/Bangkok YYYY-MM calendar month so
+// filtering cleanDay1 leaves cleanDay2 inside the active month (monthOfferCount > 0 -> calendar-day-empty).
+const candidateDay1 = bangkokDayKey(18);
+const candidateDay2 = bangkokDayKey(19);
+const sameBangkokMonth = candidateDay1.slice(0, 7) === candidateDay2.slice(0, 7);
+const cleanDay1 = sameBangkokMonth ? candidateDay1 : bangkokDayKey(17);
+const cleanDay2 = sameBangkokMonth ? candidateDay2 : candidateDay1;
 let cleanDay1PrimarySlotId = '';
 let cleanDay2SlotId = '';
 
