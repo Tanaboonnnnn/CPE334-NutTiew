@@ -211,7 +211,7 @@ export function compileDeliverable(options = {}) {
 - **Integration Staging Base SHA:** \`c4c599d\` on branch \`sprint1\` (following merged [PR #43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43) \`7449581\`, [PR #45](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/45) \`567ec1c\`, [PR #47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47) \`9aa37c0\`, and [PR #51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51) \`c4c599d\`; release branch \`main\` remains at \`b501c18\`)
 - **Verified Code & DB Baseline SHA:** \`${testedSha}\` on \`sprint1\` (Deliverable 1 source/PDF sync tracked in Issue [#48](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/48) / [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49); historical PR #43 baseline \`808b906\` preserved below)
 - **Verified GitHub Actions CI Run:** [Run ${ciRunId}](${ciRunUrl}) — 3/3 Jobs PASS (\`Unit / types / build\`, \`PostgreSQL 18 / Auth / Slot / Race A\`, \`Microsoft Edge / Auth / Tutor UI E2E\`; **209 distinct automated tests: 34 Unit + 107 DB + 68 E2E**)
-- **Target Release Branch:** \`main\` (Pending teammate review and approval of [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49), **Manual Human WCAG 2.2 AA & Screen-Reader Audit** [\`NOT RUN\`], Master Spec / Theme 1 confirmation, and separate reviewed \`sprint1 -> main\` release PR + immutable tag)
+- **Target Release Branch:** \`main\` (Pending teammate review and approval of [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49), **Independent Formal Manual WCAG 2.2 AA & Screen-Reader Release Sign-off** [\`Pending\` — distinct from @Chxtamos's \`2026-11-11\` informal author walkthrough; see Part F §6.4], Master Spec / Theme 1 confirmation, and separate reviewed \`sprint1 -> main\` release PR + immutable tag)
 - **Course Handout Deadline:** 8 November 2026, 23:59 ICT *(subsequent post-baseline PRs [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44)/[#47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47), [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50)/[#51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51), and Deliverable 1 sync PR [#49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) transparently documented below — never presented as on-time submission proof)*
 - **Report Compilation Date:** ${docGenDate}
 - **Total PDF Pages:** ${pr.totalPages ? `${pr.totalPages} pages` : 'Computing...'}
@@ -249,7 +249,7 @@ export function compileDeliverable(options = {}) {
 | — [**E.4 F-S1-03 Customer Availability**](#e4-f-s1-03-customer-availability-browse-filter) | SDS, Amended UI Spec, Option A Calendar UX Decision, API Contract, Data Contract, STS | \`AVA-01..19\`, \`UX-CAL-01..10\` | ${fmtRange('e4')} |
 | — [**E.5 F-S1-04 Exclusive Booking & Races**](#e5-f-s1-04-customer-exclusive-booking-concurrency-protection) | SDS, UI Spec, API Spec, Data Spec, Transaction Lock/Retry Contract, STS | \`BOOK-01..33\`, Race B, Race C, \`BDF-23\` | ${fmtRange('e5')} |
 | — [**E.6 F-S1-05 Booking Retrieval & Tutor View**](#e6-f-s1-05-protected-booking-retrieval-authorized-tutor-schedule) | SDS, UI Spec, API Spec, Data Contract, STS | \`RET-01..17\`, \`INV-RET-01..05\` | ${fmtRange('e6')} |
-| [**Part F: Sprint 1 Verification & Release Evidence**](#part-f-sprint-1-implementation-verification-release-evidence) | 209 distinct tests, \`AC-S1-01..35\` & \`VC/TEST-S1-01..39\` matrices, Race A/B/C proofs, verbatim excerpts, TDD history, 16 screenshots, peer reviews (#38–#51) & honest DoD | 209/209 CI PASS; Manual WCAG NOT RUN; release/LEB2 pending | ${fmtRange('partF')} |
+| [**Part F: Sprint 1 Verification & Release Evidence**](#part-f-sprint-1-implementation-verification-release-evidence) | 209 distinct tests, \`AC-S1-01..35\` & \`VC/TEST-S1-01..39\` matrices, Race A/B/C proofs, verbatim excerpts, TDD history, 16 annotated screenshots + \`409/404\` backend proofs, peer reviews (#38–#51), 3-layer WCAG status & honest DoD | 209/209 CI PASS; Author check PASS; Formal WCAG & release pending | ${fmtRange('partF')} |
 
 ---
 `;
@@ -384,7 +384,7 @@ Automated verification was executed across both **GitHub Actions Ubuntu 24.04 CI
 | :--- | :--- | :--- | :---: |
 | **VC-S1-34 / TEST-S1-34** | Full UI→API→DB Sprint 1 Journey | \`e2e/sprint1.journey.spec.ts\` (inside \`68\`-test Playwright suite) + 8 refreshed screenshots on \`c4c599d\` | **PASS** |
 | **VC-S1-35 / TEST-S1-35** | No stored secrets/plaintext/PII leaks | \`auth.db.test.ts\`, \`config.test.ts\`, \`retrieval.db.test.ts\` (\`RET-13\`), \`git grep\` clean | **PASS** |
-| **VC-S1-36 / TEST-S1-36** | Performance p95 (NFR-010) & Keyboard/WCAG (NFR-009) | \`AVA14_BENCHMARK_500\` (\`p95 = 68.21ms\` local sequential / \`9.66ms\` CI PG 18): **PASS**; Playwright focus, \`44×44px\` targets (\`>=36×44px\` day tile at \`320px\`), \`--nuttiew-*\` token contrast (\`>=4.5:1\` text / \`>=3:1\` UI) & reflow checks (\`auth.a11y.spec.ts\`, \`availability.calendar.spec.ts\`): **PASS**; **Formal manual human WCAG 2.2 AA & screen-reader assistive-tech sign-off: NOT RUN (Manual Gate)** | **PARTIAL (Auto PASS / Manual NOT RUN)** |
+| **VC-S1-36 / TEST-S1-36** | Performance p95 (NFR-010) & Keyboard/WCAG (NFR-009) | \`AVA14_BENCHMARK_500\` (\`p95 = 68.21ms\` local sequential / \`9.66ms\` CI PG 18): **PASS**; Automated Playwright focus, \`44×44px\` targets (\`>=36×44px\` day tile at \`320px\`), \`--nuttiew-*\` contrast (\`>=4.5:1\` text / \`>=3:1\` UI) & reflow checks (\`auth.a11y.spec.ts\`, \`availability.calendar.spec.ts\`): **PASS**; Informal Author Manual Walkthrough (@Chxtamos, \`2026-11-11\` ICT localhost Keyboard/375px/200%/Screen-Reader + E2E): **PASS (Author Check Only)**; **Independent Formal Manual WCAG 2.2 AA & Screen-Reader Release Sign-off: Pending** | **PARTIAL (Auto + Author PASS / Formal Sign-off Pending)** |
 | **VC-S1-37 / TEST-S1-37** | Race A (concurrent same-Tutor overlapping Slots) | \`apps/api/test/slots.race.db.test.ts\` (\`SLOT-10/11\`) | **PASS** |
 | **VC-S1-38 / TEST-S1-38** | Same-Customer natural-key duplicate/retry | \`apps/api/test/bookings.db.test.ts\` (\`BOOK-13..16\`) & \`e2e/booking.spec.ts\` | **PASS** |
 | **VC-S1-39 / TEST-S1-39** | Post-wait \`T_elig\` cutoff drift & Option 1 lock proof | \`apps/api/test/bookings.db.test.ts\` (\`BOOK-17\`, \`BOOK-19 / BDF-23\`) | **PASS** |
@@ -394,8 +394,8 @@ Automated verification was executed across both **GitHub Actions Ubuntu 24.04 CI
 | Addendum Scope / Case IDs | Feature / PR Reference | Executed Verification & Remaining Gate | Observed Result |
 | :--- | :--- | :--- | :---: |
 | **\`UX-CAL-01..07\`** | \`F-S1-03\` Option A Monthly Calendar (Issue [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44) / [PR #47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47)) | \`customer-availability-calendar.test.ts\` (**5/5** unit), \`e2e/availability.calendar.spec.ts\` (**4/4** incl. 522-row DOM collapse, Nov→Dec empty→Jan + \`2028-02-29\` leap day, exact interval key, no navigation \`POST\`, fail-closed \`503\`/malformed DTO, \`UTC\` & \`America/Los_Angeles\` projection) | **PASS** |
-| **\`UX-CAL-08..09\`** | Responsive geometry, disclosure focus transfer & computed contrast | \`320/375/640(200%)/768/800/801/1280px\` zero overflow, \`ดูเวลาเพิ่มเติม\` → 7th group focus transfer (\`5a32d05\`), \`3px solid #AA4519\` focus ring, \`position: static\` summary | **PARTIAL (Auto PASS / Manual WCAG NOT RUN)** |
-| **\`AUTH-15\` Token Alignment** | \`F-S1-01\` Login Navy + Orange + Light Canvas (Issue [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50) / [PR #51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51)) | \`e2e/auth.a11y.spec.ts\` (**2/2** computed \`rgb(247,248,251)\` canvas, \`#202B44\` heading, \`#F47736\`/\`#172137\` CTA \`5.76:1\`, \`#66778A\` control border \`>=3:1\`, \`#FFF3F3\`/\`#9C2424\` alert, \`320–1280px\` \`>=44×44px\` targets) + \`15/15\` Auth E2E | **PARTIAL (Auto PASS / Manual WCAG NOT RUN)** |
+| **\`UX-CAL-08..09\`** | Responsive geometry, disclosure focus transfer & computed contrast | \`320/375/640(200%)/768/800/801/1280px\` zero overflow, \`ดูเวลาเพิ่มเติม\` → 7th group focus transfer (\`5a32d05\`), \`3px solid #AA4519\` focus ring, \`position: static\` summary (**PASS**); Informal Author Manual Walkthrough by @Chxtamos on \`2026-11-11\` (**PASS — Author Check Only**); Independent Formal Sign-off remains Pending | **PARTIAL (Auto + Author PASS / Formal Sign-off Pending)** |
+| **\`AUTH-15\` Token Alignment** | \`F-S1-01\` Login Navy + Orange + Light Canvas (Issue [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50) / [PR #51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51)) | \`e2e/auth.a11y.spec.ts\` (**2/2** computed \`rgb(247,248,251)\` canvas, \`#202B44\` heading, \`#F47736\`/\`#172137\` CTA \`5.76:1\`, \`#66778A\` control border \`>=3:1\`, \`#FFF3F3\`/\`#9C2424\` alert, \`320–1280px\` \`>=44×44px\` targets) + \`15/15\` Auth E2E (**PASS**); Informal Author Manual Walkthrough by @Chxtamos on \`2026-11-11\` (**PASS — Author Check Only**); Independent Formal Sign-off remains Pending | **PARTIAL (Auto + Author PASS / Formal Sign-off Pending)** |
 
 *(Also note: \`AUTH-22\` deterministic multi-instance Argon2 barrier stress test covers single-process barrier in \`auth.barrier.db.test.ts\` [PASS] while full external multi-instance mixed stress remains transparently documented as PARTIAL in \`F-S1-01/tests.md\`.)*
 
@@ -478,57 +478,233 @@ Every critical domain, concurrency, and UI alignment fix followed observable **f
 
 ---
 
-## 6. End-to-End Visual Walkthrough & Screenshots
+## 6. End-to-End Visual Walkthrough, Milestone Traceability & Negative Backend Proofs
+
+Every screenshot embedded below comes directly from the committed Playwright capture suite on \`sprint1@${testedSha}\` (zero fabricated mockups) and includes structured traceability (**Actor / Preconditions → Action → Expected Result → Actual Evidence Observed → Traceability IDs**) plus direct backend/database evidence for HTTP \`409\` / \`404\` security invariants.
 
 ### 6.1 Login/Auth UI Theme Alignment (Issue #50 / PR #51 — Before vs After, \`F-S1-01\`)
 
+#### 6.1.1 Login Before Theme Unification (Desktop \`1280×800\` — Legacy ZenGreen Baseline)
+
 ![Login Before 1280px (Legacy ZenGreen)](../evidence/login-theme/login-before-1280.png)
+
+- **Artifact:** \`docs/evidence/login-theme/login-before-1280.png\` (\`1280×800 px\`, pre-\`PR #51\` \`sprint1@9aa37c0\`)
+- **Actor / Preconditions:** Anonymous visitor opening \`/\` prior to shared token alignment.
+- **Action:** Initial render of legacy ZenGreen stylesheet (\`apps/web/src/style.css\`).
+- **Expected Result (Baseline Finding):** Surface visual mismatch flagged during PR #49 design review between green/cream login chrome (\`#285C4B\` / \`#F6F4EF\`) and Tutor/Customer Navy + Orange views.
+- **Actual Evidence Observed:** Functional authentication card rendered with green accent button/headings on cream canvas, confirming why \`PR #51\` unification was scoped.
+- **Traceability:** \`F-S1-01\` · \`AUTH-15\` Baseline · \`Issue #50\`.
+
+#### 6.1.2 Login After Theme Unification (Desktop \`1280×800\` — NutTiew Navy + Orange)
 
 ![Login After 1280px (NutTiew Navy + Orange)](../evidence/login-theme/login-after-1280.png)
 
+- **Artifact:** \`docs/evidence/login-theme/login-after-1280.png\` (\`1280×800 px\`, \`sprint1@${testedSha}\`)
+- **Actor / Preconditions:** Anonymous visitor opening \`/\` with shared \`apps/web/src/tokens.css\`.
+- **Action:** Render unauthenticated login card (\`e2e/auth.a11y.spec.ts:21–77\`, \`e2e/auth.spec.ts:16\`).
+- **Expected Result:** Computed surface tokens match Tutor & Customer views (\`#F7F8FB\` canvas, \`#202B44\` navy heading, \`#F47736\` orange CTA with \`#172137\` ink \`>= 4.5:1\` contrast, \`#66778A\` control borders \`>= 3:1\`) and \`0\` horizontal overflow.
+- **Actual Evidence Observed:** Unified Navy + Orange login card (\`"ยินดีต้อนรับ"\`, email/password inputs, show/hide button, \`"เข้าสู่ระบบ"\` CTA) centered on \`#F7F8FB\`; automated audit confirmed \`5.76:1\` CTA text contrast and \`0\` overflow.
+- **Traceability:** \`F-S1-01\` · \`AC-S1-01..03\` · \`AUTH-15\` (\`e2e/auth.a11y.spec.ts:21–77\`).
+
+#### 6.1.3 Login After Theme Unification (Mobile \`375×800\` — Uncropped Responsive Reflow)
+
 ![Login After 375px Mobile (NutTiew Navy + Orange)](../evidence/login-theme/login-after-375.png)
 
+- **Artifact:** \`docs/evidence/login-theme/login-after-375.png\` (\`375×800 px\` full uncropped viewport capture, \`sprint1@${testedSha}\`)
+- **Actor / Preconditions:** Anonymous mobile user opening \`/\` at \`375×800\` CSS px.
+- **Action:** Render login card under narrow-viewport layout rules (\`e2e/auth.a11y.spec.ts:22–33\`).
+- **Expected Result:** Single-column stack displays header, email/password fields, show/hide toggle, and submit CTA inside \`375px\` with \`>= 44×44px\` hit targets and zero horizontal scrolling or bottom cutoff.
+- **Actual Evidence Observed:** Complete uncropped mobile frame shows \`"NutTiew | เข้าสู่ระบบ"\`, input controls, secondary password toggle, and primary orange \`"เข้าสู่ระบบ"\` CTA cleanly spaced with \`0\` horizontal overflow.
+- **Traceability:** \`F-S1-01\` · \`AUTH-15\` · \`NFR-009\` (\`e2e/auth.a11y.spec.ts:21–33\`, \`e2e/auth.spec.ts:16\`).
+
+#### 6.1.4 Login Validation Error & Accessible Focus Ring (\`1280×800\`)
+
 ![Login After Error & Focus Ring State 1280px](../evidence/login-theme/login-after-error-1280.png)
+
+- **Artifact:** \`docs/evidence/login-theme/login-after-error-1280.png\` (\`1280×800 px\`, \`sprint1@${testedSha}\`)
+- **Actor / Preconditions:** Anonymous visitor submitting wrong credentials (\`a11y-f7559dda7ae29a@example.test\`).
+- **Action:** Click \`เข้าสู่ระบบ\` triggering \`POST /api/v1/auth/login\` → \`HTTP 401 LOGIN_FAILED\` (\`e2e/auth.a11y.spec.ts:79–103\`).
+- **Expected Result:** Generic error message announced via \`role="alert"\` (\`#FFF3F3\` / \`#9C2424\`, no account enumeration), \`#email\` bound with \`aria-invalid="true"\` & \`aria-describedby="auth-error"\`, focus returned to \`#email\` with \`3px solid #AA4519\` focus ring.
+- **Actual Evidence Observed:** Red alert banner \`"ไม่สามารถเข้าสู่ระบบได้ กรุณาตรวจสอบข้อมูล"\` rendered cleanly and \`#email\` displays the crisp \`3px solid rgb(170, 69, 25)\` focus ring without leaking user existence.
+- **Traceability:** \`F-S1-01\` · \`AC-S1-03\` · \`VC-S1-02\` · \`AUTH-02\` · \`AUTH-15\` (\`e2e/auth.a11y.spec.ts:79–103\`).
 
 ### 6.2 Core Sprint 1 Vertical Journey (\`e2e/sprint1.journey.spec.ts\` refreshed on \`sprint1@${testedSha}\`)
 
 #### Milestone 1: Tutor Logs In & Creates 60-Minute Slot
+
 ![01 Tutor Slot Created](../evidence/sprint1/01-tutor-slot-created.png)
 
+- **Artifact:** \`docs/evidence/sprint1/01-tutor-slot-created.png\` (\`1280×1700 px\`)
+- **Actor / Preconditions:** Authenticated Tutor (\`Tutor\` role, \`...#39f66140\`) on \`ตารางเวลาติวของฉัน\`.
+- **Action:** Enter future date \`1 ธ.ค. 2026\` (\`+20\` days Bangkok) and start \`14:00\` (auto-calculated end \`15:00\`), then submit \`เพิ่มเวลาติว\` (\`POST /api/v1/tutor/slots\`, \`e2e/sprint1.journey.spec.ts:98–125\`).
+- **Expected Result:** HTTP \`201 Created\`; persisted 60-minute \`Offered\` Slot appears immediately in Tutor calendar + agenda list with \`เปิดช่วงเวลาแล้ว\` & \`ว่าง (เปิดรับจอง)\` badges and \`0\` bookings.
+- **Actual Evidence Observed:** Confirmation message \`"บันทึกเวลาติวสำเร็จ"\`, Slot card \`14:00 – 15:00 น.\` under \`1 ธ.ค. 2026\` with \`"เปิดช่วงเวลาแล้ว"\` + \`"ว่าง (เปิดรับจอง)"\`, and schedule list displaying \`0 รายการ\`.
+- **Traceability:** \`F-S1-02\` · \`AC-S1-08\` · \`VC-S1-08/14\` · \`SLOT-01..05\` (\`e2e/sprint1.journey.spec.ts:98–125\`).
+
 #### Milestone 2: Customer Browses Available Tutoring Offers (Option A Monthly Calendar)
+
 ![02 Customer Availability Browse](../evidence/sprint1/02-customer-availability-browse.png)
 
+- **Artifact:** \`docs/evidence/sprint1/02-customer-availability-browse.png\` (\`1280×900 px\`)
+- **Actor / Preconditions:** Authenticated Customer 1 (\`Customer\` role, \`...#eed2ab80\`) viewing \`เลือกช่วงเวลาติว\` (\`GET /api/v1/customer/availability\`).
+- **Action:** Browse \`ธันวาคม 2026\` monthly calendar, select \`1 ธ.ค. 2026\`, and expand exact interval accordion \`14:00–15:00 น.\` (\`e2e/sprint1.journey.spec.ts:133–146\`).
+- **Expected Result:** Eligible \`Offered\`, unoccupied, \`>= 60m\`-ahead Slots render in Asia/Bangkok wall-clock time with pseudonymous \`รหัสอ้างอิงติวเตอร์\` (no PII) and zero write \`POST\` calls during navigation.
+- **Actual Evidence Observed:** Month header shows \`ธันวาคม 2026\` (\`มี 25 ช่วงเวลา\`), \`1 ธ.ค. 2026\` highlighted, expanded \`14:00–15:00 น.\` card reveals \`รหัสอ้างอิงติวเตอร์: cdf91332-9d8e-486a-b2e2-661b39f61440\` and active \`เลือกช่วงเวลานี้\` CTA.
+- **Traceability:** \`F-S1-03\` · \`AC-S1-14/15/16\` · \`VC-S1-13/15\` · \`AVA-01..10\`, \`UX-CAL-01..03\` (\`e2e/sprint1.journey.spec.ts:133–146\`).
+
 #### Milestone 3: Customer Confirms Booking
+
 ![03 Customer Booking Confirmed](../evidence/sprint1/03-customer-booking-confirmed.png)
 
+- **Artifact:** \`docs/evidence/sprint1/03-customer-booking-confirmed.png\` (\`1280×1008 px\`)
+- **Actor / Preconditions:** Authenticated Customer 1 (\`...#eed2ab80\`) with \`14:00–15:00\` offer staged in Step 3 confirmation summary (\`#selected-offer-summary\`).
+- **Action:** Click \`ยืนยันการจอง\` dispatching \`POST /api/v1/customer/bookings\` with CSRF & \`X-NutTiew-Session-Binding\` (\`e2e/sprint1.journey.spec.ts:151–175\`).
+- **Expected Result:** HTTP \`201 Created\` backed by SERIALIZABLE transaction & \`booking_guard_s1()\`; UI displays confirmed Booking UUID, \`Booked\` status, and live refreshed \`1 ธ.ค. 2026\` showing \`0\` remaining offers.
+- **Actual Evidence Observed:** Green confirmation card shows \`"จองสำเร็จ"\`, Booking UUID \`dd098824-62f0-4db0-9769-bf3e57b40a1a\`, \`"สถานะ: Booked"\`, and refreshed \`1 ธ.ค. 2026\` tile dropped to \`0 ช่วงเวลา\`.
+- **Traceability:** \`F-S1-04\` · \`AC-S1-19/20/28\` · \`VC-S1-16/17/24\` · \`BOOK-01/02/21\` (\`e2e/sprint1.journey.spec.ts:151–175\`).
+
 #### Milestone 4: Customer Private Booking List
+
 ![04 Customer Private Bookings](../evidence/sprint1/04-customer-private-bookings.png)
 
+- **Artifact:** \`docs/evidence/sprint1/04-customer-private-bookings.png\` (\`1280×900 px\`)
+- **Actor / Preconditions:** Authenticated Customer 1 (\`...#eed2ab80\`) owning persisted Booking \`dd098824-...\`.
+- **Action:** Open \`การจองของฉัน\` triggering \`GET /api/v1/customer/bookings\` (\`e2e/sprint1.journey.spec.ts:180–195\`).
+- **Expected Result:** Server queries \`WHERE b."customerId" = $1\` from Session identity and returns only Customer 1's bookings with \`TUTOR-<8-hex>\` pseudonymous ref, Bangkok interval, and \`ยืนยันแล้ว\` status.
+- **Actual Evidence Observed:** View renders \`การจองของฉัน (1 รายการ)\`, \`1 ธ.ค. 2026 14:00 – 15:00 น.\`, \`TUTOR-cdf91332\`, \`dd098824-62f0-4db0-9769-bf3e57b40a1a\`, \`"ยืนยันแล้ว"\` badge, and \`"ดูรายละเอียด"\` button.
+- **Traceability:** \`F-S1-05\` · \`AC-S1-30\` · \`VC-S1-28/34\` · \`RET-01/14\` (\`e2e/sprint1.journey.spec.ts:180–195\`).
+
 #### Milestone 5: Customer Booking Detail Modal
+
 ![05 Customer Detail Modal](../evidence/sprint1/05-customer-detail-modal.png)
 
+- **Artifact:** \`docs/evidence/sprint1/05-customer-detail-modal.png\` (\`1280×900 px\`)
+- **Actor / Preconditions:** Authenticated Customer 1 (\`...#eed2ab80\`) on \`การจองของฉัน\`.
+- **Action:** Click \`ดูรายละเอียด\` invoking \`GET /api/v1/customer/bookings/dd098824-62f0-4db0-9769-bf3e57b40a1a\` (\`e2e/sprint1.journey.spec.ts:200–213\`).
+- **Expected Result:** Accessible \`[role="dialog"]\` modal displays verified Booking detail (UUID, \`TUTOR-cdf91332\`, Asia/Bangkok window, \`ยืนยันแล้ว\`, creation timestamp) with \`ปิด / กลับสู่รายการ\`.
+- **Actual Evidence Observed:** Detail modal renders heading \`"รายละเอียดการจอง"\`, Booking ID \`dd098824-62f0-4db0-9769-bf3e57b40a1a\`, \`TUTOR-cdf91332\`, \`1 ธ.ค. 2026, 14:00 – 15:00 น.\`, \`11 พ.ย. 2026 15:04 น.\`, badge \`"ยืนยันแล้ว"\`, and dismiss CTA.
+- **Traceability:** \`F-S1-05\` · \`AC-S1-30\` · \`VC-S1-28/34\` · \`RET-02\` (\`e2e/sprint1.journey.spec.ts:200–213\`).
+
 #### Milestone 6: Tutor Schedule View (Occupied & Pseudonymous \`CUST-...\`)
+
 ![06 Tutor Schedule Occupied](../evidence/sprint1/06-tutor-schedule-occupied.png)
 
-#### Milestone 7: Negative Business Rule Rejection (409 Conflict)
+- **Artifact:** \`docs/evidence/sprint1/06-tutor-schedule-occupied.png\` (\`1280×1722 px\`)
+- **Actor / Preconditions:** Authenticated Tutor (\`...#39f66140\`) re-signing in after Customer 1's committed booking.
+- **Action:** Load Tutor Dashboard (\`GET /api/v1/tutor/slots\` + \`GET /api/v1/tutor/bookings\`, \`e2e/sprint1.journey.spec.ts:226–248\`).
+- **Expected Result:** Slot card switches dynamically to \`มีผู้จองแล้ว (Occupied)\`, Tutor Schedule renders \`มีนัดหมาย (Booked)\` with pseudonymous \`CUST-<8-hex>\` (\`apps/api/src/retrieval.ts:219\`), and raw Customer email/full UUID are completely withheld.
+- **Actual Evidence Observed:** Slot card displays \`"มีผู้จองแล้ว (Occupied)"\`; Schedule list shows \`1 รายการ\` for \`dd098824-62f0-4db0-9769-bf3e57b40a1a\` with \`"มีนัดหมาย (Booked)"\` and \`รหัสผู้เรียน: CUST-3d599805\` (zero PII asserted in test).
+- **Traceability:** \`F-S1-05\` · \`AC-S1-07/32/33\` · \`VC-S1-30/31\` · \`RET-04/05/06/16\` (\`e2e/sprint1.journey.spec.ts:226–248\`).
+
+#### Milestone 7: Negative Business Rule Rejection (HTTP 409 Conflict — UI + Backend Proof)
+
 ![07 Negative Conflict 409](../evidence/sprint1/07-negative-conflict-409.png)
 
-#### Milestone 8: Negative Cross-Customer Access Refusal (Safe 404)
+- **Artifact:** \`docs/evidence/sprint1/07-negative-conflict-409.png\` (\`1280×932 px\`)
+- **Actor / Preconditions:** Authenticated Customer 2 (\`...#6691cbdd\`) selects an initially offered \`2 ธ.ค. 2026 13:00–14:00\` Slot (\`raceSlotId\`), while Customer 1 commits \`raceSlotId\` in PostgreSQL beforehand (\`e2e/sprint1.journey.spec.ts:259–295\`).
+- **Action:** Customer 2 clicks \`ยืนยันการจอง\` submitting \`POST /api/v1/customer/bookings\` for \`raceSlotId\`.
+- **Expected Result (Backend + UI):** PostgreSQL \`booking_guard_s1()\` / \`booking_one_active_per_slot\` rejects the duplicate claim (\`0\` Customer 2 rows written), \`createCustomerBooking()\` throws \`BookingError(409, 'SLOT_UNAVAILABLE')\`, API responds **\`HTTP 409 Conflict\`** with \`SLOT_UNAVAILABLE\` and **zero disclosure** of Customer 1 or existing Booking ID (\`BOOK-04\` in \`apps/api/test/bookings.db.test.ts:368–374\`), and UI renders \`#booking-error-banner\` + refreshes offers.
+- **Actual Evidence Observed (Correlated Proof):**
+  - **UI Visual Evidence:** Red alert banner \`"ช่วงเวลาที่เลือกไม่ว่างแล้ว กรุณาเลือกช่วงเวลาอื่นจากรายการล่าสุด"\` rendered cleanly; \`2 ธ.ค. 2026\` updates to \`0 ช่วงเวลา\`.
+  - **Backend DB Integration Correlation (\`BOOK-04\`):** Verified **PASS** in real PostgreSQL integration (\`apps/api/test/bookings.db.test.ts:368–374\`, CI PG 18 & local Win11 PG 17.2): \`POST /api/v1/customer/bookings\` returns \`status: 409\`, \`error.code: 'SLOT_UNAVAILABLE'\`, zero \`customerLowId\` / \`bookingId\` leakage.
+- **Sanitized Server Response Contract (\`apps/api/src/app.ts:16–17\`, \`bookings.ts\`, \`customer-availability.tsx:907–917\`):**
+  \`\`\`http
+  HTTP/1.1 409 Conflict
+  Cache-Control: no-store
+  Content-Type: application/json
+
+  {
+    "error": {
+      "code": "SLOT_UNAVAILABLE",
+      "message": "Selected slot is unavailable"
+    },
+    "requestId": "<uuid>"
+  }
+  \`\`\`
+- **Traceability:** \`F-S1-04\` · \`AC-S1-17/22\` · \`VC-S1-19/22\` · \`BOOK-04\` (\`bookings.db.test.ts:368–374\`) · \`e2e/sprint1.journey.spec.ts:259–295\`.
+
+#### Milestone 8: Negative Cross-Customer Access Refusal (Safe HTTP 404 — UI Isolation + Backend HTTP 404 Proof)
+
 ![08 Negative Cross Customer 404](../evidence/sprint1/08-negative-cross-customer-404.png)
+
+- **Artifact:** \`docs/evidence/sprint1/08-negative-cross-customer-404.png\` (\`1280×900 px\`)
+- **Actor / Preconditions:** Authenticated Customer 2 (\`...#6691cbdd\`) while Customer 1 owns committed Booking \`dd098824-62f0-4db0-9769-bf3e57b40a1a\`.
+- **Action (Two-Step Check Before Screenshot):** Immediately prior to capturing Screenshot \`08\`, the same Customer 2 browser context probes \`GET /api/v1/customer/bookings/${'${createdBookingId}'}\` (\`e2e/sprint1.journey.spec.ts:302–305\`), then opens \`การจองของฉัน\` (\`GET /api/v1/customer/bookings\`, \`lines 308–315\`).
+- **Expected Result & Scope Honesty:**
+  - **What Screenshot \`08\` Alone Proves vs Does Not Prove:** Screenshot \`08\` visually confirms **UI private list isolation** (\`GET /api/v1/customer/bookings\` returns \`200 OK { data: [] }\` → \`"คุณยังไม่มีประวัติการจองติว"\`, \`[data-booking-id="dd098824-..."]\` count \`0\`); the screenshot *by itself* does not display the \`404\` status code of the direct-ID endpoint.
+  - **Authoritative Backend \`HTTP 404\` Proof:** Direct HTTP \`404\` enforcement is proved by [\`apps/api/src/retrieval.ts:157–163\`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/blob/${testedSha}/apps/api/src/retrieval.ts#L157-L163) (\`WHERE b."id" = $1 AND b."customerId" = $2\` → \`BookingError(404, 'BOOKING_NOT_FOUND')\`, never \`403\`), executed directly by **\`e2e/sprint1.journey.spec.ts:302–305\`** right before Screenshot \`08\`, PostgreSQL DB test **\`RET-03\`** (\`apps/api/test/retrieval.db.test.ts:215–224\`), and Edge E2E test **\`RET-16\`** (\`e2e/retrieval.spec.ts:398–413\`). In addition, **\`RET-15-ERR-404\`** (\`e2e/retrieval.spec.ts:318–353\`) verifies the detail modal displays \`"ไม่พบข้อมูลการจองนี้"\` on \`404\`.
+- **Actual Evidence Observed:** Screenshot \`08\` displays \`0 รายการ\` / \`"คุณยังไม่มีประวัติการจองติว"\` for Customer 2 (zero Customer 1 bookings leaked). Simultaneously, \`e2e/sprint1.journey.spec.ts:302–305\`, \`RET-03\` (**PASS**), and \`RET-16\` (**PASS**) all verified HTTP \`404 BOOKING_NOT_FOUND\`:
+- **Sanitized Server Response Contract (\`apps/api/src/app.ts:16–17, 109–123\`; asserted in \`sprint1.journey.spec.ts:302–305\`, \`RET-03\`, \`RET-16\`):**
+  \`\`\`http
+  HTTP/1.1 404 Not Found
+  Cache-Control: no-store
+  Content-Type: application/json
+
+  {
+    "error": {
+      "code": "BOOKING_NOT_FOUND",
+      "message": "Booking not found"
+    },
+    "requestId": "<uuid>"
+  }
+  \`\`\`
+- **Traceability:** \`F-S1-05\` · \`AC-S1-31\` · \`VC-S1-29\` · \`NFR-S1-01\` · \`RET-03\` (\`retrieval.db.test.ts:215–224\`) · \`RET-16\` (\`e2e/retrieval.spec.ts:398–413\`) · \`RET-15-ERR-404\` · \`e2e/sprint1.journey.spec.ts:302–316\`.
 
 ### 6.3 Customer Monthly Calendar Option A (\`UX-CAL-01..10\` refreshed on \`sprint1@${testedSha}\`)
 
 #### Desktop Monthly Calendar (1280px)
+
 ![10 Option A Desktop Calendar 1280px](../evidence/sprint1/10-after-calendar-1280.png)
 
+- **Artifact:** \`docs/evidence/sprint1/10-after-calendar-1280.png\` (\`1280×933 px\`)
+- **Actor / Preconditions:** Authenticated Customer (\`...#4d63472d\`) at \`1280×900\` on a multi-day schedule with \`9\` interval groups on \`29 พ.ย. 2026\` (\`11\` offers across \`2\` Tutors).
+- **Action:** Load Customer availability view (\`e2e/availability.calendar.spec.ts:504–508\`).
+- **Expected Result:** Two-column responsive layout renders Mon–Sun calendar on left, no period filter chips, earliest day preselected, Step 2 capped at \`6\` initial accordions with \`ดูเวลาเพิ่มเติม\` disclosure and \`0\` mounted offer rows.
+- **Actual Evidence Observed:** \`พฤศจิกายน 2026\` (\`มี 12 ช่วงเวลา\`), \`29 พ.ย. 2026\` highlighted (\`11 ช่วงเวลา\`), \`6\` collapsed groups visible + \`"ดูเวลาเพิ่มเติม (อีก 3 ช่วงเวลา)"\`.
+- **Traceability:** \`F-S1-03\` · \`UX-CAL-01/02/03/08\` (\`e2e/availability.calendar.spec.ts:504–508\`).
+
 #### Dense 520+ Seeded Offer Calendar & Progressive 6-Group Disclosure (1280px)
+
 ![11 Option A Dense 520+ Offer Disclosure 1280px](../evidence/sprint1/11-after-calendar-dense-500plus-1280.png)
 
+- **Artifact:** \`docs/evidence/sprint1/11-after-calendar-dense-500plus-1280.png\` (\`1280×933 px\`)
+- **Actor / Preconditions:** Authenticated Customer (\`...#4d63472d\`) at \`1280×900\` against \`522\` real PostgreSQL offers (\`generate_series(0,519)\` across \`26\` days + \`2\` non-hourly slots, \`e2e/availability.calendar.spec.ts:109–177\`).
+- **Action:** Mount dense calendar grid with \`21 พ.ย. 2026\` auto-selected (\`22\` offers across \`12\` exact interval groups).
+- **Expected Result:** Day tiles show total offers (\`22\`, not Tutor count \`2\`), initial accordion disclosure stays capped at \`6\` groups + \`ดูเวลาเพิ่มเติม (อีก 6 ช่วงเวลา)\`, zero unrequested \`GET\`/\`POST\` traffic, SQL \`p95 <= 100 ms\`.
+- **Actual Evidence Observed:** \`พฤศจิกายน 2026\` (\`มี 214 ช่วงเวลา\`), \`21 พ.ย. 2026\` (\`22 ช่วงเวลา\`) renders cleanly with \`6\` collapsed groups and \`"ดูเวลาเพิ่มเติม (อีก 6 ช่วงเวลา)"\` (measured \`AVA14_BENCHMARK_500 p95 = 68.21 ms\` local / \`9.66 ms\` CI).
+- **Traceability:** \`F-S1-03\` · \`NFR-010\` · \`AVA14_BENCHMARK_500\` · \`UX-CAL-01/03\` (\`e2e/availability.calendar.spec.ts:109–177\`).
+
 #### Expanded Exact-Time Group & Non-Sticky Inline Selection Summary (1280px)
+
 ![12 Option A Selected Offer & Non-Sticky Summary 1280px](../evidence/sprint1/12-after-calendar-selected-1280.png)
 
+- **Artifact:** \`docs/evidence/sprint1/12-after-calendar-selected-1280.png\` (\`1280×1434 px\`)
+- **Actor / Preconditions:** Authenticated Customer (\`...#4d63472d\`) at \`1280×900\` on \`29 พ.ย. 2026\`.
+- **Action:** Expand \`08:00–09:00 น.\` (\`2 ตัวเลือก\`) and click \`เลือกช่วงเวลานี้\` for \`214a47a2-0cb9-4ea0-a1c7-4d240f1419cb\` (\`e2e/availability.calendar.spec.ts:510–513, 545–548\`).
+- **Expected Result:** Selected Tutor card switches to \`เลือกอยู่\`, and Step 3 confirmation box (\`#selected-offer-summary\`) renders with \`position: static\` strictly *below* Step 2 rather than overlaying the viewport.
+- **Actual Evidence Observed:** Expanded group lists \`214a47a2-...\` as \`"เลือกอยู่"\` and \`e55fffe4-...\` as \`"เลือกช่วงเวลานี้"\`; Step 3 \`เลือกช่วงเวลาที่ต้องการจอง (ขั้นที่ 3 — ยังไม่ใช่การจอง)\` sits inline below Step 2 with confirm & cancel buttons.
+- **Traceability:** \`F-S1-03\` · \`F-S1-04\` · \`UX-CAL-04/08\` (\`e2e/availability.calendar.spec.ts:510–549\`).
+
 #### Mobile Responsive Reflow (375px — Top-Viewport Excerpt Cropped for PDF Readability)
+
 ![09 Option A Responsive Mobile 375px](../evidence/sprint1/09-after-calendar-375.png)
+
+- **Artifact & Excerpt Note:** **PDF Top-Viewport Excerpt (\`375×956 px\`)** cropped at \`2.55 × width\` by \`scripts/generate-pdf.mjs\` from full-page capture \`docs/evidence/sprint1/09-after-calendar-375.png\` (\`375×2449 px\`). The full-height capture extends vertically into Step 2 time groups and Step 3 inline summary; the excerpt frames the complete top header bar and entire Step 1 Monthly Calendar Card without mid-row clipping.
+- **Actor / Preconditions:** Authenticated Customer (\`...#4d63472d\`) at \`375×900\` CSS px (\`e2e/availability.calendar.spec.ts:515–574\`).
+- **Action:** Collapse 2-column layout to 1-column mobile stack with \`29 พ.ย. 2026\` (\`11 ช่วงเวลา\`) selected.
+- **Expected Result:** Zero horizontal overflow (\`scrollWidth <= innerWidth\`), all interactive buttons \`>= 44×44px\`, 7-column Mon–Sun calendar readable at \`>= 44×44px\` per day tile, and full Step 1 card cleanly visible in the excerpt.
+- **Actual Evidence Observed:** Top-viewport excerpt shows mobile nav bar, \`"เลือกช่วงเวลาติว"\`, \`"โหลดข้อมูลล่าสุด"\`, complete \`พฤศจิกายน 2026\` grid (\`1–30 พ.ย.\`), selected \`29\` tile (\`11\`), and live readout \`"เลือกวันที่ 29 พ.ย. 2026 พบ 11 ช่วงเวลา"\` cleanly unclipped.
+- **Traceability:** \`F-S1-03\` · \`UX-CAL-08/09\` · \`NFR-009\` (\`e2e/availability.calendar.spec.ts:515–574\`).
+
+### 6.4 Accessibility Verification Layers (Automated vs Informal Author Walkthrough vs Independent Release Gate)
+
+To eliminate ambiguity between automated assertions, author manual inspection, and formal release sign-off, NutTiew tracks accessibility verification across **three distinct layers**:
+
+| Verification Layer | Executor & Date / Environment | Scope Covered & Concrete Observations | Gate Classification |
+| :--- | :--- | :--- | :---: |
+| **1. Automated Playwright & Computed WCAG 2.2 AA Suite** | GitHub Actions Edge CI ([Run ${ciRunId}](${ciRunUrl})) + Local Win11 Edge on \`sprint1@${testedSha}\` | \`e2e/auth.a11y.spec.ts\` (**2/2**) + \`e2e/availability.calendar.spec.ts\` (\`UX-CAL-08..09\`): computed \`--nuttiew-*\` contrast (\`>= 4.5:1\` text / \`>= 3:1\` borders & \`#AA4519\` focus ring), \`320/375/640(200%)/768/800/801/1280px\` zero overflow, \`>= 44×44px\` targets (\`>= 36×44px\` at \`320px\`), \`Enter\`/\`Space\` disclosure focus transfer (\`pendingFocusGroupKeyRef\`), \`aria-live\` & \`prefers-reduced-motion\` | **PASS (Automated Gate)** |
+| **2. Informal Author Manual Walkthrough** | **@Chxtamos** on \`2026-11-11\` (Asia/Bangkok), local Win11 dev servers (\`docs/48...\` @ \`6abfcb7\`, identical \`apps/\`/\`e2e/\` to \`sprint1@${testedSha}\`, Express API \`127.0.0.1:3001\`, Vite \`5173\`, PG \`17.2\`; servers closed after check; [PR #49 comment](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49#issuecomment-6793913908)) | Full End-to-End Flow + Manual **Keyboard navigation**, **\`375px\` Mobile**, **\`200%\` Browser Zoom**, and **Screen Reader** walkthrough. **3 minor non-blocking DOM/ARIA notes recorded (out of scope for PR #49 — zero \`apps/\` edits):** *(i)* post-login \`document.title\` stays \`"NutTiew — เข้าสู่ระบบ"\`; *(ii)* Customer view renders \`<h2 className="dashboard-kicker">\` above \`<h1>\`; *(iii)* native \`<input type="date/time">\` controls in Tutor form could add explicit \`:focus-within\` styling in a later polish pass | **PASS (Author Check Only — NOT Independent Sign-off)** |
+| **3. Independent Formal Manual WCAG 2.2 AA & Assistive-Tech Release Audit** | Separate independent human reviewer / release checklist before \`sprint1 -> main\` | Independent screen-reader / keyboard / ARIA heading & focus sign-off + release-gate checklist confirmation | **Pending Independent Sign-off** |
 
 ---
 
@@ -553,8 +729,8 @@ Every critical domain, concurrency, and UI alignment fix followed observable **f
    - Author: @Chxtamos | Reviewer: @Tanaboonnnnn (\`APPROVED\` on \`3c0cb1b\`) | Issue: [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50)
    - Acted on @Tanaboonnnnn's UI consistency feedback from PR #49: introduced \`apps/web/src/tokens.css\` unifying Login/Tutor/Customer Navy (\`#202B44\`) + Orange (\`#F47736\`) + Light Canvas (\`#F7F8FB\`) without changing auth/session/CSRF semantics, and fixed UTC-vs-Bangkok \`raceSlot\` day boundary (\`3c0cb1b\`); merged into \`sprint1\` at \`c4c599d\` ([CI Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176) **3/3** PASS).
 7. **Pull Request #49 — Deliverable 1 Source, Evidence & PDF Sync (\`docs/48-deliverable-1-pdf-9aa37c0\` → \`sprint1\`):**
-   - Author: @Chxtamos | Reviewer Requested: @Tanaboonnnnn | Issue: [#48](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/48)
-   - Aligns \`scripts/compile-deliverable.mjs\`, \`scripts/generate-pdf.mjs\`, \`README.md\`, \`deliverable-1.md\`, \`CPE334_Deliverable1_NutTiew.pdf\`, and \`docs/evidence/sprint1/*.png\` with \`sprint1@${testedSha}\` while preserving honest status for remaining **Manual Human WCAG 2.2 AA & Screen-Reader Audit** and \`sprint1 -> main\` release approval.
+   - Author: @Chxtamos | Reviewer: @Tanaboonnnnn (\`CHANGES_REQUESTED\` reviewed at \`6abfcb7\`) | Issue: [#48](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/48)
+   - Aligns \`scripts/compile-deliverable.mjs\`, \`scripts/generate-pdf.mjs\`, \`README.md\`, \`deliverable-1.md\`, \`CPE334_Deliverable1_NutTiew.pdf\`, and \`docs/evidence/sprint1/*.png\` with \`sprint1@${testedSha}\`, and resolves all 5 items in @Tanaboonnnnn's review (synced PR/Issue #48 scope, structured \`Actor/Preconditions → Action → Expected → Actual → Traceability\` annotations across all 16 screenshots, explicit \`HTTP 409/404\` backend proof correlation alongside \`07\`/\`08\`, separated 3-layer Accessibility status in §6.4/§10/README, \`375×956\` Calendar mobile crop & heading-figure pairing fix, plus PyMuPDF QA contact sheet verification).
 
 ---
 
@@ -571,7 +747,7 @@ Every critical domain, concurrency, and UI alignment fix followed observable **f
 
 - **AI Assistant Declared:** Google Antigravity / Gemini agentic coding assistant.
 - **Usage Scope:** Drafting boilerplate TypeScript interfaces, structuring \`pg_blocking_pids()\` concurrency test harnesses, automating Markdown/PDF compilation, and verifying cross-references.
-- **Human Accountability:** All product business rules (Q01–Q32), lock-ordering architecture decisions, security trust boundaries, and peer reviews were evaluated and accepted by human team members. Zero test results or deliverables were fabricated or accepted without real execution against PostgreSQL and browser suites; manual accessibility and final release gates remain explicitly uncompleted until human sign-off.
+- **Human Accountability:** All product business rules (Q01–Q32), lock-ordering architecture decisions, security trust boundaries, and peer reviews were evaluated and accepted by human team members. Zero test results or deliverables were fabricated or accepted without real execution against PostgreSQL and browser suites; informal author walkthroughs, independent formal accessibility sign-off, and final release gates remain transparently separated without claiming premature completion.
 
 ---
 
@@ -582,11 +758,12 @@ Every critical domain, concurrency, and UI alignment fix followed observable **f
 | **Whole-product Parts A–D embedded verbatim** | Complete SRS, Inventory, Traceability, System SDS & 3-Sprint Plan inside PDF | **Complete** |
 | **All Sprint 1 Part E contracts embedded verbatim** | All 31 Part E docs (F-S1-01..05, Tutor Calendar & Option A UX Decisions, Shared Booking Data) inside PDF | **Complete** |
 | **Real working UI → API → PostgreSQL vertical slice** | Verified on React 19, Express 5, PostgreSQL 17.2 (local) & 18 (CI) at \`sprint1@${testedSha}\` | **Complete** |
-| **Automated verification suite** | 209 distinct tests (34 Unit + 107 DB + 68 E2E) PASS on [CI Run ${ciRunId}](${ciRunUrl}) & local checks; typecheck & build clean | **Complete** |
-| **Formal manual human WCAG 2.2 AA & screen-reader audit** | Automated focus/target/contrast checks PASS; real human keyboard/screen-reader audit remains separate gate | **Not Run (Manual Gate)** |
+| **Automated verification & a11y/contrast suite** | 209 distinct tests (34 Unit + 107 DB + 68 E2E incl. \`auth.a11y.spec.ts\` & \`UX-CAL-08..09\`) PASS on [CI Run ${ciRunId}](${ciRunUrl}) & local checks; typecheck & build clean | **Complete** |
+| **Informal author manual accessibility walkthrough** | @Chxtamos (\`2026-11-11\` ICT on local Win11 \`sprint1@${testedSha}\`): Keyboard, \`375px\` Mobile, \`200%\` Zoom, Screen Reader + E2E flow; 3 minor DOM/ARIA notes recorded (see §6.4; not independent sign-off) | **Complete (Author Check Only)** |
+| **Independent formal manual WCAG 2.2 AA & release sign-off** | Separate independent teammate/reviewer manual WCAG 2.2 AA & screen-reader release audit required before \`sprint1 -> main\` | **Pending Independent Sign-off** |
 | **Instructor Master Spec & Theme 1 formal sign-off** | Group Work Spec v1 Draft used as baseline; final Master Spec / Theme 1 confirmation not yet supplied | **Pending External Confirmation** |
 | **Reproducible README setup** | Owner DB + post-migration grants + seed env vars smoke-tested on PG 17.2 & aligned to PR #49 | **Complete** |
-| **Staging PR #49 review & \`sprint1 -> main\` release PR** | PR #49 awaiting @Tanaboonnnnn review before separate reviewed \`sprint1 -> main\` release PR (\`main\` at \`b501c18\`) & tag | **Pending Peer Approval** |
+| **Staging PR #49 re-review & \`sprint1 -> main\` release PR** | PR #49 remediation awaiting @Tanaboonnnnn re-review before separate reviewed \`sprint1 -> main\` release PR (\`main\` at \`b501c18\`) & tag | **Pending Peer Approval** |
 | **Private Student IDs & LEB2 External Submission** | Student IDs withheld from public repo; team supplies IDs & release PDF to LEB2 | **Pending Release & LEB2 Handoff** |
 
 ---

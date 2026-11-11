@@ -10,7 +10,7 @@ CPE334 Software Engineering Project (Semester 1/2026)
 Sprint 1 delivers a fully functional, peer-reviewed vertical slice spanning **Responsive Web UI → Express 5 REST API Application → Persistent PostgreSQL Database**. All five planned Sprint 1 features (**F-S1-01** through **F-S1-05**) have been formally specified in Part E contracts, peer-reviewed, implemented in Part F, and verified through comprehensive automated test suites (Unit, Real PostgreSQL Concurrency, and Browser E2E).
 
 - **Current Staging / Integration Branch:** `sprint1` (verified at `c4c599d`, [CI Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176))
-- **Release Target:** `main` (via separately reviewed release PR after [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) approval and Manual Human WCAG 2.2 AA & Screen-Reader Audit)
+- **Release Target:** `main` (via separately reviewed release PR after [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) approval and Independent Formal Manual WCAG 2.2 AA & Screen-Reader Release Sign-off)
 - **CI / Quality Gate:** [NutTiew CI Workflow](.github/workflows/ci.yml) (Node 24, Typecheck, Build, PostgreSQL 18 Integration, Microsoft Edge E2E)
 - **Deliverable 1 Report:** [CPE334 Deliverable 1 Report](docs/deliverables/deliverable-1.md) | [PDF Export](docs/deliverables/CPE334_Deliverable1_NutTiew.pdf)
 
@@ -240,7 +240,7 @@ $$\text{Total Distinct Automated Tests: } 34 \text{ (Unit)} + 107 \text{ (DB)} +
 
 *Notes:*
 - *Verify CI run status on the exact target PR HEAD (`gh run view <run-id>`) ensuring all 3 workflow jobs (`Unit / types / build`, `PostgreSQL 18 / Auth / Slot / Race A`, `Microsoft Edge / Auth / Tutor UI E2E`) finish `SUCCESS` (e.g., `sprint1@c4c599d` verified cleanly on [CI Run #42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176)).*
-- *Formal manual human WCAG 2.2 AA & screen-reader assistive-technology verification remains a separate manual release gate (`NOT RUN`) distinct from automated Playwright checks.*
+- *Accessibility status layers (see Deliverable 1 Part F §6.4 / §10): automated Playwright focus, target, contrast & reflow checks (`e2e/auth.a11y.spec.ts`, `UX-CAL-08..09`) `PASS`; informal author localhost walkthrough (`@Chxtamos`, `2026-11-11` ICT: Keyboard, `375px` Mobile, `200%` Zoom, Screen Reader + E2E flow) `PASS (Author Check Only)`; **Independent Formal Manual WCAG 2.2 AA & Screen-Reader Release Sign-off** remains `Pending Independent Sign-off` before `sprint1 -> main` release.*
 
 ---
 

@@ -49,7 +49,7 @@ import base64, json, sys, pymupdf
 p = sys.argv[1]
 pix = pymupdf.Pixmap(p)
 if pix.height > pix.width * 2.5:
-    h = min(pix.height, int(pix.width * 1.15))
+    h = min(pix.height, int(pix.width * 2.55))
     sub = pymupdf.Pixmap(pix.colorspace, (0, 0, pix.width, h), pix.alpha)
     sub.copy(pix, (0, 0, pix.width, h))
     b64 = base64.b64encode(sub.tobytes("png")).decode("ascii")
@@ -352,7 +352,16 @@ function parseMarkdown(md) {
     closeLists();
     closeTable();
     closeBlockquote();
-    html += `<p>${inlineFormat(line)}</p>\n`;
+    const formattedLine = inlineFormat(trimmed);
+    if (
+      /^!\[[^\]]*\]\([^)]+\)$/.test(trimmed) &&
+      formattedLine.startsWith('<figure class="doc-image">') &&
+      formattedLine.endsWith('</figure>')
+    ) {
+      html += `${formattedLine}\n`;
+    } else {
+      html += `<p>${inlineFormat(line)}</p>\n`;
+    }
   }
 
   closeLists();
@@ -640,7 +649,7 @@ async function renderPdfPass(browser, passNum) {
 
 function inspectPdfWithPyMuPdf(qaDir = null) {
   const pyScript = `
-import json, sys, os
+import hashlib, json, sys, os
 import pymupdf
 
 pdf_path = sys.argv[1]
@@ -706,27 +715,148 @@ for i in range(total_pages):
 if broken_links:
     raise RuntimeError(f"Broken internal PDF nameddest links: {broken_links[:5]}")
 
-if qa_dir:
-    os.makedirs(qa_dir, exist_ok=True)
-    # Render cover/nav (1,2), part C diagram pages, E.1 start, F tables/excerpts/screenshots & last page
-    targets = sorted(set([
-        1,
-        2,
-        (pC + 2) if pC else 1,
-        pE or 1,
-        pF or 1,
-        min(total_pages, (pF or total_pages) + 5),
-        min(total_pages, (pF or total_pages) + 10),
-        min(total_pages, (pF or total_pages) + 12),
-        min(total_pages, (pF or total_pages) + 14),
-        total_pages,
-    ]))
-    for pg in targets:
-        if 1 <= pg <= total_pages:
-            pix = doc[pg - 1].get_pixmap(dpi=130)
-            pix.save(os.path.join(qa_dir, f"page-{pg:03d}.png"))
+replacement_pages = []
+question_mark_pages = []
+total_embedded_images = 0
+broken_images = []
+for i in range(total_pages):
+    txt = doc[i].get_text()
+    if "\\ufffd" in txt:
+        replacement_pages.append(i + 1)
+    if "????" in txt:
+        question_mark_pages.append(i + 1)
+    for img in doc[i].get_images(full=True):
+        total_embedded_images += 1
+        xref, _smask, w, h = img[0], img[1], img[2], img[3]
+        if w <= 0 or h <= 0:
+            broken_images.append({"page": i + 1, "xref": xref, "w": w, "h": h})
+
+if replacement_pages:
+    raise RuntimeError(f"Unicode replacement characters (U+FFFD) found on pages: {replacement_pages}")
+if broken_images:
+    raise RuntimeError(f"Invalid image dimensions found in PDF: {broken_images[:5]}")
+
+def first_page_with(needles, start_page=1):
+    for i in range(max(0, start_page - 1), total_pages):
+        txt = doc[i].get_text()
+        if all(n in txt for n in needles):
+            return i + 1
+    return None
 
 ranges["brokenLinks"] = len(broken_links)
+ranges["brokenImages"] = len(broken_images)
+ranges["totalEmbeddedImages"] = total_embedded_images
+ranges["replacementCharPages"] = replacement_pages
+ranges["questionMarkRunPages"] = question_mark_pages
+
+if qa_dir:
+    os.makedirs(qa_dir, exist_ok=True)
+    with open(pdf_path, "rb") as f:
+        pdf_bytes = f.read()
+    sha256 = hashlib.sha256(pdf_bytes).hexdigest()
+
+    f_start = pF or 1
+    p_login_375 = first_page_with(["login-after-375.png"], f_start)
+    p_login_err = first_page_with(["login-after-error-1280.png"], f_start)
+    p_m7 = first_page_with(["Milestone 7:"], f_start) or first_page_with(["07-negative-conflict-409.png"], f_start)
+    p_m8 = first_page_with(["Milestone 8:"], f_start) or first_page_with(["08-negative-cross-customer-404.png"], f_start)
+    p_cal_375 = first_page_with(["09-after-calendar-375.png"], f_start)
+    p_a11y = first_page_with(["6.4 Accessibility Verification Layers"], f_start)
+    p_dod = first_page_with(["10. Definition of Done"], f_start)
+
+    named_targets = {
+        "cover": 1,
+        "nav": 2,
+        "partC_diagram": (pC + 2) if pC else 1,
+        "partE_start": pE or 1,
+        "partF_start": f_start,
+        "login_mobile_375": p_login_375,
+        "login_error_1280": p_login_err,
+        "milestone7_conflict_409": p_m7,
+        "milestone8_cross_customer_404": p_m8,
+        "milestone8_proof_next": (p_m8 + 1) if (p_m8 and p_m8 < total_pages) else None,
+        "calendar_mobile_375_excerpt": p_cal_375,
+        "a11y_layers_6_4": p_a11y,
+        "dod_10": p_dod,
+        "last_page": total_pages,
+    }
+
+    target_pages = sorted(set(pg for pg in named_targets.values() if pg and 1 <= pg <= total_pages))
+    rendered_files = {}
+    for pg in target_pages:
+        fname = f"page-{pg:03d}.png"
+        doc[pg - 1].get_pixmap(dpi=130).save(os.path.join(qa_dir, fname))
+        rendered_files[str(pg)] = fname
+
+    sheet_panels = [
+        ("Cover (p.{})", 1),
+        ("Nav & Page Map (p.{})", 2),
+        ("Login Mobile 375px (p.{})", p_login_375),
+        ("Login Error & Focus (p.{})", p_login_err),
+        ("Milestone 7: 409 Proof (p.{})", p_m7),
+        ("Milestone 8: 404 Proof (p.{})", p_m8),
+        ("Calendar 375px Excerpt (p.{})", p_cal_375),
+        ("Part F Sec 10 DoD (p.{})", p_dod or total_pages),
+    ]
+    sheet_panels = [(lbl.format(pg), pg) for lbl, pg in sheet_panels if pg and 1 <= pg <= total_pages]
+
+    if sheet_panels:
+        cols = 2
+        rows = (len(sheet_panels) + cols - 1) // cols
+        cell_w, cell_h = 420, 594
+        pad, label_h, header_h = 24, 24, 52
+        sheet_w = cols * cell_w + (cols + 1) * pad
+        sheet_h = header_h + rows * (cell_h + label_h + pad) + pad
+        sheet = pymupdf.open()
+        sp = sheet.new_page(width=sheet_w, height=sheet_h)
+        sp.draw_rect(pymupdf.Rect(0, 0, sheet_w, sheet_h), fill=(0.97, 0.98, 0.99), color=None)
+        sp.insert_text(
+            pymupdf.Point(pad, 24),
+            f"Deliverable 1 PDF QA Contact Sheet - {total_pages} pages | {len(toc)} bookmarks | sha256:{sha256[:12]}...",
+            fontsize=14,
+            fontname="helv",
+            color=(0.12, 0.17, 0.27),
+        )
+        sp.insert_text(
+            pymupdf.Point(pad, 41),
+            f"File: {os.path.basename(pdf_path)} ({len(pdf_bytes)} bytes) | Broken links: {len(broken_links)} | Broken images: {len(broken_images)}",
+            fontsize=10,
+            fontname="helv",
+            color=(0.28, 0.35, 0.45),
+        )
+        for idx, (label, pg) in enumerate(sheet_panels):
+            r = idx // cols
+            c = idx % cols
+            x0 = pad + c * (cell_w + pad)
+            y0 = header_h + r * (cell_h + label_h + pad)
+            sp.insert_text(
+                pymupdf.Point(x0, y0 + 16),
+                label,
+                fontsize=11,
+                fontname="helv",
+                color=(0.06, 0.09, 0.16),
+            )
+            rect = pymupdf.Rect(x0, y0 + label_h, x0 + cell_w, y0 + label_h + cell_h)
+            sp.draw_rect(rect, fill=(1, 1, 1), color=(0.78, 0.83, 0.89), width=1.2)
+            sp.show_pdf_page(rect, doc, pg - 1)
+        contact_path = os.path.join(qa_dir, "qa-contact-sheet.png")
+        sp.get_pixmap(dpi=150).save(contact_path)
+        sheet.close()
+    else:
+        contact_path = None
+
+    qa_report = {
+        "pdfPath": pdf_path,
+        "fileBytes": len(pdf_bytes),
+        "sha256": sha256,
+        "ranges": ranges,
+        "namedTargets": named_targets,
+        "renderedPages": rendered_files,
+        "contactSheet": contact_path,
+    }
+    with open(os.path.join(qa_dir, "qa-report.json"), "w", encoding="utf-8") as rf:
+        json.dump(qa_report, rf, indent=2, ensure_ascii=False)
+
 print(json.dumps(ranges))
 `;
   const out = execFileSync('python', ['-c', pyScript, pdfPath, qaDir || ''], {
