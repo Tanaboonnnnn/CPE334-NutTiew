@@ -1,17 +1,18 @@
-# CPE334 Software Engineering — Deliverable 1
+# CPE334 Software Engineering — Deliverable 1 (Pre-Release Snapshot)
 ## NutTiew (นัดติว) — One-to-One Tutoring Appointment System
 
+- **Document Snapshot Status:** **Pre-Release Snapshot** aligned to integration staging `sprint1@e34d770` and open Release [PR #55](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/55) (`sprint1 -> main`). No `main` merge SHA or Git release tag is entered prematurely while Release PR #55 gates remain open.
 - **Academic Term:** Semester 1/2026
 - **Department & Institution:** Department of Computer Engineering, Faculty of Engineering, King Mongkut's University of Technology Thonburi (KMUTT)
-- **Assigned Theme:** Theme 1 — Appointment & Scheduling
+- **Assigned Theme:** Theme 1 — Appointment & Scheduling *(Draft v1 baseline; final Master Spec / Theme 1 confirmation `Pending`)*
 - **Repository URL:** [https://github.com/Tanaboonnnnn/CPE334-NutTiew](https://github.com/Tanaboonnnnn/CPE334-NutTiew)
-- **Integration Staging Base SHA:** `c4c599d` on branch `sprint1` (following merged [PR #43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43) `7449581`, [PR #45](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/45) `567ec1c`, [PR #47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47) `9aa37c0`, and [PR #51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51) `c4c599d`; release branch `main` remains at `b501c18`)
-- **Verified Code & DB Baseline SHA:** `c4c599d` on `sprint1` (Deliverable 1 source/PDF sync tracked in Issue [#48](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/48) / [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49); historical PR #43 baseline `808b906` preserved below)
-- **Verified GitHub Actions CI Run:** [Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176) — 3/3 Jobs PASS (`Unit / types / build`, `PostgreSQL 18 / Auth / Slot / Race A`, `Microsoft Edge / Auth / Tutor UI E2E`; **209 distinct automated tests: 34 Unit + 107 DB + 68 E2E**)
-- **Target Release Branch:** `main` (Pending teammate review and approval of [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49), **Independent Formal Manual WCAG 2.2 AA & Screen-Reader Release Sign-off** [`Pending` — distinct from @Chxtamos's `2026-11-11` informal author walkthrough; see Part F §6.4], Master Spec / Theme 1 confirmation, and separate reviewed `sprint1 -> main` release PR + immutable tag)
-- **Course Handout Deadline:** 8 November 2026, 23:59 ICT *(subsequent post-baseline PRs [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44)/[#47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47), [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50)/[#51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51), and Deliverable 1 sync PR [#49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) transparently documented below — never presented as on-time submission proof)*
-- **Report Compilation Date:** 11 November 2026 (Asia/Bangkok)
-- **Total PDF Pages:** 223 pages
+- **Integration Staging Head SHA:** `e34d770` on branch `sprint1` (following merged [PR #43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43) `7449581`, [PR #45](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/45) `567ec1c`, [PR #47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47) `9aa37c0`, [PR #51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51) `c4c599d`, [PR #54](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/54) `beb1a7a`, and [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) `e34d770`; release branch `main` remains at `b501c18`)
+- **Verified Code & DB Baseline SHA:** `e34d770` on `sprint1` (`apps/` and rendered UI identical to screenshot-capture baseline `c4c599d`; Release provenance & DoD synchronization tracked under reopened Issue [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) following [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) and [PR #54](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/54))
+- **Verified GitHub Actions CI Runs:** [Run 43228964121](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43228964121) on `sprint1@e34d770` and [Run 43230583518](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43230583518) on Release [PR #55](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/55) — **3/3 Jobs PASS** (`Unit / types / build`, `PostgreSQL 18 / Auth / Slot / Race A`, `Microsoft Edge / Auth / Tutor UI E2E`; **209 distinct automated tests: 34 Unit + 107 DB + 68 E2E**)
+- **Target Release Branch & Post-Approval Plan:** `main` via open Release [PR #55](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/55) (`CHANGES_REQUESTED` — pending merge of this Pre-Release Provenance Sync PR into `sprint1`, **Independent Formal Manual WCAG 2.2 AA & Screen-Reader Release Sign-off** [`Pending` — distinct from @Chxtamos's `2026-11-11` informal author walkthrough; see Part F §6.4], **Final Master Spec / Theme 1 confirmation** [`Pending`], and @Tanaboonnnnn approval). **Post-Approval Appendix Update Plan:** once PR #55 clears all gates and merges to `main`, a final release summary/appendix update will record the immutable `main` merge commit SHA, release tag, independent WCAG audit record, and Master Spec confirmation prior to LEB2 submission.
+- **Course Handout Deadline:** 8 November 2026, 23:59 ICT *(subsequent post-baseline PRs [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44)/[#47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47), [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50)/[#51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51), [#53](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/53)/[#54](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/54), [#48](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/48)/[#49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49), Release [PR #55](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/55), and reopened Issue [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) pre-release provenance sync transparently documented below — never presented as on-time submission proof)*
+- **Report Compilation Date:** 12 November 2026 (Asia/Bangkok)
+- **Total PDF Pages:** 225 pages
 
 ---
 
@@ -28,25 +29,25 @@
 
 ## Executive Summary & Document Navigation Guide
 
-**NutTiew (นัดติว)** is a one-to-one tutoring appointment and scheduling web application developed under CPE334 Software Engineering. This document is a **fully self-contained Deliverable 1 submission** packaging **Parts A through F** verbatim from approved canonical repository contracts and verified Sprint 1 test runs on `sprint1@c4c599d`, gradable completely offline without opening the repository.
+**NutTiew (นัดติว)** is a one-to-one tutoring appointment and scheduling web application developed under CPE334 Software Engineering. This document is a **Pre-Release Snapshot of Deliverable 1** packaging **Parts A through F** verbatim from approved canonical repository contracts and verified Sprint 1 test runs on `sprint1@e34d770` ([PR #55](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/55) `CHANGES_REQUESTED`), gradable offline without opening the repository. Once PR #55 satisfies all remaining release gates (Independent WCAG sign-off & Instructor Master Spec confirmation), a final post-approval appendix update will record the `main` merge SHA and release tag for LEB2 submission.
 
 ### Actual PDF Page Ranges & Traceability Navigation
 
 | Document Part / Section | Primary Content & Scope | Relevant Requirement / Contract IDs | PDF Pages |
 | :--- | :--- | :--- | :---: |
-| **Cover, Team & Navigation** | Metadata, team roles, confidentiality note, actual PDF navigation index | D1 §4.3 | p. 1–2 |
-| [**Part A: Whole-Product SRS**](#part-a-whole-product-software-requirements-specification-srs) | Complete problem domain, actors, Sprints 1–3 requirements, rules & Q01–Q32 | `FR-001..036`, `BR-001..035`, `NFR-001..016`, `Q01–Q32` | p. 3–32 |
-| [**Part B: Feature Inventory & Traceability**](#part-b-feature-inventory-requirements-traceability-matrix) | Whole-product feature catalog and canonical `AC-S1-01..35` / `VC/TEST-S1-01..39` mapping | `F-S1-01..05`, `F-S2-01..05`, `F-S3-01..02`, `AC-S1-01..35` | p. 33–48 |
-| [**Part C: Whole-Product System SDS**](#part-c-whole-product-system-software-design-specification-sds) | System architecture, Express 5 + React 19 + PostgreSQL DDL, Mermaid diagrams, future Lab 5 deployment design | C4 diagrams, `btree_gist`, `slot_guard_s1`, `booking_guard_s1` | p. 49–66 |
-| [**Part D: Feasible Three-Sprint Plan**](#part-d-feasible-three-sprint-delivery-plan) | Milestones, feature dependency order, two-student capacity, risks & Sprint 1 DoD boundary | Deliverable D1/D2/Final checkpoints | p. 67–73 |
-| [**Part E: Sprint 1 Feature Contracts & STSs**](#part-e-sprint-1-feature-specifications-software-test-specifications) | Complete embedded Part E Feature SDS, UI Spec, UX Amendments, API Spec, Data Spec, Transaction Spec, STS & DoD | All 6 Part E components (31 full contract docs) | p. 74–195 |
-| — [**E.1 F-S1-01 Authentication & Sessions**](#e1-f-s1-01-authentication-sessions-rate-limiting) | SDS, Token-Aligned UI Spec, API Contract, Data Contract, STS & Gate | `AUTH-01..23`, `OD-005-A..E` | p. 74–87 |
-| — [**E.2 F-S1-02 Tutor Slot Availability**](#e2-f-s1-02-tutor-slot-availability-scheduling) | SDS, UI Spec, Tutor Calendar UX Decision, API Spec, Data Spec, STS | `SLOT-01..17`, Race A | p. 87–111 |
-| — [**E.3 Shared Booking Data Foundation**](#e3-shared-booking-data-foundation-d1-08a) | Foundation SDS, Shared Data Spec, Shared DB STS & Trigger Guards | `BDF-01..28`, `booking_guard_s1` | p. 111–126 |
-| — [**E.4 F-S1-03 Customer Availability**](#e4-f-s1-03-customer-availability-browse-filter) | SDS, Amended UI Spec, Option A Calendar UX Decision, API Contract, Data Contract, STS | `AVA-01..19`, `UX-CAL-01..10` | p. 126–154 |
-| — [**E.5 F-S1-04 Exclusive Booking & Races**](#e5-f-s1-04-customer-exclusive-booking-concurrency-protection) | SDS, UI Spec, API Spec, Data Spec, Transaction Lock/Retry Contract, STS | `BOOK-01..33`, Race B, Race C, `BDF-23` | p. 154–176 |
-| — [**E.6 F-S1-05 Booking Retrieval & Tutor View**](#e6-f-s1-05-protected-booking-retrieval-authorized-tutor-schedule) | SDS, UI Spec, API Spec, Data Contract, STS | `RET-01..17`, `INV-RET-01..05` | p. 176–195 |
-| [**Part F: Sprint 1 Verification & Release Evidence**](#part-f-sprint-1-implementation-verification-release-evidence) | 209 distinct tests, `AC-S1-01..35` & `VC/TEST-S1-01..39` matrices, Race A/B/C proofs, verbatim excerpts, TDD history, 16 annotated screenshots + `409/404` backend proofs, peer reviews (#38–#51), 3-layer WCAG status & honest DoD | 209/209 CI PASS; Author check PASS; Formal WCAG & release pending | p. 196–223 |
+| **Cover, Team & Navigation** | Metadata, team roles, confidentiality note, actual PDF navigation index | D1 §4.3 | p. 1–3 |
+| [**Part A: Whole-Product SRS**](#part-a-whole-product-software-requirements-specification-srs) | Complete problem domain, actors, Sprints 1–3 requirements, rules & Q01–Q32 | `FR-001..036`, `BR-001..035`, `NFR-001..016`, `Q01–Q32` | p. 4–33 |
+| [**Part B: Feature Inventory & Traceability**](#part-b-feature-inventory-requirements-traceability-matrix) | Whole-product feature catalog and canonical `AC-S1-01..35` / `VC/TEST-S1-01..39` mapping | `F-S1-01..05`, `F-S2-01..05`, `F-S3-01..02`, `AC-S1-01..35` | p. 34–49 |
+| [**Part C: Whole-Product System SDS**](#part-c-whole-product-system-software-design-specification-sds) | System architecture, Express 5 + React 19 + PostgreSQL DDL, Mermaid diagrams, future Lab 5 deployment design | C4 diagrams, `btree_gist`, `slot_guard_s1`, `booking_guard_s1` | p. 50–67 |
+| [**Part D: Feasible Three-Sprint Plan**](#part-d-feasible-three-sprint-delivery-plan) | Milestones, feature dependency order, two-student capacity, risks & Sprint 1 DoD boundary | Deliverable D1/D2/Final checkpoints | p. 68–74 |
+| [**Part E: Sprint 1 Feature Contracts & STSs**](#part-e-sprint-1-feature-specifications-software-test-specifications) | Complete embedded Part E Feature SDS, UI Spec, UX Amendments, API Spec, Data Spec, Transaction Spec, STS & DoD | All 6 Part E components (31 full contract docs) | p. 75–196 |
+| — [**E.1 F-S1-01 Authentication & Sessions**](#e1-f-s1-01-authentication-sessions-rate-limiting) | SDS, Token-Aligned UI Spec, API Contract, Data Contract, STS & Gate | `AUTH-01..23`, `OD-005-A..E` | p. 75–88 |
+| — [**E.2 F-S1-02 Tutor Slot Availability**](#e2-f-s1-02-tutor-slot-availability-scheduling) | SDS, UI Spec, Tutor Calendar UX Decision, API Spec, Data Spec, STS | `SLOT-01..17`, Race A | p. 88–112 |
+| — [**E.3 Shared Booking Data Foundation**](#e3-shared-booking-data-foundation-d1-08a) | Foundation SDS, Shared Data Spec, Shared DB STS & Trigger Guards | `BDF-01..28`, `booking_guard_s1` | p. 112–127 |
+| — [**E.4 F-S1-03 Customer Availability**](#e4-f-s1-03-customer-availability-browse-filter) | SDS, Amended UI Spec, Option A Calendar UX Decision, API Contract, Data Contract, STS | `AVA-01..19`, `UX-CAL-01..10` | p. 127–155 |
+| — [**E.5 F-S1-04 Exclusive Booking & Races**](#e5-f-s1-04-customer-exclusive-booking-concurrency-protection) | SDS, UI Spec, API Spec, Data Spec, Transaction Lock/Retry Contract, STS | `BOOK-01..33`, Race B, Race C, `BDF-23` | p. 155–177 |
+| — [**E.6 F-S1-05 Booking Retrieval & Tutor View**](#e6-f-s1-05-protected-booking-retrieval-authorized-tutor-schedule) | SDS, UI Spec, API Spec, Data Contract, STS | `RET-01..17`, `INV-RET-01..05` | p. 177–196 |
+| [**Part F: Sprint 1 Verification & Release Evidence**](#part-f-sprint-1-implementation-verification-release-evidence) | 209 distinct tests, `AC-S1-01..35` & `VC/TEST-S1-01..39` matrices, Race A/B/C proofs, verbatim excerpts, TDD history, 16 annotated screenshots + `409/404` backend proofs, peer reviews (#38–#55), 3-layer WCAG status & honest DoD | 209/209 CI PASS on `e34d770` / PR #55; Author check PASS; Independent WCAG, Master Spec & PR #55 pending | p. 197–225 |
 
 ---
 
@@ -5637,7 +5638,7 @@ All 17 test cases (`RET-01..RET-17`) are fully implemented and verified **PASS (
 
 ## 1. Truthful Automated Test Execution & CI Record
 
-Automated verification was executed across both **GitHub Actions Ubuntu 24.04 CI** ([Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176) on `sprint1@c4c599d`: Node 24, PostgreSQL 18, Microsoft Edge) and **local Windows 11** (Node v24.14.0, PostgreSQL 17.2 + `btree_gist` 1.7, Prisma Client 7.10.1, Vitest 4.1.12, Microsoft Edge Playwright 1.64.1 on branch `docs/48-deliverable-1-pdf-9aa37c0` merging `sprint1@c4c599d` with zero `apps/` or `e2e/` differences).
+Automated verification was executed across both **GitHub Actions Ubuntu 24.04 CI** ([Run 43228964121](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43228964121) on `sprint1@e34d770` and [Run 43230583518](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43230583518) on Release [PR #55](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/55): Node 24, PostgreSQL 18, Microsoft Edge) and **local Windows 11** (Node v24.14.0, PostgreSQL 17.2 + `btree_gist` 1.7, Prisma Client 7.10.1, Vitest 4.1.12, Microsoft Edge Playwright 1.64.1 on `sprint1@c4c599d` / PR #49 with zero `apps/` differences to `sprint1@e34d770`, plus PR #54 `cc92488` Edge calendar month-boundary verification and re-verified local Unit/Typecheck/Build/PDF QA checks on this provenance sync branch).
 
 | Verification Gate / Suite | Execution Command | Environment | Passed | Failed | Skipped | Distinct Total |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
@@ -5648,12 +5649,12 @@ Automated verification was executed across both **GitHub Actions Ubuntu 24.04 CI
 | **Production Build** | `npm run build` | Local + CI | Clean | 0 | - | **Clean** |
 | **Git Whitespace & Patch Check** | `git diff --check` | Local | Clean | 0 | - | **Clean** |
 
-> **Total Distinct Automated Tests on `sprint1@c4c599d`:** `34` (Unit: 29 `@nuttiew/api` + 5 `@nuttiew/web`) + `107` (Real DB across 14 files) + `68` (MS Edge E2E across 11/12 spec files) = **`209` Distinct Tests (`209` Passed, `0` Failed, `0` Skipped)**
+> **Total Distinct Automated Tests on `sprint1@e34d770`:** `34` (Unit: 29 `@nuttiew/api` + 5 `@nuttiew/web`) + `107` (Real DB across 14 files) + `68` (MS Edge E2E across 11/12 spec files) = **`209` Distinct Tests (`209` Passed, `0` Failed, `0` Skipped)**
 
 > **Accounting, Environment & Historical Baseline Transparency Notes:**
 > 1. **No Double-Counting:** The 68-test Microsoft Edge suite (`npx playwright test`) already executes `e2e/sprint1.journey.spec.ts`, `e2e/availability.calendar.spec.ts` (`4` tests), and `e2e/auth.a11y.spec.ts` (`2` tests). The true count of unique automated tests is **209** (`34 + 107 + 68`).
-> 2. **Evolution from PR #43 Baseline (`199` → `209`):** [PR #43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43) (`808b906`, CI Run [`42783770373`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42783770373)) passed `29 + 106 + 64 = 199` tests. Subsequent Issue [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44) / [PR #47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47) (`9aa37c0`) added **+5** Web calendar unit tests (`apps/web/test/customer-availability-calendar.test.ts`), **+1** `520`-row PostgreSQL latency benchmark (`AVA14_BENCHMARK_500`), and **+4** Option A calendar E2E tests (`e2e/availability.calendar.spec.ts`) = **209**. Issue [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50) / [PR #51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51) (`c4c599d`) aligned Login/Auth `--nuttiew-*` tokens, strengthened `e2e/auth.a11y.spec.ts`, and fixed the UTC/Bangkok `raceSlot` boundary in `e2e/sprint1.journey.spec.ts`.
-> 3. **Local Windows PostgreSQL Parallelism vs Hosted CI PG 18:** On local Windows PG 17.2, launching all 14 DB files concurrently via default `vitest run` caused local worker/connection-pool timeouts (`8 failed | 98 passed | 1 skipped`); running the identical 14-file suite sequentially with `--fileParallelism=false` passed **14/14 files = `107/107` PASS** in `115.07s`. Hosted CI on Ubuntu PostgreSQL 18 ([Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176)) passed the default parallel command **`107/107`** cleanly in `59s` (and earlier Run [`#42672763881`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42672763881) transient dispatch failure on `0efa30b` passed 3/3 on Attempt 2).
+> 2. **Evolution from PR #43 Baseline (`199` → `209`):** [PR #43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43) (`808b906`, CI Run [`42783770373`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42783770373)) passed `29 + 106 + 64 = 199` tests. Subsequent Issue [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44) / [PR #47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47) (`9aa37c0`) added **+5** Web calendar unit tests (`apps/web/test/customer-availability-calendar.test.ts`), **+1** `520`-row PostgreSQL latency benchmark (`AVA14_BENCHMARK_500`), and **+4** Option A calendar E2E tests (`e2e/availability.calendar.spec.ts`) = **209**. Issue [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50) / [PR #51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51) (`c4c599d`) aligned Login/Auth `--nuttiew-*` tokens, strengthened `e2e/auth.a11y.spec.ts`, and fixed the UTC/Bangkok `raceSlot` day boundary in `e2e/sprint1.journey.spec.ts`. Issue [#53](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/53) / [PR #54](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/54) (`beb1a7a`, CI Run [`43080672812`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43080672812)) fixed the cross-month `cleanDay1/cleanDay2` selection bug in `e2e/availability.calendar.spec.ts`. Finally, Issue [#48](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/48) / [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) (`e34d770`, CI Run [`43228964121`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43228964121)) synchronized Deliverable 1 sources, evidence, and PDF before Release [PR #55](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/55) (`CI Run 43230583518`).
+> 3. **Local Windows PostgreSQL Parallelism vs Hosted CI PG 18:** On local Windows PG 17.2, launching all 14 DB files concurrently via default `vitest run` caused local worker/connection-pool timeouts (`8 failed | 98 passed | 1 skipped`); running the identical 14-file suite sequentially with `--fileParallelism=false` passed **14/14 files = `107/107` PASS** in `115.07s`. Hosted CI on Ubuntu PostgreSQL 18 ([Run 43228964121](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43228964121)) passed the default parallel command **`107/107`** cleanly in `59s` (and earlier Run [`#42672763881`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42672763881) transient dispatch failure on `0efa30b` passed 3/3 on Attempt 2).
 > 4. **520-Row Customer Availability Profiling (`AVA14_BENCHMARK_500`):** Local sequential PG 17.2 measured `90,591` UTF-8 bytes for `520` rows at `p50 = 45.19 ms`, `p95 = 68.21 ms`, `max = 76.11 ms` (isolated PG 17.2 in PR #47: `p95 = 12.28 ms`; hosted CI PG 18 at `5a32d05`: `p95 = 9.66 ms`), staying `< 3.5%` of the `2,000 ms` reference. Phase 1 client-side calendar indexing remains sufficient.
 
 ---
@@ -5704,7 +5705,7 @@ Automated verification was executed across both **GitHub Actions Ubuntu 24.04 CI
 
 | VC / TEST ID | Scope | Executed Verification & Honest Gate Status | Observed Result |
 | :--- | :--- | :--- | :---: |
-| **VC-S1-34 / TEST-S1-34** | Full UI→API→DB Sprint 1 Journey | `e2e/sprint1.journey.spec.ts` (inside `68`-test Playwright suite) + 8 refreshed screenshots on `c4c599d` | **PASS** |
+| **VC-S1-34 / TEST-S1-34** | Full UI→API→DB Sprint 1 Journey | `e2e/sprint1.journey.spec.ts` (inside `68`-test Playwright suite on `e34d770` / PR #55) + 8 refreshed screenshots captured on `c4c599d` (`apps/` identical at `e34d770`) | **PASS** |
 | **VC-S1-35 / TEST-S1-35** | No stored secrets/plaintext/PII leaks | `auth.db.test.ts`, `config.test.ts`, `retrieval.db.test.ts` (`RET-13`), `git grep` clean | **PASS** |
 | **VC-S1-36 / TEST-S1-36** | Performance p95 (NFR-010) & Keyboard/WCAG (NFR-009) | `AVA14_BENCHMARK_500` (`p95 = 68.21ms` local sequential / `9.66ms` CI PG 18): **PASS**; Automated Playwright focus, `44×44px` targets (`>=36×44px` day tile at `320px`), `--nuttiew-*` contrast (`>=4.5:1` text / `>=3:1` UI) & reflow checks (`auth.a11y.spec.ts`, `availability.calendar.spec.ts`): **PASS**; Informal Author Manual Walkthrough (@Chxtamos, `2026-11-11` ICT localhost Keyboard/375px/200%/Screen-Reader + E2E): **PASS (Author Check Only)**; **Independent Formal Manual WCAG 2.2 AA & Screen-Reader Release Sign-off: Pending** | **PARTIAL (Auto + Author PASS / Formal Sign-off Pending)** |
 | **VC-S1-37 / TEST-S1-37** | Race A (concurrent same-Tutor overlapping Slots) | `apps/api/test/slots.race.db.test.ts` (`SLOT-10/11`) | **PASS** |
@@ -5729,7 +5730,7 @@ The NutTiew platform enforces three distinct concurrency invariants at the Postg
 
 ### 3.1 Race A: Concurrent Slot Creation by Same Tutor (`SLOT-10/11` / `SQLSTATE 23P01`)
 - **Constraint:** `offered_slot_no_overlap_per_tutor EXCLUDE USING gist ("tutorId" WITH =, tstzrange("startsAt", "endsAt", '[)') WITH &&) WHERE ("lifecycle" = 'Offered')`.
-- **Observed Local Output (`apps/api/test/slots.race.db.test.ts` on PG 17.2, `sprint1@c4c599d`):**
+- **Observed Local Output (`apps/api/test/slots.race.db.test.ts` on PG 17.2, `c4c599d`; `apps/` & tests unchanged at `sprint1@e34d770`):**
   ```json
   RACE_A_OBSERVED {"first":"A","holderPid":13504,"aPid":24868,"bPid":15532,"statuses":[201,409],"committed":["6d6f6547-0d9d-422c-8c2b-023cd06c8773"]}
   RACE_A_DIRECT_SQL_OBSERVED {"aPid":13504,"bPid":15308,"loserSQLSTATE":"23P01"}
@@ -5742,7 +5743,7 @@ The NutTiew platform enforces three distinct concurrency invariants at the Postg
 
 ### 3.3 Race C & Option 1 Interleaving Proof: Same-Customer Overlapping Cross-Tutor Bookings (`BOOK-11`, `BOOK-19 / BDF-23`)
 - **Mechanism:** Remediation migration `20261109000000_booking_guard_user_lock` replaces `booking_guard_s1()` (`SECURITY DEFINER`) to lock `User(customerId) FOR UPDATE` inside the `BEFORE ROW` trigger *before* locking `Slot` and *before* inserting into `booked_customer_no_overlap` GiST index.
-- **Observed Local Output (`apps/api/test/bookings.db.test.ts` on PG 17.2, `sprint1@c4c599d`):**
+- **Observed Local Output (`apps/api/test/bookings.db.test.ts` on PG 17.2, `c4c599d`; `apps/` & tests unchanged at `sprint1@e34d770`):**
   ```json
   BDF23_BOOK19_EVIDENCE {"canonicalPart1A":{"slotId":"7f19db9a-c420-40d9-b29f-4c54399384c5","roguePid":29896,"adapterUserPid":22132,"userBlockers":[29896],"outcome":"BOOKING_NOT_ELIGIBLE"},"canonicalPart1B":{"slotId":"543ea446-3402-4629-b1ba-6f612eec53a6","roguePid":29896,"adapterSlotPid":22132,"slotBlockers":[29896],"outcome":"BOOKING_NOT_ELIGIBLE"},"canonicalPart1C":{"slotId":"4d9b0543-7ad5-4381-bfaa-965e39909766","roguePid":29896,"adapterPid1C":22132,"rogueBlockers1C":[22132],"adapterReverseBlockers":[],"outcome":"23P01"},"canonicalPart1C2NoStaleCommit":{"slotId":"b13f45e0-8d91-49ea-9636-9463bfe9da47","roguePid":29896,"adapterPid1C2":22132,"adapterReverseBlockers":[],"commitNoticeMs":3599120,"outcome":201},"canonicalPart1D":{"slotId":"b0cd8f7d-3122-4fd3-aa51-d1b85ab5d433","roguePid":29896,"adapterPid1D":22132,"rogueBlockers1D":[22132],"outcome":"23505"},"isolatedStressPart2":{"stressSchema":"nuttiew_bdf23_stress_bebd3e30","slotId":"a6931873-9823-403b-b405-ac09fc0d9f62","stressRoguePid":30092,"adapterInsertPid":23564,"indexBlockers":[30092],"outcome":201}}
   ```
@@ -5910,12 +5911,15 @@ Every critical domain, concurrency, and UI alignment fix followed observable **f
 5. **Case 5: Login Navy + Orange Token Alignment & Bangkok `raceSlot` Day-Key Boundary (Issue #50 / PR #51):**
    - **RED Observations:** (a) Added shared `--nuttiew-*` token & alert assertions in `e2e/auth.a11y.spec.ts` on `sprint1@9aa37c0` — failed on legacy ZenGreen `rgb(246, 244, 239)` / `rgba(0, 0, 0, 0)`. (b) CI Run [`42883503150`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42883503150) at `c8da6c1` exposed a UTC-vs-Bangkok day rollover defect in `e2e/sprint1.journey.spec.ts` between `00:00–06:59 +07:00` (`setUTCHours(6,0,0,0)` shifted `raceSlot` 1 day behind `bangkokDayKey(21)`).
    - **GREEN Fixes (commits [`c8da6c1`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/commit/c8da6c1) & [`3c0cb1b`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/commit/3c0cb1b771740fe96ec0ccba0cfbaac531692af1), merged [`c4c599d`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/commit/c4c599d304218f5d9af5a1b527662801cb88e150)):** Created `apps/web/src/tokens.css` unifying Login/Tutor/Customer surfaces (`#202B44` Navy, `#F47736` Orange, `#F7F8FB` Canvas, `#172137` Ink), updated `e2e/sprint1.journey.spec.ts` to `bangkokInstant(raceDay, '13:00')`, and passed CI [Run 42888945331](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42888945331) & post-merge CI [Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176) (**68/68** Edge E2E, **209/209** total automated PASS).
+6. **Case 6: Option A Calendar E2E Same-Month `cleanDay1/cleanDay2` Boundary (Issue #53 / PR #54):**
+   - **RED Observation (CI Run [`43055911698`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43055911698) & local Edge `3/4` when `addDaysBangkok(cleanDay1, 1)` crossed `2026-11-30` → `2026-12-01`):** `e2e/availability.calendar.spec.ts` queried two consecutive Bangkok offsets (`+18` / `+19` days) assuming both belonged to the same calendar month, failing UI lookup across month rollover on `12 Nov 2026` ICT.
+   - **GREEN Fix (PR #54 commit [`cc92488`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/commit/cc92488), merged into `sprint1` [`beb1a7a`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/commit/beb1a7a)):** Selected two consecutive days anchored within the same Bangkok month before creating slots, restoring `4/4` calendar E2E PASS locally & CI ([Run 43080672812](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43080672812) **3/3 PASS**; propagated into PR #49 `ef25d0c` & `sprint1@e34d770`).
 
 ---
 
 ## 6. End-to-End Visual Walkthrough, Milestone Traceability & Negative Backend Proofs
 
-Every screenshot embedded below comes directly from the committed Playwright capture suite on `sprint1@c4c599d` (zero fabricated mockups) and includes structured traceability (**Actor / Preconditions → Action → Expected Result → Actual Evidence Observed → Traceability IDs**) plus direct backend/database evidence for HTTP `409` / `404` security invariants.
+Every screenshot embedded below comes directly from the committed Playwright capture suite captured on `sprint1@c4c599d` (zero fabricated mockups; `apps/` backend & UI code remain identical at `sprint1@e34d770`) and includes structured traceability (**Actor / Preconditions → Action → Expected Result → Actual Evidence Observed → Traceability IDs**) plus direct backend/database evidence for HTTP `409` / `404` security invariants.
 
 ### 6.1 Login/Auth UI Theme Alignment (Issue #50 / PR #51 — Before vs After, `F-S1-01`)
 
@@ -5934,7 +5938,7 @@ Every screenshot embedded below comes directly from the committed Playwright cap
 
 ![Login After 1280px (NutTiew Navy + Orange)](../evidence/login-theme/login-after-1280.png)
 
-- **Artifact:** `docs/evidence/login-theme/login-after-1280.png` (`1280×800 px`, `sprint1@c4c599d`)
+- **Artifact:** `docs/evidence/login-theme/login-after-1280.png` (`1280×800 px`, captured on `c4c599d`; UI identical at `sprint1@e34d770`)
 - **Actor / Preconditions:** Anonymous visitor opening `/` with shared `apps/web/src/tokens.css`.
 - **Action:** Render unauthenticated login card (`e2e/auth.a11y.spec.ts:21–77`, `e2e/auth.spec.ts:16`).
 - **Expected Result:** Computed surface tokens match Tutor & Customer views (`#F7F8FB` canvas, `#202B44` navy heading, `#F47736` orange CTA with `#172137` ink `>= 4.5:1` contrast, `#66778A` control borders `>= 3:1`) and `0` horizontal overflow.
@@ -5945,7 +5949,7 @@ Every screenshot embedded below comes directly from the committed Playwright cap
 
 ![Login After 375px Mobile (NutTiew Navy + Orange)](../evidence/login-theme/login-after-375.png)
 
-- **Artifact:** `docs/evidence/login-theme/login-after-375.png` (`375×800 px` full uncropped viewport capture, `sprint1@c4c599d`)
+- **Artifact:** `docs/evidence/login-theme/login-after-375.png` (`375×800 px` full uncropped viewport capture, captured on `c4c599d`; UI identical at `sprint1@e34d770`)
 - **Actor / Preconditions:** Anonymous mobile user opening `/` at `375×800` CSS px.
 - **Action:** Render login card under narrow-viewport layout rules (`e2e/auth.a11y.spec.ts:22–33`).
 - **Expected Result:** Single-column stack displays header, email/password fields, show/hide toggle, and submit CTA inside `375px` with `>= 44×44px` hit targets and zero horizontal scrolling or bottom cutoff.
@@ -5956,14 +5960,14 @@ Every screenshot embedded below comes directly from the committed Playwright cap
 
 ![Login After Error & Focus Ring State 1280px](../evidence/login-theme/login-after-error-1280.png)
 
-- **Artifact:** `docs/evidence/login-theme/login-after-error-1280.png` (`1280×800 px`, `sprint1@c4c599d`)
+- **Artifact:** `docs/evidence/login-theme/login-after-error-1280.png` (`1280×800 px`, captured on `c4c599d`; UI identical at `sprint1@e34d770`)
 - **Actor / Preconditions:** Anonymous visitor submitting wrong credentials (`a11y-f7559dda7ae29a@example.test`).
 - **Action:** Click `เข้าสู่ระบบ` triggering `POST /api/v1/auth/login` → `HTTP 401 LOGIN_FAILED` (`e2e/auth.a11y.spec.ts:79–103`).
 - **Expected Result:** Generic error message announced via `role="alert"` (`#FFF3F3` / `#9C2424`, no account enumeration), `#email` bound with `aria-invalid="true"` & `aria-describedby="auth-error"`, focus returned to `#email` with `3px solid #AA4519` focus ring.
 - **Actual Evidence Observed:** Red alert banner `"ไม่สามารถเข้าสู่ระบบได้ กรุณาตรวจสอบข้อมูล"` rendered cleanly and `#email` displays the crisp `3px solid rgb(170, 69, 25)` focus ring without leaking user existence.
 - **Traceability:** `F-S1-01` · `AC-S1-03` · `VC-S1-02` · `AUTH-02` · `AUTH-15` (`e2e/auth.a11y.spec.ts:79–103`).
 
-### 6.2 Core Sprint 1 Vertical Journey (`e2e/sprint1.journey.spec.ts` refreshed on `sprint1@c4c599d`)
+### 6.2 Core Sprint 1 Vertical Journey (`e2e/sprint1.journey.spec.ts` captured on `c4c599d`, verified on `sprint1@e34d770`)
 
 #### Milestone 1: Tutor Logs In & Creates 60-Minute Slot
 
@@ -6067,7 +6071,7 @@ Every screenshot embedded below comes directly from the committed Playwright cap
 - **Action (Two-Step Check Before Screenshot):** Immediately prior to capturing Screenshot `08`, the same Customer 2 browser context probes `GET /api/v1/customer/bookings/${createdBookingId}` (`e2e/sprint1.journey.spec.ts:302–305`), then opens `การจองของฉัน` (`GET /api/v1/customer/bookings`, `lines 308–315`).
 - **Expected Result & Scope Honesty:**
   - **What Screenshot `08` Alone Proves vs Does Not Prove:** Screenshot `08` visually confirms **UI private list isolation** (`GET /api/v1/customer/bookings` returns `200 OK { data: [] }` → `"คุณยังไม่มีประวัติการจองติว"`, `[data-booking-id="dd098824-..."]` count `0`); the screenshot *by itself* does not display the `404` status code of the direct-ID endpoint.
-  - **Authoritative Backend `HTTP 404` Proof:** Direct HTTP `404` enforcement is proved by [`apps/api/src/retrieval.ts:157–163`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/blob/c4c599d/apps/api/src/retrieval.ts#L157-L163) (`WHERE b."id" = $1 AND b."customerId" = $2` → `BookingError(404, 'BOOKING_NOT_FOUND')`, never `403`), executed directly by **`e2e/sprint1.journey.spec.ts:302–305`** right before Screenshot `08`, PostgreSQL DB test **`RET-03`** (`apps/api/test/retrieval.db.test.ts:215–224`), and Edge E2E test **`RET-16`** (`e2e/retrieval.spec.ts:398–413`). In addition, **`RET-15-ERR-404`** (`e2e/retrieval.spec.ts:318–353`) verifies the detail modal displays `"ไม่พบข้อมูลการจองนี้"` on `404`.
+  - **Authoritative Backend `HTTP 404` Proof:** Direct HTTP `404` enforcement is proved by [`apps/api/src/retrieval.ts:157–163`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/blob/e34d770/apps/api/src/retrieval.ts#L157-L163) (`WHERE b."id" = $1 AND b."customerId" = $2` → `BookingError(404, 'BOOKING_NOT_FOUND')`, never `403`), executed directly by **`e2e/sprint1.journey.spec.ts:302–305`** right before Screenshot `08`, PostgreSQL DB test **`RET-03`** (`apps/api/test/retrieval.db.test.ts:215–224`), and Edge E2E test **`RET-16`** (`e2e/retrieval.spec.ts:398–413`). In addition, **`RET-15-ERR-404`** (`e2e/retrieval.spec.ts:318–353`) verifies the detail modal displays `"ไม่พบข้อมูลการจองนี้"` on `404`.
 - **Actual Evidence Observed:** Screenshot `08` displays `0 รายการ` / `"คุณยังไม่มีประวัติการจองติว"` for Customer 2 (zero Customer 1 bookings leaked). Simultaneously, `e2e/sprint1.journey.spec.ts:302–305`, `RET-03` (**PASS**), and `RET-16` (**PASS**) all verified HTTP `404 BOOKING_NOT_FOUND`:
 - **Sanitized Server Response Contract (`apps/api/src/app.ts:16–17, 109–123`; asserted in `sprint1.journey.spec.ts:302–305`, `RET-03`, `RET-16`):**
   ```http
@@ -6085,7 +6089,7 @@ Every screenshot embedded below comes directly from the committed Playwright cap
   ```
 - **Traceability:** `F-S1-05` · `AC-S1-31` · `VC-S1-29` · `NFR-S1-01` · `RET-03` (`retrieval.db.test.ts:215–224`) · `RET-16` (`e2e/retrieval.spec.ts:398–413`) · `RET-15-ERR-404` · `e2e/sprint1.journey.spec.ts:302–316`.
 
-### 6.3 Customer Monthly Calendar Option A (`UX-CAL-01..10` refreshed on `sprint1@c4c599d`)
+### 6.3 Customer Monthly Calendar Option A (`UX-CAL-01..10` captured on `c4c599d`, verified on `sprint1@e34d770`)
 
 #### Desktop Monthly Calendar (1280px)
 
@@ -6137,9 +6141,9 @@ To eliminate ambiguity between automated assertions, author manual inspection, a
 
 | Verification Layer | Executor & Date / Environment | Scope Covered & Concrete Observations | Gate Classification |
 | :--- | :--- | :--- | :---: |
-| **1. Automated Playwright & Computed WCAG 2.2 AA Suite** | GitHub Actions Edge CI ([Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176)) + Local Win11 Edge on `sprint1@c4c599d` | `e2e/auth.a11y.spec.ts` (**2/2**) + `e2e/availability.calendar.spec.ts` (`UX-CAL-08..09`): computed `--nuttiew-*` contrast (`>= 4.5:1` text / `>= 3:1` borders & `#AA4519` focus ring), `320/375/640(200%)/768/800/801/1280px` zero overflow, `>= 44×44px` targets (`>= 36×44px` at `320px`), `Enter`/`Space` disclosure focus transfer (`pendingFocusGroupKeyRef`), `aria-live` & `prefers-reduced-motion` | **PASS (Automated Gate)** |
-| **2. Informal Author Manual Walkthrough** | **@Chxtamos** on `2026-11-11` (Asia/Bangkok), local Win11 dev servers (`docs/48...` @ `6abfcb7`, identical `apps/`/`e2e/` to `sprint1@c4c599d`, Express API `127.0.0.1:3001`, Vite `5173`, PG `17.2`; servers closed after check; [PR #49 comment](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49#issuecomment-6793913908)) | Full End-to-End Flow + Manual **Keyboard navigation**, **`375px` Mobile**, **`200%` Browser Zoom**, and **Screen Reader** walkthrough. **3 minor non-blocking DOM/ARIA notes recorded (out of scope for PR #49 — zero `apps/` edits):** *(i)* post-login `document.title` stays `"NutTiew — เข้าสู่ระบบ"`; *(ii)* Customer view renders `<h2 className="dashboard-kicker">` above `<h1>`; *(iii)* native `<input type="date/time">` controls in Tutor form could add explicit `:focus-within` styling in a later polish pass | **PASS (Author Check Only — NOT Independent Sign-off)** |
-| **3. Independent Formal Manual WCAG 2.2 AA & Assistive-Tech Release Audit** | Separate independent human reviewer / release checklist before `sprint1 -> main` | Independent screen-reader / keyboard / ARIA heading & focus sign-off + release-gate checklist confirmation | **Pending Independent Sign-off** |
+| **1. Automated Playwright & Computed WCAG 2.2 AA Suite** | GitHub Actions Edge CI ([Run 43228964121](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43228964121) on `sprint1@e34d770` & [PR #55 Run 43230583518](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43230583518)) + Local Win11 Edge | `e2e/auth.a11y.spec.ts` (**2/2**) + `e2e/availability.calendar.spec.ts` (`UX-CAL-08..09`): computed `--nuttiew-*` contrast (`>= 4.5:1` text / `>= 3:1` borders & `#AA4519` focus ring), `320/375/640(200%)/768/800/801/1280px` zero overflow, `>= 44×44px` targets (`>= 36×44px` at `320px`), `Enter`/`Space` disclosure focus transfer (`pendingFocusGroupKeyRef`), `aria-live` & `prefers-reduced-motion` | **PASS (Automated Gate)** |
+| **2. Informal Author Manual Walkthrough** | **@Chxtamos** on `2026-11-11` (Asia/Bangkok), local Win11 dev servers (`docs/48...` @ `6abfcb7`, identical `apps/` to `sprint1@e34d770`, Express API `127.0.0.1:3001`, Vite `5173`, PG `17.2`; servers closed after check; [PR #49 comment](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49#issuecomment-6793913908)) | Full End-to-End Flow + Manual **Keyboard navigation**, **`375px` Mobile**, **`200%` Browser Zoom**, and **Screen Reader** walkthrough. **3 minor non-blocking DOM/ARIA notes recorded (out of scope for PR #49 — zero `apps/` edits):** *(i)* post-login `document.title` stays `"NutTiew — เข้าสู่ระบบ"`; *(ii)* Customer view renders `<h2 className="dashboard-kicker">` above `<h1>`; *(iii)* native `<input type="date/time">` controls in Tutor form could add explicit `:focus-within` styling in a later polish pass | **PASS (Author Check Only — NOT Independent Sign-off)** |
+| **3. Independent Formal Manual WCAG 2.2 AA & Assistive-Tech Release Audit** | Separate independent human reviewer (@Tanaboonnnnn / release reviewer) required before approving [PR #55](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/55) (`sprint1 -> main`) | Must execute and record: **audit date**, **test environment & assistive tech**, **scope covered (full keyboard flow, screen reader, zoom/reflow, error & status states)**, **PASS/FAIL per check**, and **defects/disposition** | **Pending Independent Sign-off** |
 
 ---
 
@@ -6164,8 +6168,14 @@ To eliminate ambiguity between automated assertions, author manual inspection, a
    - Author: @Chxtamos | Reviewer: @Tanaboonnnnn (`APPROVED` on `3c0cb1b`) | Issue: [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50)
    - Acted on @Tanaboonnnnn's UI consistency feedback from PR #49: introduced `apps/web/src/tokens.css` unifying Login/Tutor/Customer Navy (`#202B44`) + Orange (`#F47736`) + Light Canvas (`#F7F8FB`) without changing auth/session/CSRF semantics, and fixed UTC-vs-Bangkok `raceSlot` day boundary (`3c0cb1b`); merged into `sprint1` at `c4c599d` ([CI Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176) **3/3** PASS).
 7. **Pull Request #49 — Deliverable 1 Source, Evidence & PDF Sync (`docs/48-deliverable-1-pdf-9aa37c0` → `sprint1`):**
-   - Author: @Chxtamos | Reviewer: @Tanaboonnnnn (`CHANGES_REQUESTED` reviewed at `6abfcb7`) | Issue: [#48](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/48)
-   - Aligns `scripts/compile-deliverable.mjs`, `scripts/generate-pdf.mjs`, `README.md`, `deliverable-1.md`, `CPE334_Deliverable1_NutTiew.pdf`, and `docs/evidence/sprint1/*.png` with `sprint1@c4c599d`, and resolves all 5 items in @Tanaboonnnnn's review (synced PR/Issue #48 scope, structured `Actor/Preconditions → Action → Expected → Actual → Traceability` annotations across all 16 screenshots, explicit `HTTP 409/404` backend proof correlation alongside `07`/`08`, separated 3-layer Accessibility status in §6.4/§10/README, `375×956` Calendar mobile crop & heading-figure pairing fix, plus PyMuPDF QA contact sheet verification).
+   - Author: @Chxtamos | Reviewer: @Tanaboonnnnn (`CHANGES_REQUESTED` at `6abfcb7` → `APPROVED` & **MERGED** into `sprint1` at `e34d770`, [CI Run 43228964121](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43228964121) **3/3 PASS**) | Issue: [#48](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/48)
+   - Synchronized `scripts/compile-deliverable.mjs`, `scripts/generate-pdf.mjs`, `README.md`, `deliverable-1.md`, `CPE334_Deliverable1_NutTiew.pdf`, and `docs/evidence/sprint1/*.png` with `sprint1@c4c599d`, resolved all 5 review items (structured 16-screenshot traceability annotations, explicit `409/404` backend proofs, 3-layer Accessibility separation, `375×956` Calendar mobile crop, PyMuPDF QA), and merged `origin/sprint1@beb1a7a` (`ef25d0c`, CI Run `43205314421` **3/3 PASS**) prior to merge.
+8. **Pull Request #54 — F-S1-03 Calendar E2E Month-Boundary Fix (`fix/53-calendar-e2e-month-boundary` → `sprint1`):**
+   - Author: @Chxtamos | Reviewer: @Tanaboonnnnn (`APPROVED` & **MERGED** into `sprint1` at `beb1a7a`, [CI Run 43080672812](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43080672812) **3/3 PASS**) | Issue: [#53](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/53)
+   - Fixed `e2e/availability.calendar.spec.ts` month-rollover bug where `cleanDay1/cleanDay2` crossed month boundaries (`3/4` RED → `4/4` GREEN at commit `cc92488`).
+9. **Pull Request #55 — Sprint 1 Release (`sprint1` → `main`) & Reopened Issue #18 Provenance Sync:**
+   - Author: @Chxtamos | Reviewer: @Tanaboonnnnn (`CHANGES_REQUESTED` on `sprint1@e34d770`, [CI Run 43230583518](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43230583518) **3/3 PASS**) | Issue: [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) (reopened)
+   - Reviewer confirmed CI `3/3` (`209/209`), 27 merged PRs, and zero conflicts while blocking `main` merge on 4 truthful release gates: *(1)* Independent Manual WCAG 2.2 AA & Screen-Reader audit (`Pending`), *(2)* release provenance / pre-release snapshot sync in `README.md` & Deliverable 1 PDF, *(3)* Instructor Master Spec / Theme 1 confirmation (`Pending`), and *(4)* reopening Issue [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) (`Fixing -> PR Review`). Remediation PR from branch `docs/18-release-provenance-sync` into `sprint1` resolves Gates 2 & 4 cleanly without touching `main` directly.
 
 ---
 
@@ -6173,8 +6183,8 @@ To eliminate ambiguity between automated assertions, author manual inspection, a
 
 | Contributor | Contribution | Primary Responsibilities & Deliverables |
 | :--- | :---: | :--- |
-| **Tanboon Teawsawat** (@Tanaboonnnnn) | **50%** | Requirements discovery (Q01–Q32), Whole-product SRS & Traceability Matrix, System SDS, Three-Sprint Delivery Plan, Project #6 Kanban & UI UX governance, and substantive peer reviews across PRs #25–#51 |
-| **Chxtamos** (@Chxtamos) | **50%** | Express 5 REST API, PostgreSQL schema/GiST constraints/triggers, Option 1 concurrency lock ordering, React 19 UI (Option A calendar & shared `tokens.css`), automated Unit/DB/Playwright tests, and Deliverable 1 source/PDF packaging |
+| **Tanboon Teawsawat** (@Tanaboonnnnn) | **50%** | Requirements discovery (Q01–Q32), Whole-product SRS & Traceability Matrix, System SDS, Three-Sprint Delivery Plan, Project #6 Kanban & UI UX governance, and substantive peer reviews across PRs #25–#55 |
+| **Chxtamos** (@Chxtamos) | **50%** | Express 5 API implementation, PostgreSQL schema/GiST constraints/triggers, Option 1 concurrency lock ordering, React 19 UI (Option A calendar & shared `tokens.css`), automated Unit/DB/Playwright tests, and Deliverable 1 source/PDF packaging |
 
 ---
 
@@ -6182,7 +6192,7 @@ To eliminate ambiguity between automated assertions, author manual inspection, a
 
 - **AI Assistant Declared:** Google Antigravity / Gemini agentic coding assistant.
 - **Usage Scope:** Drafting boilerplate TypeScript interfaces, structuring `pg_blocking_pids()` concurrency test harnesses, automating Markdown/PDF compilation, and verifying cross-references.
-- **Human Accountability:** All product business rules (Q01–Q32), lock-ordering architecture decisions, security trust boundaries, and peer reviews were evaluated and accepted by human team members. Zero test results or deliverables were fabricated or accepted without real execution against PostgreSQL and browser suites; informal author walkthroughs, independent formal accessibility sign-off, and final release gates remain transparently separated without claiming premature completion.
+- **Human Accountability:** All product business rules (Q01–Q32), lock-ordering architecture decisions, security trust boundaries, and peer reviews were evaluated and accepted by human team members. Zero test results or deliverables were fabricated or accepted without real execution against PostgreSQL and browser suites; informal author walkthroughs, independent formal accessibility sign-off, Instructor Master Spec confirmation, and final release gates remain transparently separated without claiming premature completion.
 
 ---
 
@@ -6192,14 +6202,14 @@ To eliminate ambiguity between automated assertions, author manual inspection, a
 | :--- | :--- | :---: |
 | **Whole-product Parts A–D embedded verbatim** | Complete SRS, Inventory, Traceability, System SDS & 3-Sprint Plan inside PDF | **Complete** |
 | **All Sprint 1 Part E contracts embedded verbatim** | All 31 Part E docs (F-S1-01..05, Tutor Calendar & Option A UX Decisions, Shared Booking Data) inside PDF | **Complete** |
-| **Real working UI → API → PostgreSQL vertical slice** | Verified on React 19, Express 5, PostgreSQL 17.2 (local) & 18 (CI) at `sprint1@c4c599d` | **Complete** |
-| **Automated verification & a11y/contrast suite** | 209 distinct tests (34 Unit + 107 DB + 68 E2E incl. `auth.a11y.spec.ts` & `UX-CAL-08..09`) PASS on [CI Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176) & local checks; typecheck & build clean | **Complete** |
-| **Informal author manual accessibility walkthrough** | @Chxtamos (`2026-11-11` ICT on local Win11 `sprint1@c4c599d`): Keyboard, `375px` Mobile, `200%` Zoom, Screen Reader + E2E flow; 3 minor DOM/ARIA notes recorded (see §6.4; not independent sign-off) | **Complete (Author Check Only)** |
-| **Independent formal manual WCAG 2.2 AA & release sign-off** | Separate independent teammate/reviewer manual WCAG 2.2 AA & screen-reader release audit required before `sprint1 -> main` | **Pending Independent Sign-off** |
+| **Real working UI → API → PostgreSQL vertical slice** | Verified on React 19, Express 5, PostgreSQL 17.2 (local) & 18 (CI) at `sprint1@e34d770` | **Complete** |
+| **Automated verification & a11y/contrast suite** | 209 distinct tests (34 Unit + 107 DB + 68 E2E incl. `auth.a11y.spec.ts` & `UX-CAL-08..09`) PASS on [CI Run 43228964121](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43228964121) & [PR #55 Run 43230583518](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43230583518); local checks, typecheck & build clean | **Complete** |
+| **Informal author manual accessibility walkthrough** | @Chxtamos (`2026-11-11` ICT on local Win11, identical `apps/` to `sprint1@e34d770`): Keyboard, `375px` Mobile, `200%` Zoom, Screen Reader + E2E flow; 3 minor DOM/ARIA notes recorded (see §6.4; not independent sign-off) | **Complete (Author Check Only)** |
+| **Independent formal manual WCAG 2.2 AA & release sign-off** | Separate independent teammate/reviewer (@Tanaboonnnnn) manual WCAG 2.2 AA & screen-reader release audit (must record date, env, keyboard/screen-reader/zoom/error scope, PASS/FAIL, defects) required before approving PR #55 | **Pending Independent Sign-off** |
 | **Instructor Master Spec & Theme 1 formal sign-off** | Group Work Spec v1 Draft used as baseline; final Master Spec / Theme 1 confirmation not yet supplied | **Pending External Confirmation** |
-| **Reproducible README setup** | Owner DB + post-migration grants + seed env vars smoke-tested on PG 17.2 & aligned to PR #49 | **Complete** |
-| **Staging PR #49 re-review & `sprint1 -> main` release PR** | PR #49 remediation awaiting @Tanaboonnnnn re-review before separate reviewed `sprint1 -> main` release PR (`main` at `b501c18`) & tag | **Pending Peer Approval** |
-| **Private Student IDs & LEB2 External Submission** | Student IDs withheld from public repo; team supplies IDs & release PDF to LEB2 | **Pending Release & LEB2 Handoff** |
+| **Reproducible README setup** | Owner DB + post-migration grants + seed env vars smoke-tested on PG 17.2; release status & PR #55 provenance aligned | **Complete** |
+| **PR #49 & PR #54 Merged; Release PR #55 (`sprint1 -> main`)** | [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) (`e34d770`) & [PR #54](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/54) (`beb1a7a`) merged into `sprint1`; Release [PR #55](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/55) passed [CI Run 43230583518](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43230583518) (`3/3`) and is currently `CHANGES_REQUESTED` (`main` remains at `b501c18`). Reopened Issue [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) PR synchronizes Pre-Release Snapshot provenance into `sprint1`; **post-approval appendix update planned for final submission copy once PR #55 merges to `main`** | **Pending Peer Approval (Pre-Release Snapshot)** |
+| **Private Student IDs & LEB2 External Submission** | Student IDs withheld from public repo; after PR #55 merges to `main`, team records final `main` merge SHA/tag in appendix and supplies IDs + final PDF to LEB2 | **Pending Release & LEB2 Handoff** |
 
 ---
 
