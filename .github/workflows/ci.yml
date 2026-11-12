@@ -1,0 +1,157 @@
+name: NutTiew CI
+
+# CI only: no deployment, release, merge, repository mutation or real database.
+on:
+  pull_request:
+    branches: [sprint1, main]
+  push:
+    branches: [sprint1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuttiew-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Unit / types / build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout (read-only)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Node.js 24 with npm lockfile cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npm run db:generate
+      - name: Unit tests
+        run: npm test
+      - name: TypeScript typecheck (all workspaces)
+        run: npm run typecheck
+      - name: Production build (API and web)
+        run: npm run build
+
+  postgres:
+    name: PostgreSQL 18 / Auth / Slot / Race A
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Every job gets a fresh disposable database. NEVER use a real DB URL.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: nuttiew_ci
+          # Disposable, isolated GitHub runner ONLY; never enable on production.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nuttiew_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      CI: 'true'
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/nuttiew_ci
+      AUTH_CANONICAL_ORIGIN: http://localhost:5173
+      NODE_ENV: development
+      PORT: '3001'
+    steps:
+      - name: Checkout (read-only)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Node.js 24 with npm lockfile cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Generate ephemeral Auth HMAC keys
+        run: |
+          echo "AUTH_CSRF_HMAC_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "AUTH_RATE_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Generate Prisma client
+        run: npm run db:generate
+      - name: Apply real Auth + Slot + Booking migrations (BDF-01)
+        run: npm run db:migrate
+      - name: Exact sprint1 baseline upgrade with pre-existing rows (BDF-02)
+        run: bash .github/scripts/test-booking-baseline-upgrade.sh
+      - name: Configure non-owner runtime DB role
+        run: bash .github/scripts/prepare-test-db.sh
+      - name: PostgreSQL integration, ownership, barrier race and restart
+        run: npm run test:db
+
+  edge:
+    name: Microsoft Edge / Auth / Tutor UI E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: nuttiew_ci
+          # Disposable, isolated GitHub runner ONLY; never enable on production.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nuttiew_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      CI: 'true'
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/nuttiew_ci
+      AUTH_CANONICAL_ORIGIN: http://localhost:5173
+      NODE_ENV: development
+      PORT: '3001'
+    steps:
+      - name: Checkout (read-only)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Node.js 24 with npm lockfile cache
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Generate ephemeral Auth HMAC keys
+        run: |
+          echo "AUTH_CSRF_HMAC_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "AUTH_RATE_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Generate Prisma client
+        run: npm run db:generate
+      - name: Apply real Auth + Slot migrations
+        run: npm run db:migrate
+      - name: Configure non-owner runtime DB role
+        run: bash .github/scripts/prepare-test-db.sh
+      - name: Install Microsoft Edge and Linux browser dependencies
+        run: npx playwright install --with-deps msedge
+      - name: Browser E2E (including all existing Auth regressions)
+        run: npm run test:e2e -- --reporter=line,html
+      - name: Upload Playwright HTML report and failed traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-edge-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: warn

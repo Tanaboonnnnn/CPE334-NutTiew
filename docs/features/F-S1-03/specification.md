@@ -1,0 +1,152 @@
+# F-S1-03 — Customer Availability Discovery Feature SDS (Part E)
+
+> **2026-11-10 UX-only Option A amendment proposed (Issue #44, pending peer acceptance):** Replace only the Customer Availability page's simultaneous full-list presentation (`dateGroups.map(...)`) with **Option A — Date-First Monthly Calendar (Progressive Disclosure)** as requested in [Issue #15 comment #6763909620](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15#issuecomment-6763909620). See [dated UX decision](ui-decision-2026-11-10.md), [amended UI contract](ui-spec.md), and [`UX-CAL-01..10` STS](tests.md#2-ux-calendar-planned-sts). This follow-up is separate from Deliverable 1 ([#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) / PR [#43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43)).
+>
+> **Unchanged domain/security contract:** `GET /api/v1/customer/availability` remains unfiltered with zero query parameters (`BR-S1-20`, `OD-AV-03`), returning exact DTO allowlist (`slotId`, `tutorRef`, `startsAt`, `endsAt`, `meta.evaluatedAt`, `Cache-Control: no-store`), single PostgreSQL `T_view`, `OD-AV-01..08`, `OD-AV-02` display-name gate, `F-S1-04` CSRF/Session Binding/`T_elig`/SERIALIZABLE Booking safety, and `F-S1-05` `การจองของฉัน` tab.
+>
+> **`OD-002` conflict & provenance reconciliation:** [docs/srs.md](../../srs.md#13-open-decisions-and-approval-gates) and historical Part E (`PR #32`) §4/§5 below originally recorded `OD-002` (maximum advance horizon) as `OPEN`. Subsequently, [Issue #15 comments #6685976712 / #6721920473](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15#issuecomment-6685976712) and merged Part F [PR #37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37) (`apps/api/src/availability.ts`, `AVA-03`) confirmed and implemented **`OD-002 = 60 days`** evaluated at database `T_view` (`Slot.startsAt <= view_clock.evaluated_at + INTERVAL '60 days'`). Month navigation uses validated server offers + `meta.evaluatedAt` dynamically, never browser-clock filtering or hardcoded 2–3 month limits.
+>
+> **Mandatory sequential gate (Two-PR Gate):** Obtain independent peer review from @Tanaboonnnnn and merge this docs-only Part E amendment into `sprint1` before branching any Part F React/CSS/test implementation PR under Issue [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44). Historical `#15` baseline Part E/Part F artifacts remain merged via [PR #32](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32) and [PR #37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37).
+
+> **Historical baseline Part E note (PR #32):** Issue #15; provisional owner @Chxtamos; independent peer reviewer @Tanaboonnnnn. Decision states below reflect the peer-review decision record in PR #32 comment [#6683929084](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32#issuecomment-6683929084). These are engineering/design decisions, not new stakeholder business rules. This change does not implement UI/API code, add a migration, execute tests or close the issue.
+
+## 1. Authority and scope
+
+Sources: [Sprint 1 requirements](../../requirements.md) (FR-S1-08/09/13/18, AC-S1-15..18, BR-S1-06/07/09/10/11/12/15/17/20/21, NFR-S1-01/07/08/09/10/12, Q28), [SRS](../../srs.md), [System SDS](../../system-sds.md), [Feature Inventory](../../features.md), [Traceability](../../traceability.md), [AGENTS.md](../../../AGENTS.md), accepted [Auth contract](../F-S1-01/specification.md) and [Tutor Slot contract](../F-S1-02/specification.md).
+
+**Outcome:** an authenticated Customer discovers a real eligible Tutor Slot, identifies the Tutor using an approved public display name when its data gate is cleared (otherwise an opaque Tutor reference), sees Bangkok start/end time, and selects that offer without seeing another Customer's private Booking data.
+
+**In scope:** Customer-only read access to current Offered Slots; Customer-specific bookability projection; safe Tutor/Slot references; a conditional Tutor public-display-name data gate; UTC API and Asia/Bangkok UI time; privacy allowlist; loading/empty/error/retry/session-change states; planned API, DB, browser, timezone and privacy tests.
+
+**Out of scope:** Booking create/confirm/history/detail (#16/#17); Tutor Slot management/dashboard (#14); public/anonymous discovery; any unapproved Tutor profile/name/email/phone or Customer identity; subject, rating, price, location, messaging, payments, notifications, cancellation/reschedule, recurring Slots; new Tutor hours, weekdays, holidays, maximum horizon or start-minute grid; any mutable Slot.isBooked flag or Booking schema owned by #15.
+
+Part E is documentation only. Part F must be a separate code-only branch/PR after this contract is peer-accepted.
+
+## 2. Dependencies and verified repository facts
+
+Issue #13 Auth and Issue #14 Tutor Slots/Dashboard are closed. PR #31 is merged into sprint1. This branch is based on sprint1 SHA 551a9469e3d3a7e8e3ae004a382862c4f3e87e0e.
+
+**Selected sequencing route — B: a separately scoped shared data foundation.** At this base, `apps/api/prisma/schema.prisma` contains User, Session, AuthAttemptBucket, AuthAttemptReservation and Slot, but no Booking model/table. `apps/api/src/slots.ts` currently projects Tutor own-list occupancy as Unoccupied because #16 has not introduced Booking; that projection is not a Customer-availability occupancy source.
+
+The team selected a separate Issue/PR for the shared Booking data foundation, with schema, migration, ownership and sequencing reviewed before either feature relies on it. The minimum persisted fields needed by this contract are `id`, `customerId`, `currentSlotId`, `startsAt`, `endsAt` and `status` (`Booked`/`Cancelled`); `currentSlotId` is the occupancy relation and the persisted Booking interval is the Customer-overlap source. Booking mutation remains owned by #16 and must not move into #15.
+
+**Foundation tracking (not yet created):** proposed implementation owner @Chxtamos; peer reviewer @Tanaboonnnnn; dependency links #15 and #16; exact foundation Issue/PR URL and reviewed migration/schema SHA are **TBD** until that separate work is created and accepted. This PR does not create the Issue/PR or approve a migration. Until the shared foundation is reviewed, merged and its exact SHA recorded against the Part F branch, occupancy-dependent Part F work is a hard **STOP GATE**. Do not invent `Slot.isBooked`, assume all Slots are unoccupied, or create a partial Booking schema under #15.
+
+## 3. Actors and journey
+
+| Actor | Result |
+|---|---|
+| Anonymous | 401; no offer data |
+| Authenticated Customer | 200 safe availability projection |
+| Authenticated Tutor | 403; no Customer availability payload |
+| Server | Derives Customer identity from live Session; derives eligibility from persisted Slot/Booking and database time |
+
+1. Customer opens the availability screen.
+2. UI verifies GET /api/v1/auth/me and requires trusted role Customer.
+3. UI calls the Customer availability GET with the same-origin HttpOnly Session cookie.
+4. Server enforces Session and Customer role, reads eligible offers and serializes only the approved allowlist.
+5. UI displays an approved Tutor public display name only after the separate data-approval gate; otherwise it displays the opaque Tutor reference. It also displays Bangkok start/end. Selecting a Slot changes transient UI state only; it is not a Booking or reservation.
+6. Later #16 receives only the selected Slot ID and independently rechecks offer state, occupancy, Q05 and all Booking rules in its authoritative transaction. A prior availability response is never a lock, lease or guarantee.
+
+## 4. Eligibility and time
+
+For one read, `T_view` is one database-authoritative instant sampled for the availability query. Under the confirmed Customer-specific bookable-only policy, include a Slot only when:
+
+1. lifecycle is Offered;
+2. no active Booking with status Booked references that Slot;
+3. startsAt - T_view is at least 60 minutes (60:00 included; 59:59 excluded);
+4. no Active Booking owned by the authenticated Customer overlaps this Slot, even when the existing Booking belongs to a different Tutor; and
+5. the persisted Slot interval and Tutor ownership remain valid under the accepted Slot contract.
+
+**Customer-specific overlap predicate (BR-S1-09/10, Q28):** derive the owner only from `principal.userId` supplied by the live Session. Exclude a candidate Slot when an existing Booking has `customerId = principal.userId`, `status = Booked`, and its persisted interval overlaps the candidate using half-open intervals: `booking.startsAt < slot.endsAt AND slot.startsAt < booking.endsAt`. A Cancelled Booking does not conflict; exact adjacency is allowed. This is an eligibility predicate only: the query may test existence but must not return or disclose any matching Booking or Customer data. The same Customer's overlapping Booking on another Tutor must make the candidate unavailable to that Customer; another Customer's Booking must not affect this Customer's overlap predicate.
+
+T_view is an indicative read timestamp, **not** #16's transactional T_elig. Booking T_elig must be sampled by the authoritative Booking transaction after relevant contention waits, immediately before the guarded write. The availability UI must never imply a displayed Slot is reserved or guaranteed to remain bookable.
+
+PostgreSQL stores TIMESTAMPTZ; API returns RFC 3339 UTC instants ending Z; UI formats explicitly with Asia/Bangkok regardless of device timezone. Never use browser time or a client timestamp for eligibility. OD-002 (maximum advance horizon) remains OPEN: this contract does not choose an upper bound and does not claim an approved unlimited horizon. Resolve OD-002 before Part F; do not silently add a horizon, hours, weekday, holiday or minute-grid policy.
+
+A Slot can become occupied or cross Q05 after T_view. If #16 later rejects a stale selection, UI shows non-success and refreshes; #15 does not create a fake Booking endpoint.
+
+## 5. Peer-review decision record
+
+The following states record the decisions in [PR #32 comment #6683929084](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32#issuecomment-6683929084). “Confirmed” means the team engineering/design choice recorded by peer review; it does not claim a new stakeholder business rule or implementation/test completion.
+
+| ID | Decision / contract | Status |
+|---|---|---|
+| OD-AV-01 Display | Customer-specific bookable-only: return/display only Slots that pass current Slot offer, occupancy, Q05 and the authenticated Customer's BR-S1-09/10 overlap rules at `T_view`. | **CONFIRMED design choice**; not a Booking guarantee. |
+| OD-AV-02 Tutor identity | Desired UI identity is an approved Tutor public display name. Do not read/add/publish a name until its source, owner/consent, field, migration and allowlist are approved. Until then use opaque `tutorRef`. | **CONDITIONAL DATA-APPROVAL GATE**. |
+| OD-AV-03 List | No filters or pagination in Sprint 1; stable order `startsAt ASC → tutorRef ASC → slotId ASC`. | **CONFIRMED technical constraint**; not an unlimited-horizon decision. |
+| OD-AV-04 Clock | One PostgreSQL `T_view` per read; `meta.evaluatedAt` is present for both populated and empty success responses. | **CONFIRMED**; not a substitute for #16 `T_elig`. |
+| OD-AV-05 Occupancy | Exclude a Slot through active `Booking.status = Booked` and `Booking.currentSlotId = Slot.id`; never store duplicate `Slot.isBooked`. Customer overlap is a separate owner-derived interval predicate. | **CONFIRMED invariant**; schema-dependent Part F STOP GATE. |
+| OD-AV-06 Error/privacy | Reuse existing API/session security, Customer role, session binding, request ID/error envelope, `Cache-Control: no-store`, and distinguish error from empty. | **CONFIRMED**. |
+| OD-AV-07 Performance | Record p95 under a reproducible Part F workload; ≤2.0s remains a proposed reference only. | **NON-BLOCKING MEASUREMENT**; no pass/fail threshold approved. |
+| OD-AV-08 Visual | Customer UI remains light/readable but shares NutTiew brand, typography, related colors/accents, spacing, components, focus and navigation patterns with Tutor Dashboard. Role-specific layouts are allowed within one design system. | **CONFIRMED design direction**. |
+| OD-002 Horizon | No maximum advance horizon, working hours, weekday, holiday or minute-grid rule is selected. | **OPEN**; resolve before Part F. |
+| #15 ↔ #16 data foundation | Use a separately scoped shared Booking data-foundation Issue/PR (route B); record owner, reviewer, dependency links and exact accepted schema SHA. | **SELECTED; NOT CREATED**. Part F STOP GATE remains. |
+| NFR-S1-09 accessibility | Plan keyboard, focus, announcements and responsive checks; collect actual evidence in Part F. | **TEST PLAN ACCEPTED**; no WCAG 2.2 AA or 44px conformance claim. |
+
+### Conditional Tutor public-display-name gate
+
+- **Proposed source:** an explicit public display name supplied/maintained by the Tutor; never derive it from `User.email`, login credentials or a guessed profile field.
+- **Proposed field/type:** nullable `User.tutorDisplayName` (`String?` / PostgreSQL `TEXT`), used only for Tutor accounts. This is a candidate contract, not an approved schema change.
+- **Data owner and permission:** the Tutor is the source/data owner and must explicitly opt in to customer-facing display. The product/stakeholder owner must record approval for publication; @Chxtamos owns this feature contract and @Tanaboonnnnn is the peer reviewer. Record the actual approving stakeholder and consent rule before migration.
+- **Migration/seed:** only a separate reviewed forward-only migration after the data gate is accepted; no default, no backfill from email, and existing Tutors remain `NULL`. Seed only clearly test-only synthetic values in isolated test fixtures; never present fixture names as real Tutor identity.
+- **API/UI allowlist:** until the gate is cleared, omit `tutorDisplayName` and show `tutorRef`. After approval, add only the approved nullable field to the response allowlist and render it only when present; never add email, phone or other profile fields.
+- **Privacy evidence:** planned AVA-18 verifies no name is inferred from email, no unapproved field is returned, and—only after approval—the approved display field is the sole additional Tutor identity field. AVA-05 continues to inspect the full response allowlist.
+
+## 6. Acceptance and traceability
+
+| Source | F-S1-03 outcome | Planned STS |
+|---|---|---|
+| FR-S1-08 / AC-S1-15 | Customer identifies a specific Tutor using approved display name after its gate, otherwise opaque reference, plus Slot start/end | AVA-01, AVA-05, AVA-18 |
+| FR-S1-09 / AC-S1-16 | Anything shown as bookable is current, unoccupied, outside Q05 cutoff and non-overlapping for this Customer | AVA-02, AVA-03, AVA-15, AVA-16, AVA-17 |
+| AC-S1-17 | Stale offer is revalidated by #16; no false Booking success | AVA-11 |
+| AC-S1-18 / BR-S1-12 | Bangkok time meaning is independent of device locale | AVA-04 |
+| BR-S1-06/07/08/09/10/11/15/17/20/21 | Distinct Tutor offers, Slot occupancy, Q05/future-time eligibility, Customer-specific non-overlap and adjacency, role and privacy | AVA-02/03/05/06/07/15/16/17 |
+| FR-S1-18 | Failed/unauthorized reads communicate non-success without private disclosure or false availability | AVA-05/06/10 |
+| NFR-S1-01/08 | Deny anonymous/wrong role; no secret or private Booking leakage | AVA-05/06/12 |
+| NFR-S1-07/12 | Reproducible evidence, stable IDs and reviewed PR | Part F ledger/PR |
+| NFR-S1-09 | Keyboard, focus, announcements and responsive behavior are planned for manual/browser verification | AVA-13 |
+| NFR-S1-10 | Record p95 and workload evidence; ≤2.0s is non-blocking and not an approved threshold | AVA-14 |
+| OD-AV-08 | Customer and Tutor screens share NutTiew brand, typography, spacing, colors/accents, components, focus and navigation patterns with role-specific layouts | AVA-19 |
+
+Whole-product trace anchors: FR-008/009, NFR-007/009/010, VAL-006/009/033/036, VC-S1-13/TEST-S1-13, VC-S1-15/TEST-S1-15, VC-S1-22/TEST-S1-22 and VC-S1-36/TEST-S1-36. These are planned links, not test results.
+
+## 7. Definition of Done
+
+### Part E
+- [ ] Five cross-linked documents exist: Feature SDS, UI spec, API spec, data spec and STS.
+- [ ] FR-S1-08/09 and AC-S1-15..18 map to explicit rules, response fields, UI states and tests.
+- [ ] PR #32 peer decisions are recorded with explicit CONFIRMED / CONDITIONAL / OPEN / STOP GATE states; no engineering choice is mislabeled as stakeholder business approval.
+- [ ] Customer-specific bookable-only predicate includes same-Customer cross-Tutor overlap and half-open adjacency; owner comes only from the live Session.
+- [ ] Empty success response always contains DB `meta.evaluatedAt` and `Cache-Control: no-store`; query returns one metadata row even when there are no offers.
+- [ ] Tutor public display name remains behind its source/consent/schema/migration/allowlist gate; no email-derived or invented production name is exposed.
+- [ ] Response allowlist excludes Customer identity/Booking data, credentials, Session fields and unrestricted Tutor fields.
+- [ ] Shared data-foundation route B is recorded with proposed owner/reviewer/dependencies; exact Issue/PR and schema SHA remain pending, so Part F is blocked until accepted. No fake occupancy flag is added.
+- [ ] Markdown links/structure and git diff --check pass.
+- [ ] PR contains only the five F-S1-03 Markdown files, targets sprint1, links #15 and requests @Tanaboonnnnn.
+- [ ] PR stays open for independent human review; no self-approval or self-merge.
+
+### Part F — separate implementation PR
+- [ ] Start from updated sprint1 after Part E acceptance and the separately reviewed/merged shared Booking data foundation; record its exact schema SHA.
+- [ ] Implement Customer-only UI → Express API → PostgreSQL read projection from real Slot and Booking rows.
+- [ ] Verify occupied exclusion, Customer-specific cross-Tutor overlap and adjacency, Q05 boundary, approved Tutor-name allowlist gate, Bangkok rendering, auth/role denial, empty/error/retry and session-change privacy.
+- [ ] Run keyboard/focus/announcement/responsive checks and record evidence; do not claim WCAG 2.2 AA or a 44px target pass without the corresponding assessment.
+- [ ] Record real commands/results, DB/migration, source SHA and hosted CI.
+- [ ] Open separate code-only PR into sprint1 and obtain peer review.
+
+**Verification boundary:** this Part E change is documentation only. No build, API test, migration, Booking query, browser E2E, performance benchmark or accessibility audit is claimed as run or passed.
+
+## 8. UX follow-up amendment gate (Issue #44)
+
+### Issue #44 Part E — docs-only UX amendment
+- [ ] Updated Option A specs cross-linked consistently across [UX decision 2026-11-10](ui-decision-2026-11-10.md), [UI spec](ui-spec.md), [STS](tests.md#2-ux-calendar-planned-sts), this SDS, and [F-S1-04 UI cross-reference](../F-S1-04/ui-spec.md).
+- [ ] Resolved Part E design choices explicitly recorded: 6 default time groups + `ดูเวลาเพิ่มเติม`, no morning/afternoon/evening filter chips, and non-sticky inline `#selected-offer-summary` placed directly after the day's time list.
+- [ ] Phase 1 boundary preserved: `GET /api/v1/customer/availability` uses zero query parameters (`400 INVALID_INPUT` on unknown query), unchanged DTO/privacy allowlist, unchanged `F-S1-04` CSRF/Session Binding/`T_elig`/SERIALIZABLE locking, and unchanged `F-S1-05` `การจองของฉัน` tab.
+- [ ] `OD-002` (`60 days` at DB `T_view` vs initial `PR #32` / `docs/srs.md` `OPEN` status) reconciled with provenance instead of silent overwrite.
+- [ ] `UX-CAL-01..10` planned without renumbering `AC-S1-01..35` or `AVA-01..19`; no `apps/`, `e2e/`, or schema files touched.
+- [ ] Docs-only PR targets `sprint1`, links `#44` (and references `#15`/`#16`), requests @Tanaboonnnnn peer review, and waits open for approval before any Part F code begins.
+
+### Issue #44 Part F — separate implementation PR
+- [ ] Branch fresh from merged `sprint1` only after Part E acceptance and implement client-side Option A monthly calendar & CSS responsive layout in `apps/web/src/customer-availability.tsx` / `.css`.
+- [ ] Execute `UX-CAL-01..10` plus full `AVA-*`, `BOOK-*`, and `RET-*` regressions against real PostgreSQL and Microsoft Edge (`320/375/768/1280` CSS px screenshots, `500+` seeded offers, cross-year & leap-year checks, `UTC`/`America/Los_Angeles` tz checks, failed-GET/malformed-DTO/logout/unknown-outcome checks) on exact CI HEAD.
+- [ ] Distinguish automated checks cleanly from manual human WCAG 2.2 AA audit (**NOT RUN** unless performed by human reviewer).

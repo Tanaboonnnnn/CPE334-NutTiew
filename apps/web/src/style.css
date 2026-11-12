@@ -1,0 +1,255 @@
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--nuttiew-font-sans);
+  color: var(--nuttiew-ink);
+  background: var(--nuttiew-canvas);
+}
+
+/* F-S1-01 Auth shell & card aligned to NutTiew Navy + Orange design tokens */
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--nuttiew-canvas);
+  color: var(--nuttiew-ink);
+}
+
+.panel {
+  position: relative;
+  overflow: hidden;
+  width: min(100%, 440px);
+  background: var(--nuttiew-surface);
+  border: 1px solid var(--nuttiew-card-border);
+  border-radius: var(--nuttiew-radius-card);
+  box-shadow: var(--nuttiew-shadow-card);
+  padding: calc(clamp(20px, 5vw, 32px) + 4px) clamp(20px, 5vw, 32px) clamp(20px, 5vw, 32px);
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: var(--nuttiew-navy);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.auth-brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: var(--nuttiew-orange);
+  color: var(--nuttiew-navy-deep);
+  border: 1px solid var(--nuttiew-orange-border);
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+}
+
+.auth-brand-name {
+  display: block;
+  color: var(--nuttiew-navy);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.eyebrow {
+  margin: 3px 0 0;
+  color: var(--nuttiew-orange-dark);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.panel h1 {
+  margin: 0 0 6px;
+  color: var(--nuttiew-navy);
+  font-size: 1.55rem;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  margin: 0 0 22px;
+  color: var(--nuttiew-muted);
+  font-size: 0.94rem;
+  line-height: 1.6;
+}
+
+.panel a {
+  color: var(--nuttiew-navy);
+  font-weight: 600;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.panel a:hover {
+  color: var(--nuttiew-orange-dark);
+}
+
+.panel label {
+  display: block;
+  margin: 16px 0 8px;
+  color: var(--nuttiew-navy);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.panel input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 13px;
+  border: 2px solid var(--nuttiew-control-border);
+  border-radius: var(--nuttiew-radius-input);
+  background: var(--nuttiew-surface);
+  color: var(--nuttiew-ink);
+  font-family: inherit;
+  font-size: 1rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.panel input:hover:not(:disabled) {
+  border-color: var(--nuttiew-navy);
+}
+
+.panel input[aria-invalid='true'] {
+  border-color: var(--nuttiew-error);
+  background: #fffafa;
+}
+
+.panel input:focus-visible,
+.panel button:focus-visible,
+.panel a:focus-visible {
+  outline: 3px solid var(--nuttiew-focus);
+  outline-offset: 3px;
+}
+
+.panel button {
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 16px;
+  margin-top: 20px;
+  background: var(--nuttiew-orange);
+  color: var(--nuttiew-navy-deep);
+  border: 1px solid var(--nuttiew-orange-border);
+  border-radius: var(--nuttiew-radius-control);
+  box-shadow: var(--nuttiew-shadow-cta);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.panel button:hover:not(:disabled) {
+  background: var(--nuttiew-orange-hover);
+  border-color: var(--nuttiew-orange-border-hover);
+}
+
+.panel button.secondary {
+  background: var(--nuttiew-surface);
+  color: var(--nuttiew-navy);
+  border: 1.5px solid var(--nuttiew-control-border);
+  box-shadow: none;
+  margin-top: 14px;
+  font-weight: 650;
+}
+
+.panel button.secondary:hover:not(:disabled) {
+  background: var(--nuttiew-surface-hover);
+  border-color: var(--nuttiew-navy);
+}
+
+.panel button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.auth-status {
+  margin: 16px 0 0;
+  padding: 11px 14px;
+  border-radius: var(--nuttiew-radius-input);
+  background: var(--nuttiew-surface-muted);
+  border: 1px solid var(--nuttiew-border);
+  color: var(--nuttiew-navy);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.panel .error {
+  margin: 16px 0 0;
+  padding: 11px 14px;
+  border-radius: var(--nuttiew-radius-input);
+  background: var(--nuttiew-error-bg);
+  border: 1px solid var(--nuttiew-error-border);
+  color: var(--nuttiew-error);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.panel .success {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: var(--nuttiew-radius-input);
+  background: var(--nuttiew-success-bg);
+  border: 1px solid var(--nuttiew-success-border);
+  color: var(--nuttiew-success);
+  font-weight: 700;
+}
+
+.auth-identity-row {
+  margin: 8px 0;
+  color: var(--nuttiew-ink);
+}
+
+.auth-identity-row strong {
+  color: var(--nuttiew-navy);
+}
+
+.footnote {
+  margin: 22px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--nuttiew-border);
+  color: var(--nuttiew-muted);
+  font-size: 0.84rem;
+}
+
+@media (max-width: 375px) {
+  .auth-shell {
+    padding: 16px;
+  }
+  .panel {
+    padding: 24px 16px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel *,
+  .panel *::before,
+  .panel *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
