@@ -9,9 +9,9 @@ CPE334 Software Engineering Project (Semester 1/2026)
 
 Sprint 1 delivers a fully functional, peer-reviewed vertical slice spanning **Responsive Web UI → Express 5 REST API Application → Persistent PostgreSQL Database**. All five planned Sprint 1 features (**F-S1-01** through **F-S1-05**) have been formally specified in Part E contracts, peer-reviewed, implemented in Part F, and verified through comprehensive automated test suites (Unit, Real PostgreSQL Concurrency, and Browser E2E).
 
-- **Current Staging / Integration Branch:** `sprint1`
-- **Release Target:** `main` (via reviewed integration PR after PR #43 approval)
-- **CI / Quality Gate:** [NutTiew CI Workflow](.github/workflows/ci.yml) (Node 24, Typecheck, Build, PostgreSQL Integration, Microsoft Edge E2E)
+- **Current Staging / Integration Branch:** `sprint1` (verified at `c4c599d`, [CI Run 42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176))
+- **Release Target:** `main` (via separately reviewed release PR after [PR #49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) approval and Independent Formal Manual WCAG 2.2 AA & Screen-Reader Release Sign-off)
+- **CI / Quality Gate:** [NutTiew CI Workflow](.github/workflows/ci.yml) (Node 24, Typecheck, Build, PostgreSQL 18 Integration, Microsoft Edge E2E)
 - **Deliverable 1 Report:** [CPE334 Deliverable 1 Report](docs/deliverables/deliverable-1.md) | [PDF Export](docs/deliverables/CPE334_Deliverable1_NutTiew.pdf)
 
 ---
@@ -57,13 +57,13 @@ Every feature strictly followed the **Part E (Contract/SDS/STS) first $\longrigh
 
 | Feature ID | Feature Name | Contract / SDS (Part E) | Part E PR | Implementation & Tests (Part F) | Part F PR | GitHub Issue |
 | :--- | :--- | :--- | :---: | :--- | :---: | :---: |
-| **F-S1-01** | Authentication, Sessions & Rate Limiting | [F-S1-01 Spec](docs/features/F-S1-01/specification.md) | [#25](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/25) | [Auth Implementation](docs/features/F-S1-01/implementation.md) | [#26](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/26) | [#13](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/13) |
+| **F-S1-01** | Authentication, Sessions & Rate Limiting | [F-S1-01 Spec](docs/features/F-S1-01/specification.md) | [#25](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/25) | [Auth Implementation](docs/features/F-S1-01/implementation.md) | [#26](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/26), [#51](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/51) | [#13](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/13), [#50](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/50) |
 | **F-S1-02** | Tutor Slot Availability & Scheduling | [F-S1-02 Spec](docs/features/F-S1-02/specification.md) | [#27](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/27), [#30](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/30) | [Slot Implementation](docs/features/F-S1-02/implementation.md) | [#28](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/28), [#31](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/31) | [#14](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/14) |
 | **Shared** | Booking Data Foundation (Schema & Triggers) | [Data Spec](docs/foundations/booking-data/data-spec.md) | [#34](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/34) | [Foundation Tests](apps/api/test/booking.foundation.db.test.ts) | [#36](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/36), [#40](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/40) | [#33](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/33), [#39](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/39) |
-| **F-S1-03** | Customer Availability Browse & Filter | [F-S1-03 Spec](docs/features/F-S1-03/specification.md) | [#32](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32) | [Availability Web UI](apps/web/src/customer-availability.tsx) | [#37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37) | [#15](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15) |
+| **F-S1-03** | Customer Availability Browse & Filter | [F-S1-03 Spec](docs/features/F-S1-03/specification.md) | [#32](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32), [#45](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/45) | [Availability Web UI](apps/web/src/customer-availability.tsx) | [#37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37), [#47](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/47) | [#15](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15), [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44) |
 | **F-S1-04** | Customer Booking & Race Prevention | [F-S1-04 Spec](docs/features/F-S1-04/specification.md) | [#35](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/35) | [Booking API & UI](docs/features/F-S1-04/implementation.md) | [#38](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/38) | [#16](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/16) |
 | **F-S1-05** | Booking Retrieval & Schedule View | [F-S1-05 Spec](docs/features/F-S1-05/specification.md) | [#41](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/41) | [Retrieval & Schedule UI](docs/features/F-S1-05/implementation.md) | [#42](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/42) | [#17](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/17) |
-| **D1-10** | Sprint 1 Release & Deliverable 1 PDF | [Three-Sprint Plan](docs/sprints/plan.md) | [#24](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/24) | [Deliverable 1 Report](docs/deliverables/deliverable-1.md) | [#43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43) | [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) |
+| **D1-10** | Sprint 1 Release & Deliverable 1 PDF | [Three-Sprint Plan](docs/sprints/plan.md) | [#24](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/24) | [Deliverable 1 Report](docs/deliverables/deliverable-1.md) | [#43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43), [#49](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/49) | [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18), [#48](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/48) |
 
 ---
 
@@ -196,24 +196,33 @@ Navigate to `http://localhost:5173` in your browser.
 
 The repository enforces closed-loop verification across all layers:
 
-### 1. Fast Unit & Contract Tests (29 Tests)
+### 1. Fast Unit & Contract Tests (34 Tests)
 ```bash
 npm test
 ```
-Tests pure domain logic: Bangkok timezone arithmetic, ISO-8601 validation, IP resolution, and runtime credential config boundaries.
+Tests pure domain and frontend helper logic (`29` API unit tests + `5` Web Option A calendar utility tests): Bangkok timezone arithmetic, ISO-8601 validation, IP resolution, runtime credential config boundaries, and calendar cell grouping.
 
 ### 2. Static Typecheck & Production Build
 ```bash
 npm run typecheck
 npm run build
 ```
-Validates zero TypeScript errors and bundles both `@nuttiew/api` and `@nuttiew/web`.
+Validates zero TypeScript errors across workspaces and bundles both `@nuttiew/api` and `@nuttiew/web`.
 
-### 3. Real PostgreSQL Integration & Concurrency Tests (106 Tests)
+### 3. Real PostgreSQL Integration & Concurrency Tests (107 Tests)
 ```bash
+# Hosted CI (PostgreSQL 18) default parallel run:
 npm run test:db -w @nuttiew/api
+
+# Local Windows PostgreSQL 17.2 sequential recommendation (avoids multi-file connection/Argon2id pool saturation):
+npx --workspace=@nuttiew/api vitest run --fileParallelism=false \
+  test/auth.db.test.ts test/auth.extended.db.test.ts test/guards.db.test.ts \
+  test/auth.boundary.db.test.ts test/auth.barrier.db.test.ts test/auth.crash.db.test.ts \
+  test/auth.http-clock.db.test.ts test/slots.db.test.ts test/slots.race.db.test.ts \
+  test/slots.restart.db.test.ts test/booking.foundation.db.test.ts \
+  test/availability.db.test.ts test/bookings.db.test.ts test/retrieval.db.test.ts
 ```
-Executes comprehensive integration tests against genuine PostgreSQL (`nuttiew_test`):
+Executes all 14 integration test files (`107` tests) against genuine PostgreSQL (`nuttiew_test` / `nuttiew`):
 - **Race A:** Concurrent slot creation by the same tutor (`SLOT-10/11` / `SQLSTATE 23P01`).
 - **Race B:** Concurrent booking on the same offered slot (`BOOK-10` / `SLOT_UNAVAILABLE` 409).
 - **Race C:** Concurrent overlapping bookings across different tutors (`BOOK-11` / `CUSTOMER_OVERLAP` 409).
@@ -221,15 +230,17 @@ Executes comprehensive integration tests against genuine PostgreSQL (`nuttiew_te
 - **Q05 Cutoff Drift:** Post-lock eligibility evaluation rejecting late submissions (`BOOK-17`).
 - **Process Restart Durability:** Verification that committed data survives child process termination and pool reconnection (`SLOT-02/14`, `RET-14`).
 
-### 4. Browser End-to-End Tests (64 Tests)
+### 4. Browser End-to-End Tests (68 Tests)
 ```bash
 npx playwright test
 ```
-Executes all 64 browser tests (against real API + PostgreSQL) including the end-to-end domain journey (`e2e/sprint1.journey.spec.ts` [test 39/64]).
+Executes all 68 Microsoft Edge tests (11/12 active spec files against real API + PostgreSQL), including the Sprint 1 vertical journey (`e2e/sprint1.journey.spec.ts`), Option A Monthly Calendar verification (`e2e/availability.calendar.spec.ts`, `4` tests), and Login/Auth theme & computed WCAG token checks (`e2e/auth.a11y.spec.ts`, `2` tests).
 
-$$\text{Total Distinct Automated Tests: } 29 \text{ (Unit)} + 106 \text{ (DB)} + 64 \text{ (E2E)} = \mathbf{199 \text{ Distinct Tests}}$$
+$$\text{Total Distinct Automated Tests: } 34 \text{ (Unit)} + 107 \text{ (DB)} + 68 \text{ (E2E)} = \mathbf{209 \text{ Distinct Tests}}$$
 
-*Note: Always verify CI run status on the exact target PR HEAD (`gh run view <run-id>`) ensuring all 3 workflow jobs (`Unit / types / build`, `PostgreSQL 18 / Auth / Slot / Race A`, `Microsoft Edge / Auth / Tutor UI E2E`) finish `SUCCESS`.*
+*Notes:*
+- *Verify CI run status on the exact target PR HEAD (`gh run view <run-id>`) ensuring all 3 workflow jobs (`Unit / types / build`, `PostgreSQL 18 / Auth / Slot / Race A`, `Microsoft Edge / Auth / Tutor UI E2E`) finish `SUCCESS` (e.g., `sprint1@c4c599d` verified cleanly on [CI Run #42979184176](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/42979184176)).*
+- *Accessibility status layers (see Deliverable 1 Part F §6.4 / §10): automated Playwright focus, target, contrast & reflow checks (`e2e/auth.a11y.spec.ts`, `UX-CAL-08..09`) `PASS`; informal author localhost walkthrough (`@Chxtamos`, `2026-11-11` ICT: Keyboard, `375px` Mobile, `200%` Zoom, Screen Reader + E2E flow) `PASS (Author Check Only)`; **Independent Formal Manual WCAG 2.2 AA & Screen-Reader Release Sign-off** remains `Pending Independent Sign-off` before `sprint1 -> main` release.*
 
 ---
 
