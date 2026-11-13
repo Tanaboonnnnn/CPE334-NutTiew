@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run test/security.test.ts test/client-ip.test.ts test/slot-time.test.ts test/config.test.ts",
-    "test:db": "vitest run test/auth.db.test.ts test/auth.extended.db.test.ts test/guards.db.test.ts test/auth.boundary.db.test.ts test/auth.barrier.db.test.ts test/auth.crash.db.test.ts test/auth.http-clock.db.test.ts test/slots.db.test.ts test/slots.race.db.test.ts test/slots.restart.db.test.ts test/booking.foundation.db.test.ts test/availability.db.test.ts test/bookings.db.test.ts test/retrieval.db.test.ts",
+    "test:db": "vitest run test/auth.db.test.ts test/auth.extended.db.test.ts test/guards.db.test.ts test/auth.boundary.db.test.ts test/auth.barrier.db.test.ts test/auth.crash.db.test.ts test/auth.http-clock.db.test.ts test/slots.db.test.ts test/slots.race.db.test.ts test/slots.restart.db.test.ts test/booking.foundation.db.test.ts test/availability.db.test.ts test/bookings.db.test.ts test/retrieval.db.test.ts test/readiness.db.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts"

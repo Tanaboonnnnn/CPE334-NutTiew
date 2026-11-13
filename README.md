@@ -194,6 +194,21 @@ npm run dev
 *(Windows PowerShell note: run `npm run dev -w @nuttiew/api` and `npm run dev -w @nuttiew/web` in two terminals.)*
 Navigate to `http://localhost:5173` in your browser.
 
+### 7. Cloud Readiness (GH-01 — pre-Docker prep)
+
+Run the same Sprint 1 app in a disposable/cloud-style runtime without changing domain behavior:
+
+- **Host / port:** the API binds `0.0.0.0` so a container/load balancer can reach it, reading `PORT` from the environment (defaults to `3001`). Local development is unchanged. Sessions remain PostgreSQL-backed (the `Session` table), not in-memory.
+- **Readiness:** `GET /api/ready` is unauthenticated and probes the restricted runtime pool with `SELECT 1`. Response is `200 {"status":"ready"}` when the database is reachable and `503` (standard error envelope, `SERVICE_UNAVAILABLE`) when it is not. No DB URL, password, SQL error or stack trace is ever returned.
+- **Environment:** required — `DATABASE_URL` (migration/admin only), `DATABASE_URL_APP` (restricted API runtime; startup fails closed without it), `AUTH_CSRF_HMAC_KEY`, `AUTH_RATE_KEY`, `AUTH_CANONICAL_ORIGIN`, `NODE_ENV`, `PORT`. Optional — `AUTH_CSRF_KEY_VERSION` / `AUTH_CSRF_PREVIOUS_*` (rotation), `AUTH_TRUSTED_PROXIES` (reverse-proxy IPs), `SEED_EMAIL` / `SEED_PASSWORD` / `SEED_ROLE` (idempotent seed), `DATABASE_URL_BOOKING_PROBE` (test-only). See [`.env.example`](.env.example).
+- **Same-origin & HTTPS:** the API rejects cross-site `Origin`/CSRF. In a cloud runtime the UI and API must be served from the **same origin** over **HTTPS**, and `AUTH_CANONICAL_ORIGIN` must be that public HTTPS origin; production cookies are `Secure` (`SameSite=Lax`), so a plain HTTP origin in production breaks session/CSRF.
+- **Verification status (GH-01):**
+  - *Verified locally:* API host binding on `0.0.0.0`, runtime `PORT` support (code inspection and pre-PR smoke evidence), readiness handler behavior, `npm ci`, `npm run db:generate`, `npm test` (34/34), `npm run typecheck`, `npm run build`, and `git diff --check`.
+  - *Verified with injected Pool test doubles:* `GET /api/ready` fails closed with `503` and does not leak connection/SQL details when `query()` rejects (READY-03/04).
+  - *Verified in isolated GitHub Actions CI:* [run 43403576375](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43403576375) passed all 3 jobs. PostgreSQL 18 `test:db` passed **111/111**, including real-DB readiness READY-01/02 and all four readiness tests (READY-01..04 **4/4**); Microsoft Edge E2E passed. CI E2E starts `server.ts` at its default `PORT=3001`; it is not evidence of a non-default `PORT` override.
+  - *NOT RUN locally:* real-PostgreSQL readiness success, full database integration, and browser E2E because an isolated local test database and credentials were unavailable; these checks **were run in CI** as described above.
+  - *Pending in later issues (not part of GH-01):* Docker image (GH-02, #61) and GCP/Cloud SQL integration (later phase).
+
 ---
 
 ## Verification & Automated Test Suites
