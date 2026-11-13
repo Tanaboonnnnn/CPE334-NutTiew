@@ -18,12 +18,12 @@
     "@prisma/adapter-pg": "^7.10.0",
     "argon2": "^0.45.0",
     "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.0",
     "express": "^5.2.0",
     "pg": "^8.16.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "dotenv": "^17.2.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",

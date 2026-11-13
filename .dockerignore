@@ -1,0 +1,37 @@
+# ---- VCS / IDE ----
+.git
+.gitignore
+.gitattributes
+*.md
+# (docs/README.md are excluded from the image; they are not runtime artifacts)
+
+# ---- Dependencies / build outputs (never bake host state) ----
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+
+# ---- Secrets / local environment (never in the image) ----
+.env
+.env.*
+!.env.example
+compose/.env.local
+compose/db.local.env
+
+# ---- Logs / test artifacts ----
+*.log
+coverage
+playwright-report
+test-results
+
+# ---- Not needed to build or run the application ----
+docs
+e2e
+.github
+scripts
+playwright.config.ts
+package-lock-DEBUG.json
+.vscode
+.idea
+.DS_Store

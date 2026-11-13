@@ -1,0 +1,114 @@
+# ----------------------------------------------------------------------------
+# NutTiew local Docker Compose (GH-02, Issue #61)
+# Runs: persistent PostgreSQL 18 + one-shot migration/grants + the NutTiew app
+# (built React UI and Express API on a single origin), plus an optional idempotent
+# seed step.
+#
+# Secrets are read from the repository-root .env (auto-loaded by Compose) or the
+# shell environment. Copy .env.example -> .env and fill placeholders. All Compose
+# secrets use `:?` so a missing value fails loudly instead of using an unsafe
+# default.
+# ----------------------------------------------------------------------------
+services:
+  db:
+    image: postgres:18
+    environment:
+      # Superuser used only to bootstrap roles/extensions on first init of a
+      # fresh volume. Never used by the application runtime.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: nuttiew
+      # Role passwords consumed by compose/db-init.sh (never baked into image).
+      DB_OWNER_PASSWORD: ${DB_OWNER_PASSWORD:?set DB_OWNER_PASSWORD}
+      DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:?set DB_RUNTIME_PASSWORD}
+    volumes:
+      # Postgres 18 image requires the mount at /var/lib/postgresql (data lands
+      # in a version-specific subdirectory) so the volume persists across restart.
+      - nuttiew_pg_data:/var/lib/postgresql
+      - ./compose/db-init.sh:/docker-entrypoint-initdb.d/01-db-init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nuttiew"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    # Keep the DB off the public interface; only other Compose services reach it
+    # via the internal `db` hostname. No host port is published by default.
+    expose:
+      - "5432"
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    working_dir: /app/apps/api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Migration/admin credential, applied to schema by the owner role only.
+      DATABASE_URL: postgresql://nuttiew_owner:${DB_OWNER_PASSWORD:?set DB_OWNER_PASSWORD}@db:5432/nuttiew?schema=public
+    # Performs migrations, then grants least-privilege runtime rights.
+
+  app:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      # Restricted non-owner runtime account; the app never uses the admin role.
+      DATABASE_URL_APP: postgresql://nuttiew_runtime:${DB_RUNTIME_PASSWORD:?set DB_RUNTIME_PASSWORD}@db:5432/nuttiew?schema=public
+      AUTH_CSRF_HMAC_KEY: ${AUTH_CSRF_HMAC_KEY:?set AUTH_CSRF_HMAC_KEY}
+      AUTH_RATE_KEY: ${AUTH_RATE_KEY:?set AUTH_RATE_KEY}
+      # Local-HTTP Compose is DEVELOPMENT-ONLY: NODE_ENV is not "production", so
+      # cookies are NOT forced Secure (required for the browser to send them over
+      # http://localhost). Cloud/HTTPS production must set NODE_ENV=production and
+      # the public https origin.
+      NODE_ENV: development
+      AUTH_CANONICAL_ORIGIN: http://localhost:${NUTTIEW_HTTP_PORT:-3001}
+      AUTH_CSRF_KEY_VERSION: v1
+      AUTH_TRUSTED_PROXIES: ""
+      PORT: "3001"
+    ports:
+      # Private-only host binding (local Compose); container listens on 3001.
+      - "127.0.0.1:${NUTTIEW_HTTP_PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  # Optional idempotent demo-user seeding. Runs with: --profile seed
+  # e.g. docker compose --profile seed run --rm seed
+  seed:
+    build:
+      context: .
+      target: runtime
+    profiles: ["seed"]
+    working_dir: /app/apps/api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL_APP: postgresql://nuttiew_runtime:${DB_RUNTIME_PASSWORD:?set DB_RUNTIME_PASSWORD}@db:5432/nuttiew?schema=public
+      # Not required for a normal `docker compose up`; set them (e.g. in .env)
+      # before running the seed profile so the idempotent demo user is created.
+      SEED_EMAIL: ${SEED_EMAIL:-}
+      SEED_PASSWORD: ${SEED_PASSWORD:-}
+      SEED_ROLE: ${SEED_ROLE:-}
+    command: ["node", "dist/prisma/seed.js"]
+
+# Project-scoped by default: with NUTTIEW_DB_VOLUME unset Compose names this
+# volume "<compose_project>_nuttiew_pg_data", so independent Compose projects
+# cannot silently share one database. To reuse an EXISTING local volume by its
+# exact name (e.g. from the earlier GH-02 "nuttiew_pg_data"), set
+# NUTTIEW_DB_VOLUME=<that-name> in the environment or .env. Never mount the same
+# PostgreSQL data volume into two running db containers at once - stop the old
+# project/service first. Existing data is never deleted, copied or migrated here.
+volumes:
+  nuttiew_pg_data:
+    name: ${NUTTIEW_DB_VOLUME:-}
