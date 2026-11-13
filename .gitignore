@@ -8,3 +8,6 @@ coverage/
 playwright-report/
 test-results/
 *.tsbuildinfo
+# Docker/Compose local secret files (GH-02); never commit.
+compose/.env.local
+compose/db.local.env
