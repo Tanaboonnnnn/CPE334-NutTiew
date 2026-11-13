@@ -19,7 +19,8 @@ jobs:
   quality:
     name: Unit / types / build
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Raised to fit the production Docker image build on a cold runner.
+    timeout-minutes: 30
     steps:
       - name: Checkout (read-only)
         uses: actions/checkout@v7
@@ -40,6 +41,23 @@ jobs:
         run: npm run typecheck
       - name: Production build (API and web)
         run: npm run build
+      # GH-03 (Issue #62): build the production Docker runtime image from the
+      # checked-out repository so a Docker failure fails this required job.
+      # Uses the repository-root Dockerfile's "runtime" target; the .dockerignore
+      # excludes host node_modules/dist/.env so the image is built from tracked
+      # lockfile + source only. A non-zero exit fails the job and blocks merge.
+      - name: Docker production image build (runtime target, GH-03)
+        run: docker build --target runtime -t nuttiew-ci:verify .
+      # GH-03: validate the docker-compose.yml structure offline with synthetic
+      # placeholder values only; no real database, no cloud, no credentials.
+      - name: Compose config validation (offline, synthetic values)
+        run: |
+          POSTGRES_PASSWORD=ci-only-postgres-placeholder \
+          DB_OWNER_PASSWORD=ci-only-owner-placeholder \
+          DB_RUNTIME_PASSWORD=ci-only-runtime-placeholder \
+          AUTH_CSRF_HMAC_KEY=$(openssl rand -hex 32) \
+          AUTH_RATE_KEY=$(openssl rand -hex 32) \
+          docker compose config --quiet
 
   postgres:
     name: PostgreSQL 18 / Auth / Slot / Race A
