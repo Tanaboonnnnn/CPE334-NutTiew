@@ -194,6 +194,20 @@ npm run dev
 *(Windows PowerShell note: run `npm run dev -w @nuttiew/api` and `npm run dev -w @nuttiew/web` in two terminals.)*
 Navigate to `http://localhost:5173` in your browser.
 
+### 7. Cloud Readiness (GH-01 — pre-Docker prep)
+
+Run the same Sprint 1 app in a disposable/cloud-style runtime without changing domain behavior:
+
+- **Host / port:** the API binds `0.0.0.0` so a container/load balancer can reach it, reading `PORT` from the environment (defaults to `3001`). Local development is unchanged. Sessions remain PostgreSQL-backed (the `Session` table), not in-memory.
+- **Readiness:** `GET /api/ready` is unauthenticated and probes the restricted runtime pool with `SELECT 1`. Response is `200 {"status":"ready"}` when the database is reachable and `503` (standard error envelope, `SERVICE_UNAVAILABLE`) when it is not. No DB URL, password, SQL error or stack trace is ever returned.
+- **Environment:** required — `DATABASE_URL` (migration/admin only), `DATABASE_URL_APP` (restricted API runtime; startup fails closed without it), `AUTH_CSRF_HMAC_KEY`, `AUTH_RATE_KEY`, `AUTH_CANONICAL_ORIGIN`, `NODE_ENV`, `PORT`. Optional — `AUTH_CSRF_KEY_VERSION` / `AUTH_CSRF_PREVIOUS_*` (rotation), `AUTH_TRUSTED_PROXIES` (reverse-proxy IPs), `SEED_EMAIL` / `SEED_PASSWORD` / `SEED_ROLE` (idempotent seed), `DATABASE_URL_BOOKING_PROBE` (test-only). See [`.env.example`](.env.example).
+- **Same-origin & HTTPS:** the API rejects cross-site `Origin`/CSRF. In a cloud runtime the UI and API must be served from the **same origin** over **HTTPS**, and `AUTH_CANONICAL_ORIGIN` must be that public HTTPS origin; production cookies are `Secure` (`SameSite=Lax`), so a plain HTTP origin in production breaks session/CSRF.
+- **Verification status (GH-01):**
+  - *Verified by checks:* host binding on `0.0.0.0` + `PORT` from environment, readiness endpoint logic and its test file, `npm ci`/`db:generate`/`test`/`typecheck`/`build`, and `git diff --check`.
+  - *Verified using test doubles:* readiness fail-closed (503) and no-leak-on-failure paths — deterministic injected Pool doubles whose `query()` rejects; these run without a database.
+  - *NOT RUN (requires an isolated test database):* the real-PostgreSQL readiness success path and the full `test:db` / DB integration and E2E suites — there was no isolated test DB/credential available locally, and production credentials or altering an existing database were not used.
+  - *Pending in later issues (not part of GH-01):* Docker image (GH-02, #61) and GCP/Cloud SQL integration (later phase). No claim is made here of a verified live DB privilege test without the corresponding observed run.
+
 ---
 
 ## Verification & Automated Test Suites
