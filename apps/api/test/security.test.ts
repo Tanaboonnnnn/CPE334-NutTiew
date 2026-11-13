@@ -6,4 +6,9 @@ describe('auth primitives',()=>{
  it('separates account and IP HMAC buckets',()=>{const key=randomBytes(32);expect(hmac(key,'account','x').equals(hmac(key,'ip','x'))).toBe(false);});
  it('generates stable session-bound CSRF MAC',()=>{const key=randomBytes(32),nonce=randomBytes(32),id='6b58c08c-07d9-4939-8a9e-711f43cebe38';const t=csrf(key,id,nonce);expect(csrf(key,id,nonce)).toBe(t);expect(safeTokenMatch(t,t)).toBe(true);expect(safeTokenMatch(t,csrf(key,'5b58c08c-07d9-4939-8a9e-711f43cebe38',nonce))).toBe(false);expect(safeTokenMatch('bad',t)).toBe(false);});
  it('hashes session tokens with SHA-256',()=>{expect(digest('secret')).toHaveLength(32);});
+ // ===== TEMPORARY GH-04 (Issue #58) probe — NEVER MERGE =====
+ // This test is intentionally failing for the Lab 5 required-check gate proof.
+ // It will be removed once the protected-main blocked-merge screenshot is
+ // captured. Do NOT keep it in any merged release.
+ it('LAB5 GH-04: intentional CI failure - DO NOT MERGE',()=>{expect(true).toBe(false);});
 });
