@@ -5,7 +5,10 @@ on:
   pull_request:
     branches: [sprint1, main]
   push:
-    branches: [sprint1]
+    # sprint1 is the integration branch; main is included so a merged release
+    # commit gets recorded GitHub Actions Check Runs that the CD workflow
+    # (deploy.yml) verifies against the exact new main SHA (GH-05 #68).
+    branches: [sprint1, main]
   workflow_dispatch:
 
 permissions:
@@ -58,6 +61,17 @@ jobs:
           AUTH_CSRF_HMAC_KEY=$(openssl rand -hex 32) \
           AUTH_RATE_KEY=$(openssl rand -hex 32) \
           docker compose config --quiet
+
+      # GH-05 (Issue #68): offline verification of the deployment automation.
+      # Runs deploy/release/smoke/gate offline tests with no GCP credentials, no
+      # live cloud calls and no paid resources. Any unsafe deployment script or
+      # a broken fail-closed CD gate fails this required job.
+      # A documented, pinned Python dependency (PyYAML) is installed first so the
+      # suite is reproducible on a clean runner (finding #10).
+      - name: Install pinned offline-test Python deps (PyYAML)
+        run: python -m pip install --quiet -r deploy/tests/requirements.txt
+      - name: Offline deployment script tests (GH-05)
+        run: bash deploy/tests/run_all_offline.sh
 
   postgres:
     name: PostgreSQL 18 / Auth / Slot / Race A

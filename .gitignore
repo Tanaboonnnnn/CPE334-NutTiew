@@ -8,6 +8,8 @@ coverage/
 playwright-report/
 test-results/
 *.tsbuildinfo
+# GCP Workload Identity Federation ephemeral credentials (GH-05) - never commit.
+gha-creds-*.json
 # Docker/Compose local secret files (GH-02); never commit.
 compose/.env.local
 compose/db.local.env

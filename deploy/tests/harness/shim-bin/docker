@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Behavior-driven fake `docker` for offline negative tests. NEVER talks to a
+# real daemon. Records every call to FAKE_DOCKER_LOG and mimics success.
+set -u
+LOG="${FAKE_DOCKER_LOG:-}"
+[ -n "$LOG" ] && printf 'docker %s\n' "$*" >> "$LOG"
+if [ "${FAKE_DOCKER_FAIL:-0}" = "1" ]; then
+  echo "docker (fake): forced failure" >&2
+  exit 42
+fi
+exit 0
