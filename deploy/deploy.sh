@@ -71,7 +71,7 @@ gcloud_safe "3.apis" -- services enable \
 # 4. Artifact Registry repository (create if absent, never delete)
 # -----------------------------------------------------------------------------
 if [ "$NUTTIEW_REAL_ARMED" = "1" ]; then
-  if gcloud artifacts repositories describe "${NUTTIEW_ARTIFACT_REPO}" --location="${NUTTIEW_REGION}" "project=${NUTTIEW_PROJECT_ID}" >/dev/null 2>&1; then
+  if gcloud artifacts repositories describe "${NUTTIEW_ARTIFACT_REPO}" --location="${NUTTIEW_REGION}" --project="${NUTTIEW_PROJECT_ID}" >/dev/null 2>&1; then
     log "Artifact Registry repo ${NUTTIEW_ARTIFACT_REPO} already exists (reuse)"
   else
     gcloud artifacts repositories create "${NUTTIEW_ARTIFACT_REPO}" \
