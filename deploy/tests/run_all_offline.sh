@@ -49,6 +49,22 @@ run_suite() {
   fi
 }
 
+# PATH-invoked fake tools must be executable on Linux CI runners. Windows Git
+# Bash can run them even when Git records mode 100644, hiding this regression.
+verify_fake_cli_exec_bits() {
+  local repo shim mode
+  repo="$(cd "$HERE/../.." && pwd)"
+  for shim in gcloud docker; do
+    mode="$(git -C "$repo" ls-files --stage -- "deploy/tests/harness/shim-bin/$shim" | awk 'NR==1 {print $1}')"
+    if [ "$mode" != "100755" ]; then
+      echo "FAIL: fake $shim Git mode is ${mode:-<missing>} (expected executable 100755 for Linux CI)" >&2
+      return 1
+    fi
+  done
+  echo "PASS: fake gcloud/docker Git modes are executable (100755)"
+}
+
+run_suite "fake CLI executable bits" verify_fake_cli_exec_bits
 run_suite "gate behavior"            "$BASH_BIN" "$HERE/test_gate_behavior.sh"
 run_suite "shell offline (deploy/release)" "$BASH_BIN" "$HERE/run_offline_shell_tests.sh"
 run_suite "release negative (real-mode fake gcloud)" "$BASH_BIN" "$HERE/run_release_negative_tests.sh"
