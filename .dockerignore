@@ -18,6 +18,8 @@ dist
 !.env.example
 compose/.env.local
 compose/db.local.env
+# GCP WIF ephemeral credentials (GH-05) - never bake into an image.
+gha-creds-*.json
 
 # ---- Logs / test artifacts ----
 *.log

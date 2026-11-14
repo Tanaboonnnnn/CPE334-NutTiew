@@ -1,0 +1,256 @@
+# =============================================================================
+# NutTiew RELEASE DEPLOYMENT workflow (GH-05, Issue #68)
+# -----------------------------------------------------------------------------
+# Deploys an APPROVED `main` release to Google Cloud Run.
+#
+# SAFETY MODEL (fail-closed by default):
+#   * Triggers are ONLY: (a) a push/merge to `main`, or (b) a manual
+#     workflow_dispatch on `main`.  Never from `sprint1`, PRs, feature
+#     branches, or the GH-04 intentionally-failing probe branch.
+#   * A hard `disable-gate` job runs FIRST.  If the repository variable
+#     `DEPLOY_ENABLED` is not EXACTLY "true" (unset/empty/malformed/false) OR
+#     the ref is not `main`, this job FAILS THE WORKFLOW and every cloud job is
+#     skipped - so no GCP auth, no image push, no SQL, no deploy, no Secret
+#     Manager change can run.
+#   * No committed service-account JSON key.  OIDC / Workload Identity
+#     Federation credentials are only requested inside jobs that are gated after
+#     the disable-gate, and never on a disable-gated run.
+#
+# CONFIGURATION (repository variables - set ONLY by the team later):
+#   Repository variable    DEPLOY_ENABLED = "true"   (fail-closed default = absent)
+#   Repository variables   NUTTIEW_PROJECT_ID, NUTTIEW_REGION,
+#                          NUTTIEW_ARTIFACT_REPO, NUTTIEW_RUNTIME_IMAGE,
+#                          NUTTIEW_MIGRATE_IMAGE, NUTTIEW_CLOUD_RUN_SERVICE,
+#                          NUTTIEW_MIGRATE_JOB, NUTTIEW_ORIGIN,
+#                          NUTTIEW_SQL_INSTANCE, NUTTIEW_SQL_DB_NAME,
+#                          NUTTIEW_DB_OWNER_USER, NUTTIEW_DB_RUNTIME_USER,
+#                          NUTTIEW_RUNTIME_SA_EMAIL, NUTTIEW_DEPLOY_SA_EMAIL,
+#                          NUTTIEW_MAX_INSTANCES, NUTTIEW_MIN_INSTANCES,
+#                          NUTTIEW_CONCURRENCY, NUTTIEW_PORT
+#   Environment (`demo`): protection rules restrict deployments to `main` and
+#   require an approving review.  Secrets for managed credential values live at
+#   the environment or repository scope and are never written here.
+#   * No real values are set in this file or in this GH-05 round.
+# =============================================================================
+
+name: NutTiew CD - Release deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "Full Git commit SHA to deploy (default: the ref tip)."
+        required: false
+        default: ""
+        type: string
+
+# Every GitHub Actions permission is opt-in and read-only unless a job
+# explicitly narrows it.  OIDC (`id-token: write`) is only requested inside the
+# gated deployment job below, never at workflow scope.
+permissions:
+  contents: read
+
+concurrency:
+  # Avoid overlapping deployments of the release environment.
+  group: nuttiew-cd-release
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. HARD fail-closed gate.  Runs on every CD trigger.
+  # ---------------------------------------------------------------------------
+  disable-gate:
+    name: Deployment disable gate (fail-closed)
+    runs-on: ubuntu-24.04
+    if: always()
+    outputs:
+      deployable: ${{ steps.check.outputs.deployable }}
+      release_sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      # The workflow_dispatch.release_sha input is read ONLY through env (never
+      # interpolated directly into shell source) and validated as a full commit
+      # SHA below.  Untrusted/arbitrary input cannot become a shell fragment.
+      - name: Resolve intended release SHA (env-passed, validated)
+        id: sha
+        env:
+          INPUT_SHA: ${{ github.event.inputs.release_sha }}
+          REF_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_SHA}" ]; then
+            # Full immutable commit SHA only (40 or 64 hex); reject short/arbitrary input.
+            if [[ "${INPUT_SHA}" =~ ^[0-9a-f]{40}$ || "${INPUT_SHA}" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "sha=${INPUT_SHA}" >> "$GITHUB_OUTPUT"
+            else
+              echo "::error::release_sha '${INPUT_SHA:0:8}...' is not a full immutable commit SHA. Refusing a guessed/arbitrary release base."
+              exit 1
+            fi
+          else
+            echo "sha=${REF_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Evaluate DEPLOY_ENABLED + main branch gate (default DISABLED)
+        id: check
+        env:
+          DEPLOY_ENABLED: ${{ vars.DEPLOY_ENABLED }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "${DEPLOY_ENABLED}" != "true" ]; then
+            echo "deployable=false" >> "$GITHUB_OUTPUT"
+            echo "::error::DEPLOY_ENABLED is not exactly 'true' (value='${DEPLOY_ENABLED:-<unset>}')."
+            echo "::error::Deployment is DISABLED. No GCP auth, image push, SQL change or deploy ran."
+            exit 1
+          fi
+          if [ "${REF}" != "refs/heads/main" ]; then
+            echo "deployable=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Deploy allowed only on refs/heads/main (current ref=${REF})."
+            exit 1
+          fi
+          echo "deployable=true" >> "$GITHUB_OUTPUT"
+          echo "Deployment ENABLED for ${REF}."
+
+  # ---------------------------------------------------------------------------
+  # 2. Verify THIS release SHA has all three required GitHub Actions Check Runs
+  #    with a successful conclusion (not an unrelated SHA, and not the legacy
+  #    commit-status API, which does not expose Actions check runs).
+  # ---------------------------------------------------------------------------
+  verify-ci:
+    name: Verify required CI Check Runs for release SHA
+    runs-on: ubuntu-24.04
+    needs: disable-gate
+    if: needs.disable-gate.outputs.deployable == 'true'
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Confirm release SHA is on protected main
+        env:
+          RELEASE_SHA: ${{ needs.disable-gate.outputs.release_sha }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main --depth=1000 || true
+          MAIN_SHA="$(git rev-parse origin/main 2>/dev/null || echo '')"
+          [ -n "$MAIN_SHA" ] || { echo "::error::could not resolve origin/main"; exit 1; }
+          # The release SHA must be reachable from protected main (ancestor or tip);
+          # arbitrary unreviewed feature-branch SHAs are rejected.
+          git merge-base --is-ancestor "$RELEASE_SHA" "$MAIN_SHA" \
+            || { echo "::error::release SHA ${RELEASE_SHA} is not on protected main (not ancestor of ${MAIN_SHA})."; exit 1; }
+          echo "release SHA ${RELEASE_SHA} is reachable from main (${MAIN_SHA})."
+      - name: Verify required Check Runs are green for THIS SHA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ needs.disable-gate.outputs.release_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Uses the GitHub Actions Check Runs API (not commit status) via the
+          # shared, offline-testable verifier (deploy/tests/verify_check_runs.sh).
+          # Default wait is ~45 attempts x 6s (270s), configurable via repository
+          # vars, comfortably exceeding the slowest required E2E job. A timeout
+          # or transient API failure is never treated as success.
+          bash deploy/tests/verify_check_runs.sh \
+            --from-gh "${REPO}" --sha "${RELEASE_SHA}" \
+            --max-attempts "${VERIFY_MAX_ATTEMPTS:-45}" --poll "${VERIFY_POLL_SECONDS:-6}"
+
+  # ---------------------------------------------------------------------------
+  # 3. Release: migrate -> deploy -> smoke, performed ONCE by the real,
+  #    verified deploy/release.sh under the `demo` Environment protection.
+  #    A SINGLE job (not separate migrate then deploy) so the exact same release
+  #    does not run its migration twice and there is no ambiguous handoff.
+  #    This job FAILS CLOSED if real deployment is not genuinely enabled: it
+  #    requires WIF deployment config (DEPLOY_CD_READY=1 + NUTTIEW_WIF_PROVIDER +
+  #    NUTTIEW_DEPLOY_SA_EMAIL) before it can run a real migration/deploy. It
+  #    NEVER reports success from placeholder/echo steps.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Release (migrate + deploy + smoke)
+    runs-on: ubuntu-24.04
+    needs: [disable-gate, verify-ci]
+    if: needs.disable-gate.outputs.deployable == 'true'
+    environment: demo
+    permissions:
+      contents: read
+      # OIDC requested ONLY in this gated, environment-protected job, and only
+      # used AFTER the fail-closed enablement check passes.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Fail-closed enablement check (A/B boundary): real cloud deploy is
+      # impossible until a separately authorized GCP session configures WIF/IAM
+      # and variables. If any prerequisite is missing, this step FAILS and every
+      # later credential-bearing step is blocked (they all depend on this
+      # step's success). DEPLOY_ENABLED (in disable-gate) and DEPLOY_CD_READY are
+      # SEPARATE, independent, explicit fail-closed gates.
+      - name: Require real deployment configuration (fail-closed)
+        id: enablement
+        env:
+          DEPLOY_CD_READY: ${{ vars.DEPLOY_CD_READY }}
+          WIF_PROVIDER: ${{ vars.NUTTIEW_WIF_PROVIDER }}
+          DEPLOY_SA: ${{ vars.NUTTIEW_DEPLOY_SA_EMAIL }}
+          GCP_PROJECT: ${{ vars.NUTTIEW_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          if [ "${DEPLOY_CD_READY}" != "1" ]; then
+            echo "::error::GCP deployment is NOT ready: DEPLOY_CD_READY must be set to 1 by the GCP configuration session."
+            echo "::error::No migration, deployment or smoke ran; the release job is failing closed."
+            exit 1
+          fi
+          [ -n "${WIF_PROVIDER}" ] || { echo "::error::missing NUTTIEW_WIF_PROVIDER (WIF not configured)."; exit 1; }
+          [ -n "${DEPLOY_SA}" ]  || { echo "::error::missing NUTTIEW_DEPLOY_SA_EMAIL."; exit 1; }
+          [ -n "${GCP_PROJECT}" ] || { echo "::error::missing NUTTIEW_PROJECT_ID."; exit 1; }
+          echo "Real deployment configuration present (DEPLOY_CD_READY=1, WIF provider + deploy SA + project set)."
+      # OIDC/WIF authentication - NEVER executes after a failed enablement: it
+      # depends on the enablement step's success outcome (not `!cancelled()`).
+      # An explicit project_id is pinned on the credential request.
+      - name: Authenticate to Google Cloud (OIDC/WIF, main-restricted)
+        if: steps.enablement.outcome == 'success'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.NUTTIEW_WIF_PROVIDER }}
+          service_account: ${{ vars.NUTTIEW_DEPLOY_SA_EMAIL }}
+          project_id: ${{ vars.NUTTIEW_PROJECT_ID }}
+          token_format: access_token
+      # Configure the gcloud SDK ONLY after successful WIF authentication.
+      - name: Set up gcloud (GCP SDK)
+        if: steps.enablement.outcome == 'success'
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ vars.NUTTIEW_PROJECT_ID }}
+      # The single, verified release runs migrations -> Cloud Run -> smoke and
+      # reports success ONLY after the real migration and smoke script succeed.
+      # Gated on the enablement step's success so a failed preflight can never
+      # reach a credential-bearing release.
+      - name: Run verified release (migrate -> deploy -> smoke)
+        if: steps.enablement.outcome == 'success'
+        env:
+          DRY_RUN: "0"
+          NUTTIEW_ALLOW_REAL: "1"
+          RELEASE_SHA_FROM_CD: ${{ needs.disable-gate.outputs.release_sha }}
+          NUTTIEW_RELEASE_SHA: ${{ needs.disable-gate.outputs.release_sha }}
+          NUTTIEW_PROJECT_ID: ${{ vars.NUTTIEW_PROJECT_ID }}
+          NUTTIEW_REGION: ${{ vars.NUTTIEW_REGION }}
+          NUTTIEW_ARTIFACT_REPO: ${{ vars.NUTTIEW_ARTIFACT_REPO }}
+          NUTTIEW_RUNTIME_IMAGE: ${{ vars.NUTTIEW_RUNTIME_IMAGE }}
+          NUTTIEW_MIGRATE_IMAGE: ${{ vars.NUTTIEW_MIGRATE_IMAGE }}
+          NUTTIEW_SQL_INSTANCE: ${{ vars.NUTTIEW_SQL_INSTANCE }}
+          NUTTIEW_SQL_DB_NAME: ${{ vars.NUTTIEW_SQL_DB_NAME }}
+          NUTTIEW_DB_OWNER_USER: ${{ vars.NUTTIEW_DB_OWNER_USER }}
+          NUTTIEW_DB_RUNTIME_USER: ${{ vars.NUTTIEW_DB_RUNTIME_USER }}
+          NUTTIEW_RUNTIME_SA_EMAIL: ${{ vars.NUTTIEW_RUNTIME_SA_EMAIL }}
+          NUTTIEW_MIGRATE_SA_EMAIL: ${{ vars.NUTTIEW_MIGRATE_SA_EMAIL }}
+          NUTTIEW_DEPLOY_SA_EMAIL: ${{ vars.NUTTIEW_DEPLOY_SA_EMAIL }}
+          NUTTIEW_MIGRATE_JOB: ${{ vars.NUTTIEW_MIGRATE_JOB }}
+          NUTTIEW_CLOUD_RUN_SERVICE: ${{ vars.NUTTIEW_CLOUD_RUN_SERVICE }}
+          NUTTIEW_ORIGIN: ${{ vars.NUTTIEW_ORIGIN }}
+        run: |
+          set -euo pipefail
+          bash deploy/release.sh

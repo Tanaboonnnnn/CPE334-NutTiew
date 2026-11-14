@@ -1,0 +1,13 @@
+# Transient offline-test artifacts (never commit these).
+# The check-run fixtures are written & removed by test_check_runs_offline.py;
+# pycache and any leftover temp files must stay out of Git.
+__pycache__/
+*.pyc
+.tmp_checks_fixture_*.json
+.tmp_checks_payload_*.json
+.tmp_checks_*.json
+.probe_*
+.fixture-port.*
+fixture.out
+gcloud.log
+docker.log

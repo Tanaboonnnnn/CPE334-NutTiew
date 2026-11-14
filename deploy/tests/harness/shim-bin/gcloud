@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Behavior-driven fake `gcloud` for offline negative tests.
+# NEVER talks to a real cloud.  Records every call to FAKE_GCLOUD_LOG and
+# simulates outcomes driven by these env vars (0/1):
+#   FAKE_GCLOUD_FAIL_ALL=1        -> every call exits non-zero (42)
+#   FAKE_MIGRATE_FAIL=1           -> `run jobs execute`/`executions describe` fail
+#   FAKE_DIGEST_MISSING=1         -> `artifacts docker images describe` fails
+#   FAKE_DEPLOY_FAIL=1            -> `run deploy` / `run services update` fails
+#   FAKE_READY_TIMEOUT=1          -> `run revisions list` never reports Ready
+#   FAKE_ACTIVE_PROJECT           -> value returned by `config get-value project`
+#   FAKE_JOB_UPDATE_FAIL=1        -> `run jobs update` fails
+set -u
+LOG="${FAKE_GCLOUD_LOG:-}"
+[ -n "$LOG" ] && printf 'gcloud %s\n' "$*" >> "$LOG"
+if [ "${FAKE_GCLOUD_FAIL_ALL:-0}" = "1" ]; then
+  echo "gcloud(fake): forced all-fail" >&2
+  exit 42
+fi
+
+cmd="$1"; shift
+case "$cmd" in
+  config)
+    [ "${1:-}" = "get-value" ] && [ "${2:-}" = "project" ] && { echo "${FAKE_ACTIVE_PROJECT:-}"; exit 0; }
+    exit 0
+    ;;
+  run)
+    sub="${1:-}"
+    if [ "$sub" = "jobs" ] && [ "${2:-}" = "update" ]; then
+      if [ "${FAKE_JOB_UPDATE_FAIL:-0}" = "1" ]; then echo "gcloud(fake): job update failed" >&2; exit 42; fi
+      echo "ok"; exit 0
+    fi
+    if [ "$sub" = "jobs" ] && [ "${2:-}" = "describe" ]; then exit 0; fi
+    if [ "$sub" = "jobs" ] && [ "${2:-}" = "create" ]; then exit 0; fi
+    if [ "$sub" = "jobs" ] && [ "${2:-}" = "execute" ]; then
+      if [ "${FAKE_MIGRATE_FAIL:-0}" = "1" ]; then echo "gcloud(fake): migration exec failed" >&2; exit 42; fi
+      # Emit a JSON execution object with metadata.name for the script to capture.
+      echo '{"metadata":{"name":"exec-12345"}}'
+      exit 0
+    fi
+    if [ "$sub" = "jobs" ] && [ "${2:-}" = "executions" ] && [ "${3:-}" = "describe" ]; then
+      if [ "${FAKE_MIGRATE_FAIL:-0}" = "1" ]; then
+        echo '{"metadata":{"name":"exec-fail-1"},"status":{"conditions":[{"type":"Succeeded","status":"False","reason":"Failed"},{"type":"Active","status":"True"}]}}'
+        exit 0
+      fi
+      echo '{"metadata":{"name":"exec-ok-1"},"status":{"conditions":[{"type":"Active","status":"True"},{"type":"Succeeded","status":"True","reason":"JobExecutionSucceeded"}]}}'
+      exit 0
+    fi
+    if [ "$sub" = "deploy" ]; then
+      if [ "${FAKE_DEPLOY_FAIL:-0}" = "1" ]; then echo "gcloud(fake): run deploy failed" >&2; exit 42; fi
+      echo "ok"; exit 0
+    fi
+    if [ "$sub" = "services" ] && [ "${2:-}" = "describe" ]; then
+      if printf '%s' "$*" | grep -q "latestCreatedRevisionName"; then
+        echo "${FAKE_CREATED_REVISION:-nuttiew-00005-newrev}"
+        exit 0
+      fi
+      if printf '%s' "$*" | grep -q "status.url"; then
+        echo "https://nuttiew-xyz-uc.a.run.app"
+        exit 0
+      fi
+      if printf '%s' "$*" | grep -q "containers\[0\].image"; then
+        echo "${FAKE_SERVICE_IMAGE:-asia-southeast1-docker.pkg.dev/a-test-project-123/repo/nuttiew@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+        exit 0
+      fi
+      echo "https://nuttiew-xyz-uc.a.run.app"; exit 0
+    fi
+    if [ "$sub" = "revisions" ] && [ "${2:-}" = "describe" ]; then
+      if printf '%s' "$*" | grep -q "containers\[0\].image"; then
+        echo "${FAKE_REVISION_IMAGE:-asia-southeast1-docker.pkg.dev/a-test-project-123/repo/nuttiew@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+        exit 0
+      fi
+      # Ready-condition read for the exact revision described.
+      if [ "${FAKE_NEW_REVISION_NOT_READY:-0}" = "1" ]; then
+        echo "False"
+      else
+        echo "True"
+      fi
+      exit 0
+    fi
+    if [ "$sub" = "services" ] && [ "${2:-}" = "update" ]; then
+      if [ "${FAKE_DEPLOY_FAIL:-0}" = "1" ]; then echo "gcloud(fake): services update failed" >&2; exit 42; fi
+      exit 0
+    fi
+    if [ "$sub" = "revisions" ] && [ "${2:-}" = "list" ]; then
+      [ "${FAKE_READY_TIMEOUT:-0}" = "1" ] && echo "False" || echo "True"
+      exit 0
+    fi
+    echo "gcloud(fake): unknown run cmd: $*" >&2; exit 0
+    ;;
+  artifacts)
+    if [ "${1:-}" = "repositories" ] && [ "${2:-}" = "describe" ]; then exit 0; fi
+    if [ "${1:-}" = "docker" ] && [ "${2:-}" = "images" ] && [ "${3:-}" = "list" ]; then exit 0; fi
+    if [ "${1:-}" = "docker" ] && [ "${2:-}" = "images" ] && [ "${3:-}" = "describe" ]; then
+      if [ "${FAKE_DIGEST_MISSING:-0}" = "1" ]; then echo "gcloud(fake): digest missing" >&2; exit 42; fi
+      if [ "${FAKE_DIGEST_MALFORMED:-0}" = "1" ]; then echo 'sha256:NOT_A_VALID_HEX'; exit 0; fi
+      echo 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+      exit 0
+    fi
+    echo "gcloud(fake): artifacts ok" >&2; exit 0
+    ;;
+  auth)
+    if [ "${1:-}" = "configure-docker" ]; then
+      if [ "${FAKE_DOCKER_AUTH_FAIL:-0}" = "1" ]; then echo "gcloud(fake): docker auth failed" >&2; exit 42; fi
+      exit 0
+    fi
+    exit 0
+    ;;
+  services)
+    exit 0
+    ;;
+  iam)
+    exit 0
+    ;;
+  sql)
+    [ "${1:-}" = "connect" ] && { echo "pseudo-sql> done" >&2; exit 0; }
+    [ "${1:-}" = "databases" ] && { exit 0; }
+    exit 0
+    ;;
+  secrets)
+    exit 0
+    ;;
+  projects)
+    exit 0
+    ;;
+  *)
+    echo "gcloud(fake) default ok: $cmd $*" >&2; exit 0
+    ;;
+esac
