@@ -111,4 +111,4 @@ services:
 # project/service first. Existing data is never deleted, copied or migrated here.
 volumes:
   nuttiew_pg_data:
-    name: ${NUTTIEW_DB_VOLUME:-}
+    name: ${NUTTIEW_DB_VOLUME:-${COMPOSE_PROJECT_NAME:-nuttiew}_nuttiew_pg_data}
