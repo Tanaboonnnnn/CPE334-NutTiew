@@ -61,6 +61,10 @@ jobs:
           AUTH_CSRF_HMAC_KEY=$(openssl rand -hex 32) \
           AUTH_RATE_KEY=$(openssl rand -hex 32) \
           docker compose config --quiet
+      # Lab 5 C-03: config --quiet can pass even when an interpolated volume name
+      # is empty and the very first Compose up fails. Test project-scoped names.
+      - name: Compose fresh-clone volume isolation (C-03)
+        run: python scripts/verify_compose_volume.py
 
       # GH-05 (Issue #68): offline verification of the deployment automation.
       # Runs deploy/release/smoke/gate offline tests with no GCP credentials, no
