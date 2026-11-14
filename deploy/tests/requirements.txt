@@ -1,0 +1,4 @@
+# Pinned Python dependencies for the GH-05 offline test suite
+# (used by deploy/tests/validate_deploy_gate.py).  Install reproducibly with:
+#   python -m pip install -r deploy/tests/requirements.txt
+PyYAML==6.0.2

@@ -28,6 +28,10 @@ export async function createApp(pool:Pool, config:Config) {
  const app=express();app.disable('x-powered-by');app.use(cookieParser());
  app.use((req,res,next)=>{res.locals.requestId=randomUUID();res.setHeader('Cache-Control','no-store');next();});
  app.use(express.json({limit:'4kb',strict:true}));
+ // Unauthenticated liveness/readiness for container-orchestrator probes. Runs a
+ // harmless query against the injected runtime pool; never returns DB URLs,
+ // passwords, SQL errors, stack traces or other internal infrastructure detail.
+ app.get('/api/ready',async(_req,res)=>{try{await pool.query('SELECT 1');res.status(200).json({status:'ready'});}catch{code(res,503,'SERVICE_UNAVAILABLE');}});
  const dummy=await argon2.hash(randomToken(),{type:argon2.argon2id});
  const guard=requireSession(pool,cookieName(config),(res,status,error)=>{code(res,status,error);});
  const withSession=(handler:(req:Request,res:Response,s:{id:string;userId:string;role:'Customer'|'Tutor';csrfNonce:Buffer;csrfKeyVersion:string})=>Promise<void>):RequestHandler[]=>[

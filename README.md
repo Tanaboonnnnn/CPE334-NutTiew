@@ -194,6 +194,69 @@ npm run dev
 *(Windows PowerShell note: run `npm run dev -w @nuttiew/api` and `npm run dev -w @nuttiew/web` in two terminals.)*
 Navigate to `http://localhost:5173` in your browser.
 
+### 7. Cloud Readiness (GH-01 — pre-Docker prep)
+
+Run the same Sprint 1 app in a disposable/cloud-style runtime without changing domain behavior:
+
+- **Host / port:** the API binds `0.0.0.0` so a container/load balancer can reach it, reading `PORT` from the environment (defaults to `3001`). Local development is unchanged. Sessions remain PostgreSQL-backed (the `Session` table), not in-memory.
+- **Readiness:** `GET /api/ready` is unauthenticated and probes the restricted runtime pool with `SELECT 1`. Response is `200 {"status":"ready"}` when the database is reachable and `503` (standard error envelope, `SERVICE_UNAVAILABLE`) when it is not. No DB URL, password, SQL error or stack trace is ever returned.
+- **Environment:** required — `DATABASE_URL` (migration/admin only), `DATABASE_URL_APP` (restricted API runtime; startup fails closed without it), `AUTH_CSRF_HMAC_KEY`, `AUTH_RATE_KEY`, `AUTH_CANONICAL_ORIGIN`, `NODE_ENV`, `PORT`. Optional — `AUTH_CSRF_KEY_VERSION` / `AUTH_CSRF_PREVIOUS_*` (rotation), `AUTH_TRUSTED_PROXIES` (reverse-proxy IPs), `SEED_EMAIL` / `SEED_PASSWORD` / `SEED_ROLE` (idempotent seed), `DATABASE_URL_BOOKING_PROBE` (test-only). See [`.env.example`](.env.example).
+- **Same-origin & HTTPS:** the API rejects cross-site `Origin`/CSRF. In a cloud runtime the UI and API must be served from the **same origin** over **HTTPS**, and `AUTH_CANONICAL_ORIGIN` must be that public HTTPS origin; production cookies are `Secure` (`SameSite=Lax`), so a plain HTTP origin in production breaks session/CSRF.
+- **Verification status (GH-01):**
+  - *Verified locally:* API host binding on `0.0.0.0`, runtime `PORT` support (code inspection and pre-PR smoke evidence), readiness handler behavior, `npm ci`, `npm run db:generate`, `npm test` (34/34), `npm run typecheck`, `npm run build`, and `git diff --check`.
+  - *Verified with injected Pool test doubles:* `GET /api/ready` fails closed with `503` and does not leak connection/SQL details when `query()` rejects (READY-03/04).
+  - *Verified in isolated GitHub Actions CI:* [run 43403576375](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43403576375) passed all 3 jobs. PostgreSQL 18 `test:db` passed **111/111**, including real-DB readiness READY-01/02 and all four readiness tests (READY-01..04 **4/4**); Microsoft Edge E2E passed. CI E2E starts `server.ts` at its default `PORT=3001`; it is not evidence of a non-default `PORT` override.
+  - *NOT RUN locally:* real-PostgreSQL readiness success, full database integration, and browser E2E because an isolated local test database and credentials were unavailable; these checks **were run in CI** as described above.
+  - *Pending in later issues (not part of GH-01):* Docker image (GH-02, #61) and GCP/Cloud SQL integration (later phase).
+
+### 8. Docker Compose (GH-02 — local, reproducible)
+
+Run the same Sprint 1 web UI + Express API + persistent PostgreSQL in containers on **one public HTTP port**:
+
+*Prerequisites:*
+- Docker Engine + Docker Compose (tested with Docker 29.9.2 / Compose v5.6.0, Postgres 18 image)
+- Copy `.env.example` → `.env` and fill the placeholders (see below). Compose reads these from the root `.env`; a missing required value fails loudly.
+
+*Required environment values (placeholders in `.env.example`):*
+- `POSTGRES_PASSWORD`, `DB_OWNER_PASSWORD`, `DB_RUNTIME_PASSWORD` — the isolated Compose DB superuser, the migration/admin role (`nuttiew_owner`, used only for migrations), and the restricted API runtime role (`nuttiew_runtime`). All three must be distinct and must **not** be the `.env.example` `REPLACE_WITH_...` placeholders (rejected by `compose/db-init.sh`). `DB_OWNER_PASSWORD` and `DB_RUNTIME_PASSWORD` must each be **16–64 URL-safe characters** (`[A-Za-z0-9_-]`, e.g. `openssl rand -hex 32`) so they are safe inside both the SQL role setup and the `postgresql://` connection string; validation fails closed without echoing the value.
+- `AUTH_CSRF_HMAC_KEY`, `AUTH_RATE_KEY` (64+ hex chars) and optional `NUTTIEW_HTTP_PORT` (host port, default `3001`).
+
+*Build and start:*
+```bash
+docker compose up -d --build       # builds both images, starts db -> migrate -> app
+docker compose ps                  # db and app are "healthy"
+```
+The migrate service waits for a healthy DB, applies the forward-only Prisma migrations as the owner, then grants the runtime role only its least-privilege rights (no Slot/Booking UPDATE/DELETE/TRUNCATE). The `app` container serves both the built React UI at `/` and the API at `/api/...` on `http://localhost:3001`.
+
+*Optional idempotent demo-user seed* (create a Tutor and a Customer by re-running with different role/email):
+```bash
+docker compose --profile seed run --rm seed   # uses SEED_EMAIL / SEED_PASSWORD / SEED_ROLE from .env
+```
+
+*Readiness / health:*
+```bash
+curl -s http://localhost:3001/api/ready   # 200 {"status":"ready"} when DB reachable; 503 otherwise
+```
+
+*Logs and shutdown:* `docker compose logs -f app db` and `docker compose down`. Use `docker compose stop`/`up` for normal restarts. Data persists in the volume; by default Compose uses project-scoped naming (`<project>_nuttiew_pg_data`), or an explicit existing volume when `NUTTIEW_DB_VOLUME` is set (see below). To verify persistence after an app restart, book a slot then `docker compose restart app` and re-read the booking — it survives because sessions and bookings are PostgreSQL-backed, not app-container memory.
+
+*Reusing an earlier GH-02 volume (`nuttiew_pg_data`)*: the Compose volume is project-scoped by default (`<project>_nuttiew_pg_data`) so independent projects cannot silently share a database. To keep an **existing** volume's records, tell Compose to use it by its exact name via `NUTTIEW_DB_VOLUME`:
+```bash
+# In .env (or export): NUTTIEW_DB_VOLUME=nuttiew_pg_data
+docker compose down                       # stop and remove the old app/db containers
+docker compose up -d                      # db now mounts the existing nuttiew_pg_data volume
+```
+Safe reuse rules:
+- **Stop the old PostgreSQL service/container before pointing a new one at the same volume**, and never mount one PG data volume into two running `db` containers at once (PostgreSQL data would not be safe).
+- Existing data is **never** deleted, copied, renamed or migrated here; no fake success is claimed.
+- If you prefer, instead of reusing the old volume just leave `NUTTIEW_DB_VOLUME` unset and let a fresh project-scoped volume initialize; no existing volume is touched either way.
+
+*Credential preflight (finding 2):* `compose/db-init.sh` validates `POSTGRES_PASSWORD`, `DB_OWNER_PASSWORD` and `DB_RUNTIME_PASSWORD` before creating roles — rejects the `.env.example` `REPLACE_WITH_...` placeholders, requires all three distinct, and requires owner/runtime to be 16–64 URL-safe characters. It fails closed and never echoes the values. Because PostgreSQL initializes a fresh volume cluster before the init script runs, a failed validation can leave a fresh volume partially initialized; Docker only re-runs init scripts on a fresh (uninitialized) volume. Safe practice: verify the three values are set, distinct and non-placeholder **before** the first `up`. If an init script failed, do **not** delete or reset anything — you can point a *separate* `NUTTIEW_DB_VOLUME` name at a fresh volume for a clean retry, leaving any partially-initialized volume untouched.
+
+*Security notes for local Compose:* the `app` service runs with `NODE_ENV=development` so session cookies are **not** marked `Secure` (required for the browser to send them over `http://localhost`). This is a **development-only** setting. For Cloud/HTTPS production set `NODE_ENV=production` and `AUTH_CANONICAL_ORIGIN` to the public `https://` origin; cookies then become `Secure` and same-origin/CSRF checks stay intact. The runtime role cannot UPDATE/DELETE/TRUNCATE `Slot`/`Booking` (verified: `permission denied`), preserving the DB invariants.
+
+*What is NOT yet verified:* GCP/Cloud Run deployment, the full Lab 5 deployment guide, and a Cloud-SQL integration are **GH-05** scope. Docker CI on GitHub Actions is **GH-03**. No production credentials, deploy automation, or real database were used.
+
 ---
 
 ## Verification & Automated Test Suites
