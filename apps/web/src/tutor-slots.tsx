@@ -270,10 +270,10 @@ export function TutorAvailability({
       <div className="next-lesson-header">
         <div>
           <p className="dashboard-kicker">
-            {nextLesson?.phase === 'in-progress' ? 'ACTIVE LESSON NOW' : 'NEXT BOOKED LESSON'}
+            {nextLesson?.phase === 'in-progress' ? 'SCHEDULED WINDOW NOW' : 'NEXT BOOKED LESSON'}
           </p>
           <h2 id="next-lesson-heading">
-            {nextLesson?.phase === 'in-progress' ? 'กำลังติวอยู่ในช่วงเวลานี้' : 'นัดหมายติวที่ใกล้ที่สุด'}
+            {nextLesson?.phase === 'in-progress' ? 'นัดหมายที่อยู่ในช่วงเวลาตามตาราง' : 'นัดหมายติวที่ใกล้ที่สุด'}
           </h2>
         </div>
         <a className="next-lesson-jump" href="#tutor-schedule-bookings-section">ดูรายการนัดหมายทั้งหมด ↓</a>
@@ -299,7 +299,7 @@ export function TutorAvailability({
             <span>ผู้จอง: <strong>{nextLesson.lesson.customerRef}</strong></span>
             <span>รหัส: <code>{nextLesson.lesson.id}</code></span>
             <span className={nextLesson.phase === 'in-progress' ? 'badge-occupied' : 'badge-booked'}>
-              {nextLesson.phase === 'in-progress' ? 'กำลังติวอยู่ (In progress)' : 'มีนัดหมาย (Booked)'}
+              {nextLesson.phase === 'in-progress' ? 'อยู่ในช่วงเวลานัดหมาย (Booked)' : 'มีนัดหมาย (Booked)'}
             </span>
           </div>
         </div>

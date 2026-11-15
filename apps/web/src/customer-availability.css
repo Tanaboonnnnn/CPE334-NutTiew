@@ -1223,6 +1223,44 @@
   border-color: var(--nuttiew-border);
   box-shadow: var(--nuttiew-shadow-soft);
 }
+.customer-app .selected-summary-surface {
+  border-left: 4px solid var(--customer-navy);
+  padding: 20px 22px;
+  gap: 16px;
+}
+.customer-app .customer-booking-card {
+  padding: 18px 20px;
+  border-left: 3px solid var(--nuttiew-card-border);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.customer-app .customer-booking-card:hover {
+  border-left-color: var(--customer-navy);
+  box-shadow: var(--nuttiew-shadow-card);
+}
+.customer-app .customer-bookings-empty {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 24px;
+}
+.customer-app .customer-bookings-empty p {
+  margin: 0;
+  font-size: 0.96rem;
+  color: var(--customer-muted);
+}
+.customer-app [data-testid="empty-browse-availability-btn"] {
+  background: var(--customer-orange);
+  color: var(--customer-navy-deep);
+  border: 1px solid var(--nuttiew-orange-border);
+  border-radius: 9px;
+  padding: 10px 18px;
+}
+.customer-app [data-testid="empty-browse-availability-btn"]:hover {
+  background: var(--nuttiew-orange-hover);
+  border-color: var(--nuttiew-orange-border-hover);
+}
 .customer-account-panel {
   padding: 28px;
   max-width: 760px;

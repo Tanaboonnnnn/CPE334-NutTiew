@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeTutorKpis, selectNextTutorLesson, type TutorBookingSummary } from '../src/tutor-metrics.js';
 import type { OfferedSlot } from '../src/tutor-calendar.js';
 
-function makeSlot(id: string, startsAt: string, occupancy: 'Available' | 'Occupied' = 'Available'): OfferedSlot {
+function makeSlot(id: string, startsAt: string, occupancy: 'Unoccupied' | 'Occupied' = 'Unoccupied'): OfferedSlot {
   const start = new Date(startsAt);
   const end = new Date(start.getTime() + 3_600_000);
   return {
@@ -44,13 +44,13 @@ describe('computeTutorKpis', () => {
       // Sunday before week (2026-12-27 23:30+07:00) -> NOT this week
       makeSlot('prev-sun', '2026-12-27T23:30:00+07:00', 'Occupied'),
       // Monday 00:00+07:00 (2026-12-27T17:00:00Z) -> IN this week
-      makeSlot('mon-start', '2026-12-27T17:00:00.000Z', 'Available'),
+      makeSlot('mon-start', '2026-12-27T17:00:00.000Z', 'Unoccupied'),
       // Cross-year UTC instant: 2026-12-31T17:30:00Z = 2027-01-01 00:30+07:00 -> IN this week
       makeSlot('new-year-bkk', '2026-12-31T17:30:00.000Z', 'Occupied'),
       // Sunday 23:30+07:00 -> IN this week
-      makeSlot('sun-end', '2027-01-03T23:30:00+07:00', 'Available'),
+      makeSlot('sun-end', '2027-01-03T23:30:00+07:00', 'Unoccupied'),
       // Next Monday 00:00+07:00 -> NOT this week
-      makeSlot('next-mon', '2027-01-04T00:00:00+07:00', 'Available'),
+      makeSlot('next-mon', '2027-01-04T00:00:00+07:00', 'Unoccupied'),
     ];
 
     const kpis = computeTutorKpis(slots, nowMs);
