@@ -58,6 +58,38 @@ if [ "$NUTTIEW_REAL_ARMED" = "1" ]; then
 fi
 
 # -----------------------------------------------------------------------------
+# 3b. Bootstrap-secret preflight (audited finding F2): in REAL mode every
+#     bootstrap password secret must exist, be readable and carry a nonempty
+#     value BEFORE any avoidable cloud mutation.  Missing resource, no usable
+#     version, access denial and an empty value each fail closed with a distinct
+#     actionable error.  Secret VALUES are never echoed.  The operator remains
+#     responsible for populating Secret Manager (no value is ever generated here).
+# -----------------------------------------------------------------------------
+if [ "$NUTTIEW_REAL_ARMED" = "1" ]; then
+  verify_bootstrap_secret() { # <ref> <label>
+    local ref="$1" label="$2" probe_rc=0 probe_out=""
+    [ -n "$ref" ] || fail "PENDING live step: bootstrap secret ref for $label is not configured (required env not set). Set the corresponding NUTTIEW_*_SECRET variable before a real deployment."
+    probe_out="$(gcloud secrets versions access latest --secret="$ref" --project="$NUTTIEW_PROJECT_ID" 2>&1)" || probe_rc=$?
+    if [ "$probe_rc" -ne 0 ]; then
+      case "$probe_out" in
+        *NOT_FOUND*|*"not exist"*|*"has no versions"*)
+          fail "PENDING live prerequisite: Secret Manager secret '$ref' ($label) does not exist or has no usable version. The operator must create it and add a real value before a real deployment." ;;
+        *PERMISSION_DENIED*|*"Permission denied"*|*"denied"*)
+          fail "PENDING live prerequisite: access to Secret Manager secret '$ref' ($label) was DENIED. Grant the calling identity secretAccessor on that secret before a real deployment." ;;
+        *)
+          fail "PENDING live prerequisite: could not read Secret Manager secret '$ref' ($label) (rc=$probe_rc). Verify the secret, its version and permissions; no value is ever printed." ;;
+      esac
+    fi
+    [ -n "$probe_out" ] || fail "PENDING live prerequisite: Secret Manager secret '$ref' ($label) has an EMPTY value. The operator must set a real value before a real deployment."
+    log "bootstrap secret '$ref' ($label) verified present, readable and nonempty (value never printed)"
+  }
+  verify_bootstrap_secret "${NUTTIEW_SQL_POSTGRES_PASSWORD_SECRET:-}" "postgres superuser password"
+  verify_bootstrap_secret "${NUTTIEW_SQL_OWNER_PASSWORD_SECRET:-}" "DB owner role password"
+  verify_bootstrap_secret "${NUTTIEW_SQL_RUNTIME_PASSWORD_SECRET:-}" "DB runtime role password"
+else
+  plan "3b.secret-preflight" "verify bootstrap password secrets exist/readable/nonempty before mutations (real mode only)"
+fi
+# -----------------------------------------------------------------------------
 # 3. EXACT project scope check, then enable required GCP APIs (finding #4)
 # -----------------------------------------------------------------------------
 require_active_project
@@ -217,15 +249,71 @@ else
   plan "6.db.preflight" "verify Cloud SQL instance/database/roles/extensions exist before migrations (real mode only)"
 fi
 
+
+# -----------------------------------------------------------------------------
+# 6b0. Idempotent Secret Manager / service-account helpers (audited finding):
+#      `gcloud_safe ... || true` cannot recover from gcloud_safe's `fail` (exit 1).
+#      For create-if-absent resources we must distinguish 'already exists / reuse'
+#      from real errors, so we probe with `describe` first (capturing the exit
+#      code with `|| rc=$?`, never `|| true`), reuse on success, create only on
+#      confirmed NOT_FOUND, and FAIL CLOSED on permission-denied or unexpected
+#      errors.  Dry-run (not armed) prints a plan and never touches gcloud.
+#      No resource VALUE is ever read or printed.
+# -----------------------------------------------------------------------------
+ensure_secret_create() {
+  local name="$1" rc=0 out=""
+  if [ "$NUTTIEW_REAL_ARMED" != "1" ]; then plan "6b.secrets" "ensure secret reference $name exists (reuse if present)"; return 0; fi
+  out="$(gcloud secrets describe "$name" --project="$NUTTIEW_PROJECT_ID" 2>&1)" || rc=$?
+  if [ "$rc" -eq 0 ]; then log "Secret Manager secret $name already exists (reuse); value untouched"; return 0; fi
+  case "$out" in
+    *NOT_FOUND*|*"not exist"*|*"Not found"*|*"does not exist"*)
+      gcloud secrets create "$name" --project="$NUTTIEW_PROJECT_ID" \
+        || fail "failed to create Secret Manager secret $name"
+      log "created Secret Manager secret reference $name (operator adds the real value later)"
+      return 0 ;;
+    *PERMISSION_DENIED*|*"Permission denied"*|*denied*)
+      fail "PERMISSION DENIED inspecting/creating Secret Manager secret $name; grant the deploy identity secretmanager.admin before a real deployment." ;;
+    *) fail "could not determine state of Secret Manager secret $name (rc=$rc): $out" ;;
+  esac
+}
+ensure_iam_sa() {
+  local email="$1" display="$2" rc=0 out=""
+  if [ "$NUTTIEW_REAL_ARMED" != "1" ]; then plan "7.sa" "ensure service account $email exists (reuse if present)"; return 0; fi
+  out="$(gcloud iam service-accounts describe "$email" --project="$NUTTIEW_PROJECT_ID" 2>&1)" || rc=$?
+  if [ "$rc" -eq 0 ]; then log "service account $email already exists (reuse)"; return 0; fi
+  case "$out" in
+    *NOT_FOUND*|*"not exist"*|*"Not found"*|*"does not exist"*)
+      gcloud iam service-accounts create "${email%%@*}" --display-name="$display" --project="$NUTTIEW_PROJECT_ID" \
+        || fail "failed to create service account $email"
+      log "created service account $email"
+      return 0 ;;
+    *PERMISSION_DENIED*|*"Permission denied"*|*denied*)
+      fail "PERMISSION DENIED creating service account $email; grant iam.serviceAccounts.create on the project." ;;
+    *) fail "could not determine state of service account $email (rc=$rc): $out" ;;
+  esac
+}
+# -----------------------------------------------------------------------------
+# 6b. Secret Manager references (audited findings F2/F3 ordering): secret
+#     RESOURCES must exist before any IAM binding references them.  Created
+#     idempotently (reuse if present); the operator still supplies VALUES later
+#     via Secret Manager.  This block must run BEFORE section 7 (service
+#     accounts / IAM bindings), never after it.
+# -----------------------------------------------------------------------------
+for sec in "${NUTTIEW_DATABASE_URL_SECRET:-DATABASE_URL}" \
+           "${NUTTIEW_DATABASE_URL_APP_SECRET:-DATABASE_URL_APP}" \
+           "${NUTTIEW_CSRF_HMAC_KEY_SECRET:-AUTH_CSRF_HMAC_KEY}" \
+           "${NUTTIEW_RATE_KEY_SECRET:-AUTH_RATE_KEY}"; do
+  ensure_secret_create "$sec"
+done
+plan "6b.secrets" "secret references ready; operator supplies real VALUES in the real GCP session; none are read/printed here"
+
 # -----------------------------------------------------------------------------
 # 7. Least-privilege service accounts
 # -----------------------------------------------------------------------------
-gcloud_safe "7.sa.runtime" -- iam service-accounts create "${NUTTIEW_RUNTIME_SA_EMAIL%%@*}" \
-  --display-name="NutTiew runtime SA" || true
+ensure_iam_sa "${NUTTIEW_RUNTIME_SA_EMAIL}" "NutTiew runtime SA"
 gcloud_safe "7.sa.runtime" -- projects add-iam-policy-binding "${NUTTIEW_PROJECT_ID}" \
   --member="serviceAccount:${NUTTIEW_RUNTIME_SA_EMAIL}" --role="roles/cloudsql.client"
-gcloud_safe "7.sa.deploy" -- iam service-accounts create "${NUTTIEW_DEPLOY_SA_EMAIL%%@*}" \
-  --display-name="NutTiew deploy SA" || true
+ensure_iam_sa "${NUTTIEW_DEPLOY_SA_EMAIL}" "NutTiew deploy SA"
 gcloud_safe "7.sa.deploy" -- projects add-iam-policy-binding "${NUTTIEW_PROJECT_ID}" \
   --member="serviceAccount:${NUTTIEW_DEPLOY_SA_EMAIL}" --role="roles/artifactregistry.writer"
 gcloud_safe "7.sa.deploy" -- projects add-iam-policy-binding "${NUTTIEW_PROJECT_ID}" \
@@ -238,8 +326,7 @@ gcloud_safe "7.sa.deploy" -- projects add-iam-policy-binding "${NUTTIEW_PROJECT_
 #     migration job needs: Cloud SQL client + read the migration DATABASE_URL
 #     secret. It does NOT receive deployment administration or broad Secret
 #     Manager access.
-gcloud_safe "7.sa.migrate" -- iam service-accounts create "${NUTTIEW_MIGRATE_SA_EMAIL%%@*}" \
-  --display-name="NutTiew migrate SA" || true
+ensure_iam_sa "${NUTTIEW_MIGRATE_SA_EMAIL}" "NutTiew migrate SA"
 gcloud_safe "7.sa.migrate" -- projects add-iam-policy-binding "${NUTTIEW_PROJECT_ID}" \
   --member="serviceAccount:${NUTTIEW_MIGRATE_SA_EMAIL}" --role="roles/cloudsql.client"
 # PR finding #3: a FAILED required permission grant is NOT suppressed (gcloud_safe
@@ -248,16 +335,9 @@ gcloud_safe "7.sa.migrate" -- projects add-iam-policy-binding "${NUTTIEW_PROJECT
 gcloud_safe "7.sa.migrate" -- secrets add-iam-policy-binding "${NUTTIEW_DATABASE_URL_SECRET:-DATABASE_URL}" \
   --member="serviceAccount:${NUTTIEW_MIGRATE_SA_EMAIL}" --role="roles/secretmanager.secretAccessor"
 
-# -----------------------------------------------------------------------------
-# 8. Secret Manager references (created; operator supplies VALUES later)
-# -----------------------------------------------------------------------------
-for sec in "${NUTTIEW_DATABASE_URL_SECRET:-DATABASE_URL}" \
-           "${NUTTIEW_DATABASE_URL_APP_SECRET:-DATABASE_URL_APP}" \
-           "${NUTTIEW_CSRF_HMAC_KEY_SECRET:-AUTH_CSRF_HMAC_KEY}" \
-           "${NUTTIEW_RATE_KEY_SECRET:-AUTH_RATE_KEY}"; do
-  gcloud_safe "8.secrets" -- secrets create "$sec" --project="${NUTTIEW_PROJECT_ID}" || true
-done
-plan "8.secrets" "secret references ready; operator supplies real VALUES in the real GCP session; none are read/printed here"
+# (audited findings F2/F3: secret reference creation moved to 6b, BEFORE the
+#  service-account/IAM section, so the migration SA's secret IAM binding always
+#  targets an existing secret resource)
 
 # -----------------------------------------------------------------------------
 # 9. Build + publish full-SHA images, then resolve immutable digests (finding #5)
