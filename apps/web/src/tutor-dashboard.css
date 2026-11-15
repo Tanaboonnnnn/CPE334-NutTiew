@@ -444,4 +444,195 @@ main.dashboard-root {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Studio Desk & Planner Hierarchy (Issue #85) */
+.tutor-app .dashboard-main-area {
+  background-color: var(--tutor-canvas);
+  background-image:
+    linear-gradient(to right, var(--nuttiew-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--nuttiew-grid-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.tutor-app .dashboard-card {
+  border-color: var(--nuttiew-border);
+  box-shadow: var(--nuttiew-shadow-soft);
+}
+.tutor-app .overview-tile {
+  border-color: var(--nuttiew-border);
+  box-shadow: none;
+}
+.tutor-app .overview-tile small {
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+/* Next Booked Lesson Spotlight */
+.next-lesson-spotlight {
+  padding: 20px 24px;
+  margin-bottom: 22px;
+  border-left: 4px solid var(--tutor-navy);
+  background: #ffffff;
+}
+.next-lesson-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.next-lesson-header h2 {
+  margin: 0;
+  font-size: 1.18rem;
+  color: var(--tutor-navy);
+}
+.next-lesson-jump {
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--tutor-orange-dark);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.next-lesson-jump:hover {
+  background: var(--nuttiew-surface-hover);
+}
+.next-lesson-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--nuttiew-surface-muted);
+  border: 1px solid var(--nuttiew-border);
+}
+.next-lesson-datetime {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.next-lesson-datetime strong {
+  font-size: 1rem;
+  color: var(--tutor-navy);
+}
+.next-lesson-datetime span {
+  font-size: 0.9rem;
+  color: var(--tutor-ink);
+}
+.next-lesson-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  color: var(--tutor-muted);
+}
+.next-lesson-empty-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.next-lesson-empty {
+  margin: 0;
+  font-size: 0.94rem;
+  color: var(--tutor-muted);
+}
+.next-lesson-cta {
+  background: var(--tutor-orange);
+  color: var(--tutor-navy-deep);
+  border-color: var(--nuttiew-orange-border);
+  border-radius: 9px;
+  padding: 10px 16px;
+}
+.next-lesson-cta:hover {
+  background: var(--nuttiew-orange-hover);
+  border-color: var(--nuttiew-orange-border-hover);
+}
+
+/* Read-only Account Panel */
+.account-panel-card {
+  padding: 28px;
+  max-width: 760px;
+}
+.account-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.account-panel-subtitle {
+  margin: 4px 0 0;
+  color: var(--tutor-muted);
+  font-size: 0.94rem;
+}
+.account-back-button {
+  background: #ffffff;
+  color: var(--tutor-navy);
+  border: 1px solid var(--tutor-control-border);
+  border-radius: 9px;
+  padding: 10px 16px;
+}
+.account-back-button:hover {
+  background: var(--nuttiew-surface-hover);
+}
+.account-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin: 0 0 24px;
+}
+.account-readonly-item {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--nuttiew-surface-muted);
+  border: 1px solid var(--nuttiew-border);
+}
+.account-readonly-item dt {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--tutor-muted);
+  margin-bottom: 4px;
+}
+.account-readonly-item dd {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--tutor-navy);
+  overflow-wrap: anywhere;
+}
+.account-panel-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.account-panel-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--nuttiew-error);
+  border: 1px solid var(--nuttiew-error-border);
+}
+.account-panel-logout:hover {
+  background: var(--nuttiew-error-bg);
+}
+
+@media (max-width: 640px) {
+  .next-lesson-spotlight,
+  .account-panel-card {
+    padding: 18px 16px;
+  }
 }
