@@ -109,15 +109,76 @@ case "$cmd" in
     exit 0
     ;;
   iam)
+    if [ "${1:-}" = "service-accounts" ] && [ "${2:-}" = "describe" ]; then
+      sa="${3:-}"
+      [ -z "$sa" ] && for a in "$@"; do case "$a" in --project=*) ;; *@*) sa="$a" ;; esac; done
+      if [ "$sa" = "${FAKE_SA_EXISTS:-}" ]; then echo ""; exit 0; fi
+      if [ "$sa" = "${FAKE_SA_DENIED:-}" ]; then echo "gcloud(fake): PERMISSION_DENIED describe $sa" >&2; exit 46; fi
+      echo "gcloud(fake): NOT_FOUND: service account $sa does not exist" >&2; exit 44
+    fi
+    if [ "${1:-}" = "service-accounts" ] && [ "${2:-}" = "create" ]; then
+      if [ -n "${FAKE_SA_CREATE_DENIED:-}" ]; then echo "gcloud(fake): PERMISSION_DENIED create SA" >&2; exit 46; fi
+      if [ "${FAKE_SA_CREATE_FAIL:-0}" = "1" ]; then echo "gcloud(fake): SA create failed" >&2; exit 42; fi
+      echo ""; exit 0
+    fi
     exit 0
     ;;
   sql)
-    [ "${1:-}" = "connect" ] && { echo "pseudo-sql> done" >&2; exit 0; }
+    if [ "${1:-}" = "databases" ] && [ "${2:-}" = "list" ]; then
+      echo "${FAKE_SQL_DB_LIST:-nuttiew}"
+      exit 0
+    fi
+    if [ "${1:-}" = "connect" ]; then
+      if [ "${FAKE_SQL_READINESS_FAIL:-0}" = "1" ]; then echo "" >&2; exit 0; fi
+      echo "2"
+      echo "pgcrypto"
+      echo "btree_gist"
+      echo "pseudo-sql> done" >&2
+      exit 0
+    fi
     [ "${1:-}" = "databases" ] && { exit 0; }
     exit 0
     ;;
   secrets)
-    exit 0
+    sub="${1:-}"
+    if [ "$sub" = "add-iam-policy-binding" ]; then
+      if [ "${FAKE_IAM_GRANT_FAIL:-0}" = "1" ]; then echo "gcloud(fake): secrets add-iam-policy-binding failed" >&2; exit 47; fi
+      exit 0
+    fi
+    if [ "$sub" = "describe" ]; then
+      secret_arg=""
+      for a in "$@"; do case "$a" in --secret=*) ;; esac; done
+      # last positional is the secret name for the legacy `secrets describe NAME`; modern form uses --secret= ? use positional
+      name_pos=""
+      for a in "$@"; do case "$a" in --project=*) ;; --*) ;; *) name_pos="$a" ;; esac; done
+      [ -n "$name_pos" ] || name_pos="$(echo "$@" | grep -o "\.\|[A-Za-z0-9_-]*$" >/dev/null; echo "${@: -1}")"
+      if [ "$name_pos" = "${FAKE_SECRET_EXISTS:-}" ]; then echo ""; exit 0; fi
+      if [ "$name_pos" = "${FAKE_SECRET_DENIED:-}" ]; then echo "gcloud(fake): PERMISSION_DENIED describing $name_pos" >&2; exit 46; fi
+      if [ "$name_pos" = "${FAKE_SECRET_CREATE_FAIL:-}" ]; then echo "gcloud(fake): NOT_FOUND" >&2; exit 44; fi
+      # default: describe of any unknown secret => does not exist
+      echo "gcloud(fake): NOT_FOUND: secret $name_pos does not exist" >&2
+      exit 44
+    fi
+    if [ "$sub" = "create" ]; then
+      name_pos=""
+      for a in "$@"; do case "$a" in --project=*) ;; --*) ;; *) name_pos="$a" ;; esac; done
+      [ -n "$name_pos" ] || name_pos="$(echo "${@: -1}")"
+      if [ "$name_pos" = "${FAKE_SECRET_INVALID:-}" ]; then echo "gcloud(fake): INVALID_ARGUMENT creating $name_pos" >&2; exit 3; fi
+      if [ -n "${FAKE_SECRET_CREATE_DENIED:-}" ]; then echo "gcloud(fake): PERMISSION_DENIED creating $name_pos" >&2; exit 46; fi
+      echo ""; exit 0
+    fi
+    if [ "$sub" = "versions" ] && [ "${2:-}" = "access" ]; then
+      secret_arg=""
+      for a in "$@"; do case "$a" in --secret=*) secret_arg="${a#--secret=}" ;; esac; done
+      [ "$secret_arg" = "${FAKE_SECRET_MISSING:-}" ] && { echo "gcloud(fake): NOT_FOUND: secret $secret_arg does not exist" >&2; exit 44; }
+      [ "$secret_arg" = "${FAKE_SECRET_NO_VERSION:-}" ] && { echo "gcloud(fake): NOT_FOUND: secret $secret_arg has no versions" >&2; exit 45; }
+      [ "$secret_arg" = "${FAKE_SECRET_DENIED:-}" ] && { echo "gcloud(fake): PERMISSION_DENIED on $secret_arg" >&2; exit 46; }
+      [ "$secret_arg" = "${FAKE_SECRET_EMPTY:-}" ] && { printf ''; exit 0; }
+      printf 'fake-secret-value-for-%s\n' "$secret_arg"
+      exit 0
+    fi
+    # reconcile FAKE_SECRET_EXISTS as 'exists' when name matches (used by tests)
+    echo ""; exit 0
     ;;
   projects)
     exit 0

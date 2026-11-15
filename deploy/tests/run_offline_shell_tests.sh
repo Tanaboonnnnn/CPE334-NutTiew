@@ -199,6 +199,21 @@ rc9=$?
 [ "$rc9" -eq 0 ] && pass "release.sh dry-run with explicit full SHA exits 0" || { failt "release.sh dry-run exit $rc9"; echo "$out9" | tail -10; }
 
 # =============================================================================
+# 9. Regression (GH-05 finding): no malformed "project=..." gcloud flag.
+#    A positional argument like "project=${VAR}" (missing the leading "--") is
+#    not a valid gcloud flag; in REAL mode it makes describe/probe commands fail
+#    spuriously (e.g. artifacts repositories describe at deploy.sh) and can push
+#    the script into a wrong create/existing-resource path. Fail if any deploy
+#    script passes a bare "project=" token as its own argument.
+# =============================================================================
+malformed_flag_hits="$(grep -nE '(^|[[:space:]])"project=\$\{' "$DEPLOY_DIR/deploy.sh" "$DEPLOY_DIR/release.sh" "$DEPLOY_DIR/lib-nuttiew.sh" 2>/dev/null || true)"
+if [ -z "$malformed_flag_hits" ]; then
+  pass "no malformed bare project= gcloud flag in deploy scripts"
+else
+  failt "malformed bare project= flag found:" "$malformed_flag_hits"
+fi
+
+# =============================================================================
 # Cleanup
 # =============================================================================
 rm -rf "$rat_sb" "$rat_logs"

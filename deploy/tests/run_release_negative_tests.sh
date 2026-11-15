@@ -262,6 +262,338 @@ fi
 kill "$FIXTURE_PID" 2>/dev/null || true
 
 # =============================================================================
+# F2/F3 REGRESSION SUITE — Secret Manager prerequisites + IAM ordering
+# (audited findings F2/F3; behavioral, uses the fake gcloud shim)
+#   * bootstrap secrets (postgres/owner/runtime password refs) must exist with a
+#     usable, nonempty value BEFORE any avoidable cloud mutation
+#   * missing resource / no version / access denied / empty value all fail closed
+#     with a distinct, actionable error (never a silent skip)
+#   * migration SA secret IAM binding must never precede secret creation
+#   * dry-run never mutates anything
+# =============================================================================
+
+# Fake-gcloud behaviors (driven by env, read from the shim):
+#   FAKE_SECRET_MISSING=<name>   -> 'secrets versions access --secret=<name>' exits 44 (resource-not-found)
+#   FAKE_SECRET_NO_VERSION=<n>   -> exits 45 (no usable version)
+#   FAKE_SECRET_DENIED=<n>       -> exits 46 (permission denied)
+#   FAKE_SECRET_EMPTY=<n>        -> prints empty value (exit 0)
+#   FAKE_IAM_BEFORE_SECRET=1     -> record an ORDER VIOLATION if
+#                                   'secrets add-iam-policy-binding' is logged
+#                                   before the first 'secrets create' for that secret
+
+# helper: run deploy/deploy.sh in real mode against the fake cloud CLI.
+run_deploy() {
+  local sb="$1" logs="$2"; shift 2
+  : > "$logs/gcloud.log"; : > "$logs/docker.log"
+  (
+    cd "$sb" && PATH="${SHIM_DIR}:${PATH}" \
+    FAKE_GCLOUD_LOG="$logs/gcloud.log" FAKE_DOCKER_LOG="$logs/docker.log" \
+    FAKE_ACTIVE_PROJECT="a-test-project-123" \
+    env "${BASE[@]}" "$@" "$RUN_BASH" deploy/deploy.sh
+  )
+}
+# helper: does the gcloud log contain any mutation (avoidable cloud change)?
+log_has_mutation() { grep -qE "services enable|repositories create|sql databases create|iam service-accounts create|add-iam-policy-binding|run jobs (create|update|execute)|run deploy|secrets create|docker build" "$1" 2>/dev/null; }
+
+# --- 10. Missing postgres secret -> abort BEFORE any avoidable cloud mutation ---
+sb="$(make_sandbox)"
+run_deploy "$sb" "$logs" \
+  NUTTIEW_SQL_POSTGRES_PASSWORD_SECRET=nuttiew-pg-pw \
+  NUTTIEW_SQL_OWNER_PASSWORD_SECRET=nuttiew-ow-pw \
+  NUTTIEW_SQL_RUNTIME_PASSWORD_SECRET=nuttiew-rt-pw \
+  FAKE_SECRET_MISSING=nuttiew-pg-pw >"$logs/out10" 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "missing bootstrap secret -> non-zero" || failt "missing bootstrap secret did not abort (rc=$rc)"
+if log_has_mutation "$logs/gcloud.log"; then
+  failt "missing secret proceeded to an avoidable cloud mutation"
+else
+  pass "missing secret aborted before any avoidable cloud mutation"
+fi
+grep -qi "does not exist" "$logs/out10" && pass "missing secret error is actionable" || failt "missing secret error not actionable: $(tail -3 "$logs/out10")"
+rm -rf "$sb"
+
+# --- 11. Secret exists but has NO usable version -> abort before mutations ---
+sb="$(make_sandbox)"
+run_deploy "$sb" "$logs" \
+  NUTTIEW_SQL_POSTGRES_PASSWORD_SECRET=nuttiew-pg-pw \
+  NUTTIEW_SQL_OWNER_PASSWORD_SECRET=nuttiew-ow-pw \
+  NUTTIEW_SQL_RUNTIME_PASSWORD_SECRET=nuttiew-rt-pw \
+  FAKE_SECRET_NO_VERSION=nuttiew-ow-pw >"$logs/out11" 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "secret without usable version -> non-zero" || failt "no-version secret did not abort (rc=$rc)"
+if log_has_mutation "$logs/gcloud.log"; then
+  failt "no-version secret proceeded to an avoidable cloud mutation"
+else
+  pass "no-version secret aborted before any avoidable cloud mutation"
+fi
+rm -rf "$sb"
+
+# --- 12. Secret access DENIED -> abort before mutations ---
+sb="$(make_sandbox)"
+run_deploy "$sb" "$logs" \
+  NUTTIEW_SQL_POSTGRES_PASSWORD_SECRET=nuttiew-pg-pw \
+  NUTTIEW_SQL_OWNER_PASSWORD_SECRET=nuttiew-ow-pw \
+  NUTTIEW_SQL_RUNTIME_PASSWORD_SECRET=nuttiew-rt-pw \
+  FAKE_SECRET_DENIED=nuttiew-rt-pw >"$logs/out12" 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "secret access denied -> non-zero" || failt "denied secret did not abort (rc=$rc)"
+rm -rf "$sb"
+
+# --- 13. Secret value EMPTY -> abort before mutations ---
+sb="$(make_sandbox)"
+run_deploy "$sb" "$logs" \
+  NUTTIEW_SQL_POSTGRES_PASSWORD_SECRET=nuttiew-pg-pw \
+  NUTTIEW_SQL_OWNER_PASSWORD_SECRET=nuttiew-ow-pw \
+  NUTTIEW_SQL_RUNTIME_PASSWORD_SECRET=nuttiew-rt-pw \
+  FAKE_SECRET_EMPTY=nuttiew-pg-pw >"$logs/out13" 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "empty secret value -> non-zero" || failt "empty secret value did not abort (rc=$rc)"
+if log_has_mutation "$logs/gcloud.log"; then
+  failt "empty secret value proceeded to an avoidable cloud mutation"
+else
+  pass "empty secret value aborted before any avoidable cloud mutation"
+fi
+rm -rf "$sb"
+
+# --- 14. F3 ORDER: migration SA secret IAM binding must come AFTER secret creation ---
+# (uses the healthy local smoke fixture like the happy-path test, so the smoke
+#  step does not fail the release for an unrelated reason)
+portfile14="$(mktemp -u "${logs}/fixture-port14.XXXXXX")"
+"$PYTHON_BIN" "$(resolve_native_path "$HERE/httpserver_fixture.py")" 0 "$portfile14" >"$logs/fixture14.out" 2>&1 &
+FIXPID14=$!
+for _ in $(seq 1 50); do [ -s "$portfile14" ] && break; sleep 0.1; done
+HEALTHY_URL14="http://127.0.0.1:$(cat "$portfile14")"
+sb="$(make_sandbox)"
+run_deploy "$sb" "$logs" \
+  NUTTIEW_SQL_POSTGRES_PASSWORD_SECRET=nuttiew-pg-pw \
+  NUTTIEW_SQL_OWNER_PASSWORD_SECRET=nuttiew-ow-pw \
+  NUTTIEW_SQL_RUNTIME_PASSWORD_SECRET=nuttiew-rt-pw \
+  NUTTIEW_SMOKE_BASE_URL="$HEALTHY_URL14" NUTTIEW_READY_ATTEMPTS=3 NUTTIEW_READY_POLL_SECONDS=0 >"$logs/out14" 2>&1; rc=$?
+if [ "$rc" -eq 0 ]; then
+  first_create=$(grep -n "secrets create" "$logs/gcloud.log" | head -1 | cut -d: -f1)
+  first_bind=$(grep -n "secrets add-iam-policy-binding" "$logs/gcloud.log" | head -1 | cut -d: -f1)
+  if [ -n "$first_create" ] && [ -n "$first_bind" ] && [ "$first_create" -lt "$first_bind" ]; then
+    pass "migration SA secret IAM binding ordered after secret creation (F3)"
+  else
+    failt "IAM binding order wrong: first_create=$first_create first_bind=$first_bind"
+  fi
+else
+  failt "happy path with secrets failed; cannot check order (rc=$rc): $(tail -3 "$logs/out14")"
+fi
+kill "$FIXPID14" 2>/dev/null || true
+rm -rf "$sb" "$portfile14"
+
+# =============================================================================
+# 15-19. Secret Reference idempotency + IAM correctness (audited finding).
+#   * existing secret is reused (no re-creation attempt)
+#   * missing secret is created successfully
+#   * permission-denied / create-failure stops execution (no false success, no
+#     migration/deploy after prerequisite failure)
+#   * migration SA IAM binding targets the correct, verified DATABASE_URL secret
+#   * no secret value ever leaks (asserted here + final scan)
+# =============================================================================
+
+# shared helper: run deploy.sh happy-path with smoke fixture, returns rc
+run_deploy_smoke() {
+  local portfile_cmd="$1" logs="$2" sb="$3"; shift 3
+  local pf="$(mktemp -u "$logs/fix-XXXXXX")"
+  "$PYTHON_BIN" "$(resolve_native_path "$HERE/httpserver_fixture.py")" 0 "$pf" >"$logs/fix.out" 2>&1 &
+  local pid=$!
+  for _ in $(seq 1 50); do [ -s "$pf" ] && break; sleep 0.1; done
+  local url="http://127.0.0.1:$(cat "$pf")"
+  run_deploy "$sb" "$logs" \
+    NUTTIEW_SQL_POSTGRES_PASSWORD_SECRET=nuttiew-pg-pw \
+    NUTTIEW_SQL_OWNER_PASSWORD_SECRET=nuttiew-ow-pw \
+    NUTTIEW_SQL_RUNTIME_PASSWORD_SECRET=nuttiew-rt-pw \
+    NUTTIEW_SMOKE_BASE_URL="$url" NUTTIEW_READY_ATTEMPTS=3 NUTTIEW_READY_POLL_SECONDS=0 \
+    "$@" >"$logs/fix_run.out" 2>&1; local rc=$?
+  kill "$pid" 2>/dev/null || true
+  rm -f "$pf"
+  return $rc
+}
+
+# --- 15. Existing secret reused: no re-creation attempt for the pre-existing one ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" FAKE_SECRET_EXISTS=DATABASE_URL >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && pass "existing secret -> deploy succeeds (exit 0)" || failt "existing-secret happy path failed (rc=$rc): $(tail -3 "$logs/fix_run.out")"
+if grep -qE "secrets create DATABASE_URL( |$)" "$logs/gcloud.log"; then failt "existing secret was re-created"; else pass "existing secret reused (no re-create)"; fi
+rm -rf "$sb"
+
+# --- 16. Missing secret created successfully (happy path asserts create happens) ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && pass "missing secret -> created + deploy succeeds" || failt "missing-secret create happy path failed (rc=$rc): $(tail -3 "$logs/fix_run.out")"
+grep -qE "secrets create DATABASE_URL( |$)" "$logs/gcloud.log" && pass "missing secret created in happy path" || { failt "missing secret was NOT created"; echo "log: $(grep -E "secrets (create|describe)" "$logs/gcloud.log" | head -4)"; }
+rm -rf "$sb"
+
+# --- 17. Permission denied on secret describe -> STOP before migration/deploy ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" FAKE_SECRET_DENIED=DATABASE_URL >/dev/null 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "secret describe permission denied -> non-zero" || failt "permission denied did not abort (rc=$rc)"
+if grep -qE "secrets create|run deploy|run jobs|secrets add-iam-policy-binding" "$logs/gcloud.log"; then failt "permission-denied proceeded to mutation/deploy"; else :; fi
+[ -z "$(grep -E "secrets create|run deploy|run jobs|secrets add-iam-policy-binding" "$logs/gcloud.log")" ] && pass "permission-denied: no mutation/deploy after failure" || failt "permission-denied proceeded after failure"
+rm -rf "$sb"
+
+# --- 18. Secret create failure -> STOP (no false success, no migration/deploy) ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" FAKE_SECRET_INVALID=DATABASE_URL >/dev/null 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "secret create failure -> non-zero" || failt "create failure did not abort (rc=$rc)"
+[ -z "$(grep -E "run deploy|run jobs|secrets add-iam-policy-binding" "$logs/gcloud.log")" ] && pass "create-fail: no migration/deploy after failure" || failt "create-fail proceeded after failure"
+rm -rf "$sb"
+
+# --- 19. Migration SA IAM binding targets correct verified DATABASE_URL secret ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && pass "binding-target happy path succeeds" || failt "binding-target happy path failed (rc=$rc)"
+bind_line="$(grep "secrets add-iam-policy-binding" "$logs/gcloud.log" | grep -F "serviceAccount:test-migrate-sa" | head -1)"
+echo "$bind_line" | grep -qE "DATABASE_URL" && pass "IAM binding targets the DATABASE_URL secret" || failt "IAM binding did not target DATABASE_URL: $bind_line"
+echo "$bind_line" | grep -qE "roles/secretmanager\.secretAccessor" && pass "IAM binding uses secretAccessor role (least privilege)" || failt "IAM binding role wrong: $bind_line"
+echo "$bind_line" | grep -qE "serviceAccount:test-migrate-sa" && pass "IAM binding targets migration SA" || failt "IAM binding member wrong: $bind_line"
+rm -rf "$sb"
+# =============================================================================
+# 19b-19e. Runtime SA secret IAM (Issue #82): the runtime Cloud Run container
+#   mounts DATABASE_URL_APP / AUTH_CSRF_HMAC_KEY / AUTH_RATE_KEY from Secret
+#   Manager (section 12 of deploy.sh), so the runtime SA must get
+#   roles/secretmanager.secretAccessor on EXACTLY those three secrets -- never on
+#   the migration DATABASE_URL, and never project-wide.
+#   Behavioral: inspects the recorded fake-gcloud IAM binding lines.
+# =============================================================================
+
+# scope of secretAccessor bindings for one SA (secret name per binding line)
+secret_accessor_scope() { # <email> -> confident secret name per binding
+  local email="$1"
+  grep "secrets add-iam-policy-binding" "$logs/gcloud.log" \
+    | grep -F "serviceAccount:$email" \
+    | grep "roles/secretmanager.secretAccessor" \
+    | sed -E 's#^gcloud secrets add-iam-policy-binding ([^ ]+).*#\1#' \
+    | sort | uniq
+}
+
+# --- 19b. Runtime SA gets EXACTLY the three app secrets (least privilege) ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && pass "runtime-SAM-iAM happy path succeeds" || failt "runtime-SA IAM happy path failed (rc=$rc): $(tail -3 "$logs/fix_run.out")"
+runtime_secrets="$(secret_accessor_scope test-runtime-sa@a-test-project-123.iam.gserviceaccount.com)"
+expected_runtime="AUTH_CSRF_HMAC_KEY
+AUTH_RATE_KEY
+DATABASE_URL_APP"
+if [ "$runtime_secrets" = "$expected_runtime" ]; then
+  pass "runtime SA secretAccessor scope == {DATABASE_URL_APP, AUTH_CSRF_HMAC_KEY, AUTH_RATE_KEY} exactly"
+else
+  failt "runtime SA secretAccessor scope mismatch. got: $(echo "$runtime_secrets" | tr '\n' ',')"
+fi
+if echo "$runtime_secrets" | grep -qx "DATABASE_URL"; then
+  failt "runtime SA granted secretAccessor on the migration DATABASE_URL secret"
+else
+  pass "runtime SA is NOT granted the migration DATABASE_URL secret"
+fi
+rm -rf "$sb"
+
+# --- 19c. Migration SA still reads ONLY the migration DATABASE_URL secret ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && pass "migration-SA-IAM happy path succeeds" || failt "migration-SA IAM happy path failed (rc=$rc)"
+mig_secrets="$(secret_accessor_scope test-migrate-sa@a-test-project-123.iam.gserviceaccount.com)"
+if [ "$mig_secrets" = "DATABASE_URL" ]; then
+  pass "migration SA secretAccessor scope is ONLY DATABASE_URL"
+else
+  failt "migration SA secretAccessor scope mismatch. got: $(echo "$mig_secrets" | tr '\n' ',')"
+fi
+if grep -E "projects add-iam-policy-binding .*roles/secretmanager\.secretAccessor" "$logs/gcloud.log"; then
+  failt "a project-wide secretAccessor binding was issued"
+else
+  pass "no project-wide secretAccessor binding (resource-level only)"
+fi
+rm -rf "$sb"
+
+# --- 19d. Env-overridable secret names: custom NUTTIEW_*_SECRET values honored ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" \
+  NUTTIEW_DATABASE_URL_APP_SECRET=custom_app \
+  NUTTIEW_CSRF_HMAC_KEY_SECRET=custom_csrf \
+  NUTTIEW_RATE_KEY_SECRET=custom_rate >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && pass "runtime-SA-env-override happy path succeeds" || failt "env-override happy path failed (rc=$rc)"
+runtime_custom="$(secret_accessor_scope test-runtime-sa@a-test-project-123.iam.gserviceaccount.com)"
+expected_custom="custom_app
+custom_csrf
+custom_rate"
+if [ "$runtime_custom" = "$expected_custom" ]; then
+  pass "runtime SA honors NUTTIEW_*_SECRET env overrides for all three app secrets"
+else
+  failt "runtime SA env-override scope mismatch. got: $(echo "$runtime_custom" | tr '\n' ',')"
+fi
+rm -rf "$sb"
+
+# --- 19e. IAM grant failure aborts immediately; no deployment continues ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" FAKE_IAM_GRANT_FAIL=1 >/dev/null 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "IAM grant failure -> deploy non-zero" || failt "IAM grant failure did not abort (rc=$rc)"
+if grep -q "run deploy" "$logs/gcloud.log"; then
+  failt "runtime deploy ran after an IAM grant failure"
+else
+  pass "no runtime deploy after IAM grant failure"
+fi
+rm -rf "$sb"
+
+# --- 20. Resource names in logs must never be executed as shell commands ---
+# Mutation test on an ISOLATED sandbox copy of deploy.sh (never the source tree).
+# RED: restore the old backtick bug in that sandbox's real helper and prove a
+# fake deployment executes a harmless named probe from the secret name.
+# GREEN: run the unmodified helper with the SAME payload and prove it does not.
+pmark="$logs/pwn_probe"
+rm -f "$pmark"
+# Bash evaluates `$name` as ONE command name in this quoted context, even if
+# the variable contains spaces. A "touch /path" payload would therefore produce
+# "No such file or directory" without executing touch. Use a single executable
+# name found on an isolated PATH instead, so old code must execute the marker.
+original_shim_dir="$SHIM_DIR"
+probe_bin="$(mktemp -d)"
+cat > "$probe_bin/nuttiew_test20_probe" <<'PROBE'
+#!/usr/bin/env bash
+[ -n "${NUTTIEW_TEST_MARKER:-}" ] || exit 2
+: > "$NUTTIEW_TEST_MARKER"
+PROBE
+chmod +x "$probe_bin/nuttiew_test20_probe"
+SHIM_DIR="$probe_bin:$original_shim_dir"
+# RED: only the throwaway sandbox gets the deliberately vulnerable old line.
+sb="$(make_sandbox)"
+sed -i 's|reference \$name (operator adds the real value later)|reference `\$name` (operator adds the real value later)|' "$sb/deploy/deploy.sh"
+if grep -Fq 'log "created Secret Manager secret reference `$name` (operator adds the real value later)"' "$sb/deploy/deploy.sh"; then
+  git -C "$sb" add deploy/deploy.sh && git -C "$sb" commit -q -m "test-only restore backtick bug" || failt "RED sandbox setup commit failed"
+  run_deploy_smoke "" "$logs" "$sb" NUTTIEW_DATABASE_URL_SECRET=nuttiew_test20_probe NUTTIEW_TEST_MARKER="$pmark" >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 0 ] && [ -e "$pmark" ]; then
+    pass "RED: original backtick bug executes secret name through real helper"
+  else
+    failt "RED: original helper bug was not detected (rc=$rc; marker missing); log tail: $(tail -n 10 "$logs/fix_run.out")"
+  fi
+else
+  failt "RED sandbox setup did not restore the original vulnerable line"
+fi
+rm -rf "$sb"
+rm -f "$pmark"
+
+# --- GREEN: real production helper (no backticks) must interpolate, not execute ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" \
+  NUTTIEW_DATABASE_URL_SECRET=nuttiew_test20_probe NUTTIEW_TEST_MARKER="$pmark" \
+  NUTTIEW_READY_ATTEMPTS=3 NUTTIEW_READY_POLL_SECONDS=0 >/dev/null 2>&1; rc=$?
+if [ "$rc" -eq 0 ]; then
+  pass "GREEN: unmodified deploy.sh completed the fake-cloud path"
+else
+  failt "GREEN: unmodified deploy.sh failed (rc=$rc)"
+fi
+if [ -e "$pmark" ]; then
+  failt "GREEN FAIL: production helper executed the secret name as a command (marker created)"
+else
+  pass "GREEN: production helper interpolates the secret name, never executes it"
+fi
+# Assert the EXACT target helper line was reached with the literal input.
+if grep -Fq "created Secret Manager secret reference nuttiew_test20_probe (operator adds the real value later)" "$logs/fix_run.out"; then
+  pass "GREEN: exact secret-reference helper log preserves the literal name"
+else
+  failt "GREEN: expected secret-reference helper log not reached"
+fi
+rm -rf "$sb"
+SHIM_DIR="$original_shim_dir"
+rm -rf "$probe_bin"
+
+# =============================================================================
 # 9. No secret / credential value leaked in any captured output
 # =============================================================================
 if grep -riE "mySecret|BEGIN PRIVATE KEY|ghp_|token=|PASSWORD=" "$logs" 2>/dev/null | grep -v "PASSWORD=" ; then
