@@ -1,19 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { AllSlotsAgenda, SlotCalendar, bangkokClock, bangkokLongDate, shiftDay, type OfferedSlot } from './tutor-calendar.js';
+import { AllSlotsAgenda, SlotCalendar, bangkokClock, bangkokLongDate, type OfferedSlot } from './tutor-calendar.js';
 import { TutorDashboardShell } from './tutor-dashboard-shell.js';
+import { computeTutorKpis, selectNextTutorLesson, type TutorBookingSummary } from './tutor-metrics.js';
 
 type SlotList = { data: OfferedSlot[]; meta: { requestId: string } };
-export type TutorScheduleBooking = {
-  id: string;
-  slotId: string;
-  tutorId: string;
-  customerRef: string;
-  startsAt: string;
-  endsAt: string;
-  status: 'Booked';
-  displayStatus: 'Booked' | 'Past';
-  createdAt: string;
-};
+export type TutorScheduleBooking = TutorBookingSummary;
 
 
 /** A Bangkok wall-clock input must never be interpreted in the device's timezone. */
@@ -112,21 +103,10 @@ export function TutorAvailability({
   const preview = bangkokStart(date, startTime);
   const end = preview ? new Date(preview.getTime() + 3_600_000) : null;
 
-  // Derive KPI metrics strictly from authenticated API state (Asia/Bangkok Mon–Sun week).
-  const todayBangkok = bangkokDayKey(new Date());
-  const todayDow = new Date(todayBangkok + 'T00:00:00Z').getUTCDay(); // 0=Sun..6=Sat
-  const daysFromMon = (todayDow + 6) % 7;
-  const weekStart = shiftDay(todayBangkok, -daysFromMon);
-  const weekEnd = shiftDay(weekStart, 6);
-  const offeredCount = slots.filter(s => s.lifecycle === 'Offered').length;
-  const occupiedCount = slots.filter(s => s.occupancy === 'Occupied').length;
-  const slotsThisWeek = slots.filter(s => {
-    const dayKey = bangkokDayKey(new Date(s.startsAt));
-    return dayKey >= weekStart && dayKey <= weekEnd;
-  }).length;
-  const nextBookedLesson = [...bookings]
-    .filter(b => b.displayStatus !== 'Past')
-    .sort((a, b) => a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id))[0] ?? null;
+  // Derive KPI metrics & Next Booked Lesson strictly from authenticated API state.
+  const nowMs = Date.now();
+  const { offeredCount, occupiedCount, slotsThisWeek } = computeTutorKpis(slots, nowMs);
+  const nextLesson = selectNextTutorLesson(bookings, nowMs);
 
   const refreshSlots = async (showLoading = false) => {
     const current = ++slotsVersion.current;
@@ -289,8 +269,12 @@ export function TutorAvailability({
     <section className="dashboard-card next-lesson-spotlight" data-testid="tutor-next-booked-lesson" aria-labelledby="next-lesson-heading">
       <div className="next-lesson-header">
         <div>
-          <p className="dashboard-kicker">NEXT BOOKED LESSON</p>
-          <h2 id="next-lesson-heading">นัดหมายติวที่ใกล้ที่สุด</h2>
+          <p className="dashboard-kicker">
+            {nextLesson?.phase === 'in-progress' ? 'ACTIVE LESSON NOW' : 'NEXT BOOKED LESSON'}
+          </p>
+          <h2 id="next-lesson-heading">
+            {nextLesson?.phase === 'in-progress' ? 'กำลังติวอยู่ในช่วงเวลานี้' : 'นัดหมายติวที่ใกล้ที่สุด'}
+          </h2>
         </div>
         <a className="next-lesson-jump" href="#tutor-schedule-bookings-section">ดูรายการนัดหมายทั้งหมด ↓</a>
       </div>
@@ -301,20 +285,22 @@ export function TutorAvailability({
           <p className="error">{bookingsError}</p>
           <button className="retry-button" type="button" onClick={() => void refreshBookings(true)}>โหลดรายการนัดหมายใหม่</button>
         </div>
-      ) : nextBookedLesson ? (
+      ) : nextLesson ? (
         <div className="next-lesson-body">
           <div className="next-lesson-datetime">
-            <strong>{bangkokLongDate(new Date(nextBookedLesson.startsAt))}</strong>
+            <strong>{bangkokLongDate(new Date(nextLesson.lesson.startsAt))}</strong>
             <span>
-              <time dateTime={nextBookedLesson.startsAt}>{bangkokClock(new Date(nextBookedLesson.startsAt))}</time>
+              <time dateTime={nextLesson.lesson.startsAt}>{bangkokClock(new Date(nextLesson.lesson.startsAt))}</time>
               <span aria-hidden="true"> – </span>
-              <time dateTime={nextBookedLesson.endsAt}>{bangkokClock(new Date(nextBookedLesson.endsAt))}</time> น. (Asia/Bangkok)
+              <time dateTime={nextLesson.lesson.endsAt}>{bangkokClock(new Date(nextLesson.lesson.endsAt))}</time> น. (Asia/Bangkok)
             </span>
           </div>
           <div className="next-lesson-meta">
-            <span>ผู้จอง: <strong>{nextBookedLesson.customerRef}</strong></span>
-            <span>รหัส: <code>{nextBookedLesson.id}</code></span>
-            <span className="badge-booked">มีนัดหมาย (Booked)</span>
+            <span>ผู้จอง: <strong>{nextLesson.lesson.customerRef}</strong></span>
+            <span>รหัส: <code>{nextLesson.lesson.id}</code></span>
+            <span className={nextLesson.phase === 'in-progress' ? 'badge-occupied' : 'badge-booked'}>
+              {nextLesson.phase === 'in-progress' ? 'กำลังติวอยู่ (In progress)' : 'มีนัดหมาย (Booked)'}
+            </span>
           </div>
         </div>
       ) : (

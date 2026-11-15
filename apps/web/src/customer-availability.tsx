@@ -379,6 +379,25 @@ export function CustomerAvailability({
   const errorRef = useRef<HTMLParagraphElement>(null);
   const pendingFocusGroupKeyRef = useRef<string | null>(null);
   const timeGroupToggleRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const accountHeadingRef = useRef<HTMLHeadingElement>(null);
+  const availabilityHeadingRef = useRef<HTMLHeadingElement>(null);
+  const bookingsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const pendingTabFocusRef = useRef<'availability' | 'bookings' | 'account' | null>(null);
+
+  const navigateTab = (tab: 'availability' | 'bookings' | 'account') => {
+    pendingTabFocusRef.current = tab;
+    setActiveTab(tab);
+    setMenuOpen(false);
+  };
+
+  useEffect(() => {
+    const target = pendingTabFocusRef.current;
+    if (!target || target !== activeTab) return;
+    pendingTabFocusRef.current = null;
+    if (target === 'account') accountHeadingRef.current?.focus();
+    else if (target === 'bookings') bookingsHeadingRef.current?.focus();
+    else availabilityHeadingRef.current?.focus();
+  }, [activeTab]);
 
   const shortId = accountId.replaceAll('-', '').slice(-8);
 
@@ -1206,7 +1225,7 @@ export function CustomerAvailability({
             href="#availability-section"
             className={'sidebar-nav-link' + (activeTab === 'availability' ? ' sidebar-nav-active' : '')}
             aria-current={activeTab === 'availability' ? 'page' : undefined}
-            onClick={(e) => { e.preventDefault(); setActiveTab('availability'); setMenuOpen(false); }}
+            onClick={(e) => { e.preventDefault(); navigateTab('availability'); }}
           >
             <Icon kind="calendar" />
             <span>เลือกช่วงเวลาติว</span>
@@ -1217,7 +1236,7 @@ export function CustomerAvailability({
             className={'sidebar-nav-link' + (activeTab === 'bookings' ? ' sidebar-nav-active' : '')}
             aria-current={activeTab === 'bookings' ? 'page' : undefined}
             data-testid="nav-my-bookings"
-            onClick={(e) => { e.preventDefault(); setActiveTab('bookings'); setMenuOpen(false); }}
+            onClick={(e) => { e.preventDefault(); navigateTab('bookings'); }}
           >
             <Icon kind="clock" />
             <span>การจองของฉัน</span>
@@ -1228,7 +1247,7 @@ export function CustomerAvailability({
             aria-current={activeTab === 'account' ? 'page' : undefined}
             href="#customer-account-panel"
             data-testid="nav-customer-account"
-            onClick={(e) => { e.preventDefault(); setActiveTab('account'); setMenuOpen(false); }}
+            onClick={(e) => { e.preventDefault(); navigateTab('account'); }}
           >
             <Icon kind="user" />
             <span>บัญชีของฉัน</span>
@@ -1306,7 +1325,7 @@ export function CustomerAvailability({
               <div className="account-panel-header">
                 <div>
                   <p className="dashboard-kicker">AUTHENTICATED SESSION</p>
-                  <h1 id="customer-account-heading">บัญชีของฉัน</h1>
+                  <h1 id="customer-account-heading" tabIndex={-1} ref={accountHeadingRef}>บัญชีของฉัน</h1>
                   <p className="account-panel-subtitle">
                     ข้อมูลบัญชีแบบอ่านอย่างเดียวจากเซสชันที่ยืนยันตัวตนแล้ว
                   </p>
@@ -1314,7 +1333,7 @@ export function CustomerAvailability({
                 <button
                   type="button"
                   className="account-back-button"
-                  onClick={() => setActiveTab('availability')}
+                  onClick={() => navigateTab('availability')}
                 >
                   กลับไปเลือกช่วงเวลาติว
                 </button>
@@ -1355,7 +1374,7 @@ export function CustomerAvailability({
               <header className="availability-hero">
                 <div className="availability-hero-copy">
                   <h2 className="dashboard-kicker">YOUR RESERVATIONS</h2>
-                  <h1 id="customer-bookings-heading">การจองของฉัน</h1>
+                  <h1 id="customer-bookings-heading" tabIndex={-1} ref={bookingsHeadingRef}>การจองของฉัน</h1>
                   <p className="availability-helper">
                     เวลาที่แสดงเป็นเวลาประเทศไทย <strong>Asia/Bangkok (UTC+07:00)</strong>
                   </p>
@@ -1441,7 +1460,7 @@ export function CustomerAvailability({
               <header className="availability-hero">
             <div className="availability-hero-copy">
               <h2 className="dashboard-kicker">ยินดีต้อนรับ</h2>
-              <h1 id="availability-heading">เลือกช่วงเวลาติว</h1>
+              <h1 id="availability-heading" tabIndex={-1} ref={availabilityHeadingRef}>เลือกช่วงเวลาติว</h1>
               <p className="availability-helper">
                 เลือกวันที่สะดวก แล้วเลือกช่วงเวลา • เวลาที่แสดงเป็นเวลาประเทศไทย{' '}
                 <strong>Asia/Bangkok (UTC+07:00)</strong>

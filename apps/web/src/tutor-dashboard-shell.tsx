@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import './tutor-dashboard.css';
 
 type IconKind = 'calendar' | 'user' | 'logout' | 'menu' | 'plus' | 'clock' | 'arrow';
@@ -27,8 +27,25 @@ export function TutorDashboardShell({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeNav, setActiveNav] = useState<'schedule' | 'account'>('schedule');
+  const accountHeadingRef = useRef<HTMLHeadingElement>(null);
+  const scheduleHeadingRef = useRef<HTMLHeadingElement>(null);
+  const pendingFocusRef = useRef<'account' | 'schedule' | null>(null);
   const shortId = accountId.replaceAll('-', '').slice(-8);
   const closeMenu = () => setMenuOpen(false);
+  const navigateTo = (target: 'schedule' | 'account') => {
+    pendingFocusRef.current = target;
+    setActiveNav(target);
+    closeMenu();
+  };
+  useEffect(() => {
+    if (pendingFocusRef.current === 'account' && activeNav === 'account') {
+      accountHeadingRef.current?.focus();
+      pendingFocusRef.current = null;
+    } else if (pendingFocusRef.current === 'schedule' && activeNav === 'schedule') {
+      scheduleHeadingRef.current?.focus();
+      pendingFocusRef.current = null;
+    }
+  }, [activeNav]);
   const focusCreate = () => {
     setActiveNav('schedule');
     queueMicrotask(() => document.getElementById('slot-date')?.focus());
@@ -53,8 +70,7 @@ export function TutorDashboardShell({
           href="#calendar-section"
           onClick={(e) => {
             e.preventDefault();
-            setActiveNav('schedule');
-            closeMenu();
+            navigateTo('schedule');
           }}
         >
           <Icon kind="calendar"/><span>ตารางเวลาของฉัน</span>
@@ -67,8 +83,7 @@ export function TutorDashboardShell({
           data-testid="nav-tutor-account"
           onClick={(e) => {
             e.preventDefault();
-            setActiveNav('account');
-            closeMenu();
+            navigateTo('account');
           }}
         >
           <Icon kind="user"/><span>บัญชีของฉัน</span>
@@ -107,10 +122,10 @@ export function TutorDashboardShell({
             <div className="account-panel-header">
               <div>
                 <p className="dashboard-kicker">AUTHENTICATED SESSION</p>
-                <h1 id="tutor-account-heading">บัญชีของฉัน</h1>
+                <h1 id="tutor-account-heading" tabIndex={-1} ref={accountHeadingRef}>บัญชีของฉัน</h1>
                 <p className="account-panel-subtitle">ข้อมูลบัญชีแบบอ่านอย่างเดียวจากเซสชันที่ยืนยันตัวตนแล้ว</p>
               </div>
-              <button type="button" className="account-back-button" onClick={() => setActiveNav('schedule')}>
+              <button type="button" className="account-back-button" onClick={() => navigateTo('schedule')}>
                 กลับไปหน้าตารางเวลา
               </button>
             </div>
@@ -139,7 +154,7 @@ export function TutorDashboardShell({
             <header className="dashboard-hero">
               <div className="dashboard-hero-copy">
                 <p className="dashboard-kicker">MY TUTORING SCHEDULE</p>
-                <h1 id="schedule-heading">ตารางเวลาติวของฉัน</h1>
+                <h1 id="schedule-heading" tabIndex={-1} ref={scheduleHeadingRef}>ตารางเวลาติวของฉัน</h1>
                 <p>จัดการช่วงเวลาที่พร้อมสอนของคุณในที่เดียว ทุกช่วงเวลาเชื่อมต่อกับข้อมูลที่บันทึกไว้จริง</p>
                 <div className="hero-identity"><Icon kind="clock"/><span>เวลาประเทศไทย · <strong>Asia/Bangkok (UTC+07:00)</strong></span></div>
               </div>

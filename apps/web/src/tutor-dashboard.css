@@ -470,13 +470,13 @@ main.dashboard-root {
 }
 
 /* Next Booked Lesson Spotlight */
-.next-lesson-spotlight {
+.tutor-app .next-lesson-spotlight {
   padding: 20px 24px;
   margin-bottom: 22px;
   border-left: 4px solid var(--tutor-navy);
   background: #ffffff;
 }
-.next-lesson-header {
+.tutor-app .next-lesson-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -484,12 +484,12 @@ main.dashboard-root {
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
-.next-lesson-header h2 {
+.tutor-app .next-lesson-header h2 {
   margin: 0;
   font-size: 1.18rem;
   color: var(--tutor-navy);
 }
-.next-lesson-jump {
+.tutor-app .next-lesson-jump {
   font-size: 0.875rem;
   font-weight: 650;
   color: var(--tutor-orange-dark);
@@ -499,10 +499,10 @@ main.dashboard-root {
   padding: 4px 8px;
   border-radius: 8px;
 }
-.next-lesson-jump:hover {
+.tutor-app .next-lesson-jump:hover {
   background: var(--nuttiew-surface-hover);
 }
-.next-lesson-body {
+.tutor-app .next-lesson-body {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -513,20 +513,20 @@ main.dashboard-root {
   background: var(--nuttiew-surface-muted);
   border: 1px solid var(--nuttiew-border);
 }
-.next-lesson-datetime {
+.tutor-app .next-lesson-datetime {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.next-lesson-datetime strong {
+.tutor-app .next-lesson-datetime strong {
   font-size: 1rem;
   color: var(--tutor-navy);
 }
-.next-lesson-datetime span {
+.tutor-app .next-lesson-datetime span {
   font-size: 0.9rem;
   color: var(--tutor-ink);
 }
-.next-lesson-meta {
+.tutor-app .next-lesson-meta {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -534,36 +534,92 @@ main.dashboard-root {
   font-size: 0.875rem;
   color: var(--tutor-muted);
 }
-.next-lesson-empty-row {
+.tutor-app .next-lesson-empty-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
-.next-lesson-empty {
+.tutor-app .next-lesson-empty {
   margin: 0;
   font-size: 0.94rem;
   color: var(--tutor-muted);
 }
-.next-lesson-cta {
+.tutor-app .next-lesson-cta,
+.tutor-app .empty-slots-cta {
   background: var(--tutor-orange);
   color: var(--tutor-navy-deep);
   border-color: var(--nuttiew-orange-border);
   border-radius: 9px;
   padding: 10px 16px;
 }
-.next-lesson-cta:hover {
+.tutor-app .next-lesson-cta:hover,
+.tutor-app .empty-slots-cta:hover {
   background: var(--nuttiew-orange-hover);
   border-color: var(--nuttiew-orange-border-hover);
 }
+.tutor-app .empty-slots-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 0 8px;
+}
+
+/* 7-Day Week Strip Overview inside SlotCalendar */
+.tutor-app .tutor-week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 22px;
+  background: var(--nuttiew-surface-muted);
+  border-bottom: 1px solid var(--nuttiew-border);
+}
+.tutor-app .week-strip-day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  min-height: 58px;
+  border-radius: 9px;
+  background: #ffffff;
+  border: 1px solid var(--nuttiew-card-border);
+  color: var(--tutor-ink);
+  text-align: left;
+  font-weight: 500;
+}
+.tutor-app .week-strip-day:hover {
+  background: var(--nuttiew-surface-hover);
+  border-color: var(--tutor-navy);
+}
+.tutor-app .week-strip-day-active {
+  border-color: var(--tutor-navy);
+  box-shadow: inset 0 0 0 1px var(--tutor-navy);
+  background: #eef3fb;
+}
+.tutor-app .week-strip-label {
+  font-size: 0.78rem;
+  color: var(--tutor-muted);
+}
+.tutor-app .week-strip-date {
+  font-size: 0.88rem;
+  color: var(--tutor-navy);
+  font-weight: 700;
+}
+.tutor-app .week-strip-count {
+  font-size: 0.76rem;
+  color: var(--tutor-ink);
+}
 
 /* Read-only Account Panel */
-.account-panel-card {
+.tutor-app .account-panel-card {
   padding: 28px;
   max-width: 760px;
 }
-.account-panel-header {
+.tutor-app .account-panel-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -571,52 +627,52 @@ main.dashboard-root {
   flex-wrap: wrap;
   margin-bottom: 22px;
 }
-.account-panel-subtitle {
+.tutor-app .account-panel-subtitle {
   margin: 4px 0 0;
   color: var(--tutor-muted);
   font-size: 0.94rem;
 }
-.account-back-button {
+.tutor-app .account-back-button {
   background: #ffffff;
   color: var(--tutor-navy);
   border: 1px solid var(--tutor-control-border);
   border-radius: 9px;
   padding: 10px 16px;
 }
-.account-back-button:hover {
+.tutor-app .account-back-button:hover {
   background: var(--nuttiew-surface-hover);
 }
-.account-readonly-grid {
+.tutor-app .account-readonly-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 14px;
   margin: 0 0 24px;
 }
-.account-readonly-item {
+.tutor-app .account-readonly-item {
   padding: 14px 16px;
   border-radius: 10px;
   background: var(--nuttiew-surface-muted);
   border: 1px solid var(--nuttiew-border);
 }
-.account-readonly-item dt {
+.tutor-app .account-readonly-item dt {
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--tutor-muted);
   margin-bottom: 4px;
 }
-.account-readonly-item dd {
+.tutor-app .account-readonly-item dd {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
   color: var(--tutor-navy);
   overflow-wrap: anywhere;
 }
-.account-panel-actions {
+.tutor-app .account-panel-actions {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
 }
-.account-panel-logout {
+.tutor-app .account-panel-logout {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -626,13 +682,20 @@ main.dashboard-root {
   color: var(--nuttiew-error);
   border: 1px solid var(--nuttiew-error-border);
 }
-.account-panel-logout:hover {
+.tutor-app .account-panel-logout:hover {
   background: var(--nuttiew-error-bg);
 }
 
+@media (max-width: 900px) {
+  .tutor-app .tutor-week-strip {
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    padding: 12px 15px;
+  }
+}
+
 @media (max-width: 640px) {
-  .next-lesson-spotlight,
-  .account-panel-card {
+  .tutor-app .next-lesson-spotlight,
+  .tutor-app .account-panel-card {
     padding: 18px 16px;
   }
 }

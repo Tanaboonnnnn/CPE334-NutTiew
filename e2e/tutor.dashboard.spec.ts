@@ -176,9 +176,11 @@ test.describe('Tutor Calendar Dashboard / reviewed UX-R1…UX-R6 candidate', () 
     await expect(page.getByRole('link', { name: 'บัญชีของฉัน' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'ออกจากระบบ' })).toBeVisible();
     await page.getByRole('link', { name: 'บัญชีของฉัน' }).click();
-    await expect(page.getByRole('button', { name: 'ออกจากระบบ' })).toBeVisible();
-    await page.getByRole('button', { name: 'ปิดเมนูนำทาง' }).focus();
-    await expect(page.getByRole('button', { name: 'ปิดเมนูนำทาง' })).toBeFocused();
+    await expect(page.locator('#tutor-account-panel')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'บัญชีของฉัน' })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'เปิดเมนูนำทาง' })).toHaveAttribute('aria-expanded', 'false');
+    await page.getByRole('button', { name: 'กลับไปหน้าตารางเวลา' }).click();
+    await expect(page.getByRole('heading', { name: 'ตารางเวลาติวของฉัน' })).toBeFocused();
   });
 
   test('UX-R4 actual computed WCAG AA contrast samples and keyboard calendar controls', async ({ page }) => {
@@ -817,5 +819,78 @@ test.describe('Tutor Calendar Dashboard / reviewed UX-R1…UX-R6 candidate', () 
     await page.screenshot({ path: 'test-results/dashboard-after-create-1280.png', fullPage: true });
     await page.reload();
     await expect(page.locator('#all-slots [data-slot-id="' + inserted.id + '"]')).toHaveCount(1);
+  });
+
+  test('UX-R7 Account panel shows session identity, supports Logout and hides private data', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await signIn(page);
+    await page.getByTestId('nav-tutor-account').click();
+    const panel = page.locator('#tutor-account-panel');
+    await expect(panel).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'บัญชีของฉัน' })).toBeFocused();
+    await expect(panel).toContainText('Tutor');
+    await expect(panel).toContainText('#' + tutorId.replaceAll('-', '').slice(-8));
+    await expect(panel).toContainText('Asia/Bangkok (UTC+07:00)');
+    await page.screenshot({ path: 'test-results/tutor-account-1280.png', fullPage: true });
+    await panel.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('heading', { name: 'ยินดีต้อนรับ' })).toBeVisible();
+    await expect(page.locator('#tutor-account-panel')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'ตารางเวลาติวของฉัน' })).toHaveCount(0);
+  });
+
+  test('UX-R7 Next Booked Lesson Spotlight handles real bookings, empty CTA, and GET error retry', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    // 1) Initial 503 on /api/v1/tutor/bookings shows error + retry, then 200 empty state
+    let failBookings = true;
+    await page.route('**/api/v1/tutor/bookings', async route => {
+      if (failBookings) {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE' } }) });
+        return;
+      }
+      await route.continue();
+    });
+    await signIn(page);
+    const spotlight = page.getByTestId('tutor-next-booked-lesson');
+    await expect(spotlight).toContainText('ไม่สามารถโหลดรายการนัดหมายได้');
+    failBookings = false;
+    await spotlight.getByRole('button', { name: 'โหลดรายการนัดหมายใหม่' }).click();
+    await expect(spotlight).toContainText('ยังไม่มีนัดหมายติวที่กำลังจะมาถึง');
+    await spotlight.getByRole('button', { name: 'เปิดช่วงเวลาติวเพิ่ม' }).click();
+    await expect(page.getByLabel('วันที่')).toBeFocused();
+
+    // 2) Insert a real upcoming Booking on a dedicated Slot (append-only in S1) and verify Spotlight
+    const cRes = await pool.query<{ id: string }>('SELECT "id" FROM "User" WHERE "email"=$1', [customer]);
+    const custId = cRes.rows[0].id;
+    const spotStart = dateTime(day(10), '15:00');
+    const spotEnd = new Date(spotStart.getTime() + 3_600_000);
+    const sRes = await pool.query<{ id: string }>(
+      'INSERT INTO "Slot"("tutorId","startsAt","endsAt") VALUES($1,$2,$3) RETURNING "id"',
+      [tutorId, spotStart, spotEnd],
+    );
+    const bRes = await pool.query<{ id: string }>(
+      'INSERT INTO "Booking"("currentSlotId","customerId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,$5) RETURNING "id"',
+      [sRes.rows[0].id, custId, spotStart, spotEnd, 'Booked'],
+    );
+    const bookingId = bRes.rows[0].id;
+    await page.reload();
+    await expect(spotlight).toContainText(bookingId);
+    await expect(spotlight).toContainText('มีนัดหมาย (Booked)');
+  });
+
+  test('UX-R7 7-day week strip navigates without extra API calls and 1920px has zero overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const slotGets: string[] = [];
+    page.on('request', req => {
+      if (req.url().includes('/api/v1/tutor/slots') && req.method() === 'GET') slotGets.push(req.url());
+    });
+    await signIn(page);
+    const strip = page.getByTestId('tutor-week-strip');
+    await expect(strip.locator('button')).toHaveCount(7);
+    const before = slotGets.length;
+    await strip.locator('button').nth(2).click();
+    expect(slotGets.length).toBe(before);
+    const overflow1920 = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+    expect(overflow1920).toBe(false);
+    await page.screenshot({ path: 'test-results/dashboard-1920.png', fullPage: true });
   });
 });
