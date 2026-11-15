@@ -196,6 +196,8 @@ variables — nothing is hard-coded into executable logic.
 | Secrets | `DATABASE_URL`, `DATABASE_URL_APP`, `AUTH_CSRF_HMAC_KEY`, `AUTH_RATE_KEY` | Secret Manager; only refs in runtime |
 | Migration job | `NUTTIEW_MIGRATE_JOB` (default `<service>-migrate`) | isolated Cloud Run job |
 | Cloud Run service | `NUTTIEW_CLOUD_RUN_SERVICE` (e.g. `nuttiew`) | single origin UI+API |
+| Bootstrap password secrets | `NUTTIEW_SQL_POSTGRES_PASSWORD_SECRET`, `NUTTIEW_SQL_OWNER_PASSWORD_SECRET`, `NUTTIEW_SQL_RUNTIME_PASSWORD_SECRET` | **required in REAL mode** — three Secret Manager refs holding the postgres superuser, DB owner and DB runtime passwords; each must EXIST, be readable and carry a NONEMPTY value before any mutation (audited finding F2). Values are never generated or printed by the scripts |
+| Secret creation ordering | `secrets create` for `DATABASE_URL`/`DATABASE_URL_APP`/`AUTH_CSRF_HMAC_KEY`/`AUTH_RATE_KEY` | created idempotently (reuse if present) BEFORE the service-account IAM bindings, so the migration SA secret IAM binding always targets an existing secret (audited finding F3). Migration SA receives only `roles/secretmanager.secretAccessor` on the migration `DATABASE_URL` secret — least privilege, never broad Secret Manager |
 | GitHub Environment | `demo` | protection restricts deploy to `main` |
 
 **Cloud SQL connection method (PENDING).** The application uses `pg` (node-postgres,
@@ -238,6 +240,22 @@ deploy runbook's §5–§8 describe the exact `gcloud` steps): enable APIs, crea
 Artifact Registry repo, create the Cloud SQL instance, bootstrap the two roles +
 `pgcrypto`/`btree_gist` extensions, create the two service accounts, and references
 to the Secret Manager secrets.
+
+> **Bootstrap-secret prerequisite (audited findings F2/F3).** Before any avoidable
+> cloud mutation, `deploy/deploy.sh` in REAL mode verifies the three bootstrap
+> password secrets exist, are readable and carry nonempty values
+> (`verify_bootstrap_secret`). A missing resource, a secret with no usable version,
+> a permission denial and an empty value each FAIL CLOSED with a distinct,
+> actionable error before anything is created — never a silent skip, never an
+> auto-generated password. Operator must have already populated those Secret
+> Manager **values** (the runbook only creates the secret *references* later).
+> Secret references are created idempotently **before** the service-account IAM
+> bindings, so the migration SA can be granted `secretAccessor` only on the
+> already-existing migration `DATABASE_URL` secret. Idempotency is enforced by a
+> `describe`-first probe (`ensure_secret_create` / `ensure_iam_sa`): an existing
+> resource is reused without modification; a missing resource is created; and a
+> permission-denied or unexpected error fails closed before anything is deployed —
+> never `|| true` over an aborting `gcloud_safe`. All live GCP verification is `PENDING`.
 
 Step 3 — **Build + publish** tagged images (full SHA + digest).
 
