@@ -35,7 +35,9 @@
   --nuttiew-radius-control: 9px;
   --nuttiew-radius-input: 8px;
   --nuttiew-shadow-card: 0 12px 32px rgba(32, 43, 68, 0.08);
+  --nuttiew-shadow-soft: 0 4px 16px rgba(32, 43, 68, 0.05);
   --nuttiew-shadow-cta: 0 4px 13px rgba(161, 85, 43, 0.13);
+  --nuttiew-grid-line: rgba(32, 43, 68, 0.035);
 
   /* Semantic feedback (WCAG AA compliant; never a page palette) */
   --nuttiew-error: #9c2424;

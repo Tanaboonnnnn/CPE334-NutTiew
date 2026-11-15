@@ -149,3 +149,18 @@ implementation in PR #28. For the **new** Tutor Calendar Dashboard,
 the amended Part E in PR #30 still requires independent approval and
 merge **before** a new code-only Part F PR; this historical checklist
 does not satisfy that new gate.
+
+---
+
+## Amendment: Issue #85 Studio Desk Redesign & Account Panel (PR #86, pending human review)
+
+- **Supersedes `UX-R1` Account navigation clause (line 11 above):** `บัญชีของฉัน` (`[data-testid="nav-tutor-account"]`) now opens the in-workspace read-only `#tutor-account-panel` rather than scrolling to `#account-details` in the sidebar, closes the mobile menu drawer, and moves focus to `#tutor-account-heading` (`tabIndex={-1}`).
+- **New Automated Test Cases (`e2e/tutor.dashboard.spec.ts`, `apps/web/test/tutor-metrics.test.ts`):**
+
+| ID | Scope & Expected Behavior | Automated Source |
+|---|---|---|
+| `UX-R4` (updated) | At `320px`, opening mobile nav and selecting `บัญชีของฉัน` closes drawer (`aria-expanded="false"`), opens `#tutor-account-panel`, moves focus to `#tutor-account-heading`, and `กลับไปหน้าตารางเวลา` returns focus to `#schedule-heading` | `e2e/tutor.dashboard.spec.ts` |
+| `UX-R7` | (1) Account panel renders `Tutor`, `#shortId`, `Asia/Bangkok (UTC+07:00)`, and `ออกจากระบบ` clears session/private UI; (2) Next Booked Lesson Spotlight handles `503` + `โหลดรายการนัดหมายใหม่` retry, `200` empty CTA focusing `#slot-date`, and real DB `Booked` row; (3) `[data-testid="tutor-week-strip"]` renders 7 days with zero extra `GET /api/v1/tutor/slots` and zero overflow at `1920×1080` | `e2e/tutor.dashboard.spec.ts` |
+| `tutor-metrics` | Unit tests verify `computeTutorKpis` (`Offered`, `Occupied`, `Unoccupied`, `Asia/Bangkok` Mon–Sun & cross-year `2026-12-31T17:30:00Z`) and `selectNextTutorLesson` (`in-progress` vs `upcoming` vs `Past`) | `apps/web/test/tutor-metrics.test.ts` |
+
+- **Verified CI Evidence (prior to this STS-only doc commit):** `f1e9bf49baf7f6dcb436ac850a550768803b331` — CI Run [`43743870949`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43743870949) (`Unit / types / build`, `PostgreSQL 18`, `Microsoft Edge E2E` all **SUCCESS**, `playwright-edge-report` artifact uploaded). Pending human visual & spec review by `@Tanaboonnnnn`.

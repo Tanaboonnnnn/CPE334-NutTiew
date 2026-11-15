@@ -84,6 +84,7 @@ export function SlotCalendar({
     return () => media.removeEventListener('change', update);
   }, []);
   const days = Array.from({ length: dayCount }, (_, index) => shiftDay(startDay, index));
+  const weekDays = Array.from({ length: 7 }, (_, index) => shiftDay(startDay, index));
   const visible = calendarVisibleCount(slots, startDay, dayCount);
   return (
     <section className="dashboard-card calendar-card" id="calendar-section" aria-labelledby="calendar-title">
@@ -111,6 +112,33 @@ export function SlotCalendar({
         <span className="calendar-dot" aria-hidden="true" />
         <span>ช่วงที่แสดง: {visible} ช่วงเวลา</span>
         <span className="calendar-all-hint">รายการทุกวันอยู่ด้านล่าง ↓</span>
+      </div>
+      <div className="tutor-week-strip" data-testid="tutor-week-strip" role="group" aria-label="ภาพรวม 7 วันถัดไป">
+        {weekDays.map(dayKey => {
+          const { dayPart, datePart } = calendarDayLabel(dayKey);
+          const daySlots = slots.filter(s => s.lifecycle === 'Offered' && minuteSlice(s, dayKey) !== null);
+          const occupied = daySlots.filter(s => s.occupancy === 'Occupied').length;
+          const isActiveWindow = days.includes(dayKey);
+          return (
+            <button
+              key={dayKey}
+              type="button"
+              className={'week-strip-day' + (isActiveWindow ? ' week-strip-day-active' : '')}
+              aria-pressed={dayKey === startDay}
+              onClick={() => onChangeDay(dayKey)}
+            >
+              <span className="week-strip-label">{dayPart}</span>
+              <strong className="week-strip-date">{datePart}</strong>
+              <span className="week-strip-count">
+                {daySlots.length === 0
+                  ? 'ว่าง'
+                  : occupied > 0
+                    ? `${daySlots.length} ช่วง (${occupied} จอง)`
+                    : `${daySlots.length} ช่วง`}
+              </span>
+            </button>
+          );
+        })}
       </div>
       <div ref={viewport} className="calendar-scroll" tabIndex={0} role="region" aria-label="ปฏิทิน 24 ชั่วโมง เลื่อนดูเวลาได้ทุกช่วง">
         <div className="calendar-scroll-inner" data-columns={dayCount}>
@@ -171,7 +199,12 @@ export function AllSlotsAgenda({ slots }: { slots: OfferedSlot[] }) {
       <span className="agenda-count">{ordered.length} ช่วงเวลา</span>
     </div>
     {ordered.length === 0
-      ? <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่เปิดไว้</p>
+      ? <div className="empty-slots-box">
+          <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่เปิดไว้</p>
+          <button type="button" className="empty-slots-cta" onClick={() => document.getElementById('slot-date')?.focus()}>
+            เปิดช่วงเวลาติวแรก
+          </button>
+        </div>
       : <ul className="slot-list" aria-label="Slot ทั้งหมดของฉัน">{ordered.map(slot => {
         const start = new Date(slot.startsAt);
         const end = new Date(slot.endsAt);
