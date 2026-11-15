@@ -141,6 +141,10 @@ case "$cmd" in
     ;;
   secrets)
     sub="${1:-}"
+    if [ "$sub" = "add-iam-policy-binding" ]; then
+      if [ "${FAKE_IAM_GRANT_FAIL:-0}" = "1" ]; then echo "gcloud(fake): secrets add-iam-policy-binding failed" >&2; exit 47; fi
+      exit 0
+    fi
     if [ "$sub" = "describe" ]; then
       secret_arg=""
       for a in "$@"; do case "$a" in --secret=*) ;; esac; done
