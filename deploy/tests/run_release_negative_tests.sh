@@ -441,10 +441,94 @@ rm -rf "$sb"
 sb="$(make_sandbox)"
 run_deploy_smoke "" "$logs" "$sb" >/dev/null 2>&1; rc=$?
 [ "$rc" -eq 0 ] && pass "binding-target happy path succeeds" || failt "binding-target happy path failed (rc=$rc)"
-bind_line="$(grep "secrets add-iam-policy-binding" "$logs/gcloud.log" | head -1)"
+bind_line="$(grep "secrets add-iam-policy-binding" "$logs/gcloud.log" | grep -F "serviceAccount:test-migrate-sa" | head -1)"
 echo "$bind_line" | grep -qE "DATABASE_URL" && pass "IAM binding targets the DATABASE_URL secret" || failt "IAM binding did not target DATABASE_URL: $bind_line"
 echo "$bind_line" | grep -qE "roles/secretmanager\.secretAccessor" && pass "IAM binding uses secretAccessor role (least privilege)" || failt "IAM binding role wrong: $bind_line"
 echo "$bind_line" | grep -qE "serviceAccount:test-migrate-sa" && pass "IAM binding targets migration SA" || failt "IAM binding member wrong: $bind_line"
+rm -rf "$sb"
+# =============================================================================
+# 19b-19e. Runtime SA secret IAM (Issue #82): the runtime Cloud Run container
+#   mounts DATABASE_URL_APP / AUTH_CSRF_HMAC_KEY / AUTH_RATE_KEY from Secret
+#   Manager (section 12 of deploy.sh), so the runtime SA must get
+#   roles/secretmanager.secretAccessor on EXACTLY those three secrets -- never on
+#   the migration DATABASE_URL, and never project-wide.
+#   Behavioral: inspects the recorded fake-gcloud IAM binding lines.
+# =============================================================================
+
+# scope of secretAccessor bindings for one SA (secret name per binding line)
+secret_accessor_scope() { # <email> -> confident secret name per binding
+  local email="$1"
+  grep "secrets add-iam-policy-binding" "$logs/gcloud.log" \
+    | grep -F "serviceAccount:$email" \
+    | grep "roles/secretmanager.secretAccessor" \
+    | sed -E 's#^gcloud secrets add-iam-policy-binding ([^ ]+).*#\1#' \
+    | sort | uniq
+}
+
+# --- 19b. Runtime SA gets EXACTLY the three app secrets (least privilege) ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && pass "runtime-SAM-iAM happy path succeeds" || failt "runtime-SA IAM happy path failed (rc=$rc): $(tail -3 "$logs/fix_run.out")"
+runtime_secrets="$(secret_accessor_scope test-runtime-sa@a-test-project-123.iam.gserviceaccount.com)"
+expected_runtime="AUTH_CSRF_HMAC_KEY
+AUTH_RATE_KEY
+DATABASE_URL_APP"
+if [ "$runtime_secrets" = "$expected_runtime" ]; then
+  pass "runtime SA secretAccessor scope == {DATABASE_URL_APP, AUTH_CSRF_HMAC_KEY, AUTH_RATE_KEY} exactly"
+else
+  failt "runtime SA secretAccessor scope mismatch. got: $(echo "$runtime_secrets" | tr '\n' ',')"
+fi
+if echo "$runtime_secrets" | grep -qx "DATABASE_URL"; then
+  failt "runtime SA granted secretAccessor on the migration DATABASE_URL secret"
+else
+  pass "runtime SA is NOT granted the migration DATABASE_URL secret"
+fi
+rm -rf "$sb"
+
+# --- 19c. Migration SA still reads ONLY the migration DATABASE_URL secret ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && pass "migration-SA-IAM happy path succeeds" || failt "migration-SA IAM happy path failed (rc=$rc)"
+mig_secrets="$(secret_accessor_scope test-migrate-sa@a-test-project-123.iam.gserviceaccount.com)"
+if [ "$mig_secrets" = "DATABASE_URL" ]; then
+  pass "migration SA secretAccessor scope is ONLY DATABASE_URL"
+else
+  failt "migration SA secretAccessor scope mismatch. got: $(echo "$mig_secrets" | tr '\n' ',')"
+fi
+if grep -E "projects add-iam-policy-binding .*roles/secretmanager\.secretAccessor" "$logs/gcloud.log"; then
+  failt "a project-wide secretAccessor binding was issued"
+else
+  pass "no project-wide secretAccessor binding (resource-level only)"
+fi
+rm -rf "$sb"
+
+# --- 19d. Env-overridable secret names: custom NUTTIEW_*_SECRET values honored ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" \
+  NUTTIEW_DATABASE_URL_APP_SECRET=custom_app \
+  NUTTIEW_CSRF_HMAC_KEY_SECRET=custom_csrf \
+  NUTTIEW_RATE_KEY_SECRET=custom_rate >/dev/null 2>&1; rc=$?
+[ "$rc" -eq 0 ] && pass "runtime-SA-env-override happy path succeeds" || failt "env-override happy path failed (rc=$rc)"
+runtime_custom="$(secret_accessor_scope test-runtime-sa@a-test-project-123.iam.gserviceaccount.com)"
+expected_custom="custom_app
+custom_csrf
+custom_rate"
+if [ "$runtime_custom" = "$expected_custom" ]; then
+  pass "runtime SA honors NUTTIEW_*_SECRET env overrides for all three app secrets"
+else
+  failt "runtime SA env-override scope mismatch. got: $(echo "$runtime_custom" | tr '\n' ',')"
+fi
+rm -rf "$sb"
+
+# --- 19e. IAM grant failure aborts immediately; no deployment continues ---
+sb="$(make_sandbox)"
+run_deploy_smoke "" "$logs" "$sb" FAKE_IAM_GRANT_FAIL=1 >/dev/null 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "IAM grant failure -> deploy non-zero" || failt "IAM grant failure did not abort (rc=$rc)"
+if grep -q "run deploy" "$logs/gcloud.log"; then
+  failt "runtime deploy ran after an IAM grant failure"
+else
+  pass "no runtime deploy after IAM grant failure"
+fi
 rm -rf "$sb"
 
 # --- 20. Resource names in logs must never be executed as shell commands ---

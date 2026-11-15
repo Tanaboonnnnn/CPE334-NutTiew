@@ -313,6 +313,19 @@ plan "6b.secrets" "secret references ready; operator supplies real VALUES in the
 ensure_iam_sa "${NUTTIEW_RUNTIME_SA_EMAIL}" "NutTiew runtime SA"
 gcloud_safe "7.sa.runtime" -- projects add-iam-policy-binding "${NUTTIEW_PROJECT_ID}" \
   --member="serviceAccount:${NUTTIEW_RUNTIME_SA_EMAIL}" --role="roles/cloudsql.client"
+# Runtime SA reads ONLY the three runtime app secrets it mounts (section 12):
+# DATABASE_URL_APP / AUTH_CSRF_HMAC_KEY / AUTH_RATE_KEY.  Grants are SECRET-RESOURCE
+# scoped (never project-wide) so the runtime stays least privilege and never gains
+# access to the migration/admin DATABASE_URL credential (abstracted from the same
+# naming scheme; the runtime is deliberately NOT bound to it).  Section 6b already
+# created these secret RESOURCES before this block, so each binding references an
+# existing secret.  gcloud_safe fails closed: a failed grant aborts the deploy.
+gcloud_safe "7.sa.runtime" -- secrets add-iam-policy-binding "${NUTTIEW_DATABASE_URL_APP_SECRET:-DATABASE_URL_APP}" \
+  --member="serviceAccount:${NUTTIEW_RUNTIME_SA_EMAIL}" --role="roles/secretmanager.secretAccessor"
+gcloud_safe "7.sa.runtime" -- secrets add-iam-policy-binding "${NUTTIEW_CSRF_HMAC_KEY_SECRET:-AUTH_CSRF_HMAC_KEY}" \
+  --member="serviceAccount:${NUTTIEW_RUNTIME_SA_EMAIL}" --role="roles/secretmanager.secretAccessor"
+gcloud_safe "7.sa.runtime" -- secrets add-iam-policy-binding "${NUTTIEW_RATE_KEY_SECRET:-AUTH_RATE_KEY}" \
+  --member="serviceAccount:${NUTTIEW_RUNTIME_SA_EMAIL}" --role="roles/secretmanager.secretAccessor"
 ensure_iam_sa "${NUTTIEW_DEPLOY_SA_EMAIL}" "NutTiew deploy SA"
 gcloud_safe "7.sa.deploy" -- projects add-iam-policy-binding "${NUTTIEW_PROJECT_ID}" \
   --member="serviceAccount:${NUTTIEW_DEPLOY_SA_EMAIL}" --role="roles/artifactregistry.writer"
