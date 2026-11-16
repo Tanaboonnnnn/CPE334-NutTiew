@@ -44,6 +44,14 @@
 | UnknownBookingOutcome lock | Unresolved Booking POST (`503 BOOKING_OUTCOME_UNKNOWN` / network abort/timeout) | Keep `#selected-offer-summary` + `ส่งคำขอเดิมอีกครั้ง`; block (`disabled`) switching selection to any different `slotId` across all days/time groups until reconciled |
 | Session change / logout | Logout click, `logoutError`, `401`/`403`, binding mismatch, `nuttiew-auth-changed` event | Immediately abort in-flight requests, clear offers, calendar selection, day map, and CSRF state; ignore delayed responses from prior Session |
 
+---
+
+## Amendment: Issue #85 Studio Desk Hierarchy & Read-Only Account Panel (PR #86, pending human review)
+
+- **Supersedes `#account-details` sidebar anchor behavior (§A.1 item 1):** Clicking **บัญชีของฉัน** (`[data-testid="nav-customer-account"]`) now switches `activeTab` to `'account'` (`#customer-account-panel`), closes the mobile navigation drawer (`aria-expanded="false"`), and moves keyboard focus to `#customer-account-heading` (`tabIndex={-1}`). The panel displays read-only session-derived **Role (`Customer`)**, **Account Reference (`#shortId`)**, **`Asia/Bangkok (UTC+07:00)`**, a **กลับไปเลือกช่วงเวลาติว** button (returning focus to `#availability-heading`), and **ออกจากระบบ** (using the existing `handleLogout` handler). Switching to `'bookings'` likewise moves focus to `#customer-bookings-heading`.
+- **Studio Desk Visual Hierarchy (`customer-availability.css`):** Applies the shared subtle blueprint grid canvas, softened card borders/shadows, a left Navy accent on `#selected-offer-summary` (Step 3), elevated `.customer-booking-card` boundaries, and an actionable primary-styled empty-state CTA (`[data-testid="empty-browse-availability-btn"]`), while preserving all `#44` Date-first Monthly Calendar, CSRF, and `UnknownBookingOutcome` contracts unchanged.
+- **Verification:** Covered by `e2e/availability.calendar.spec.ts` (`UX-CAL-11`). Pending human review by `@Tanaboonnnnn` on PR #86.
+
 ### A.3 Responsive breakpoints, hit targets, and accessibility targets
 
 | Viewport | Layout | Calendar/target geometry |

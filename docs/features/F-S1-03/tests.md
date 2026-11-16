@@ -127,3 +127,16 @@
 - Consistent with Part E separation, no test, migration, API route, query, browser run, benchmark, or manual accessibility audit is executed by this STS documentation amendment.
 - Historical `#15` Part F sequencing required the merged `#33` Booking foundation for `AVA-01..10`/`12`/`15..17`, the `#16` endpoint for `AVA-11`, and exact `320/375/768/1280 CSS px` + timezone + keyboard/focus evidence; `AVA-18` positive-path display-name display remains blocked until `OD-AV-02` clears.
 - Do not claim full WCAG 2.2 AA without a complete manual assessment.
+
+---
+
+## Amendment: Issue #85 Studio Desk Hierarchy & Read-Only Account Panel (PR #86, pending human review)
+
+- **Supersedes Customer Shell `#account-details` sidebar anchor behavior:** `บัญชีของฉัน` (`[data-testid="nav-customer-account"]`) now opens `#customer-account-panel` (`activeTab === 'account'`), closes the mobile menu drawer, and moves focus to `#customer-account-heading` (`tabIndex={-1}`).
+- **New Automated Test Case (`e2e/availability.calendar.spec.ts`):**
+
+| ID | Scope & Expected Behavior | Automated Source |
+|---|---|---|
+| `UX-CAL-11` | At `320×800`, mobile menu closes on `บัญชีของฉัน` (`aria-expanded="false"`), `#customer-account-panel` shows `Customer` and `Asia/Bangkok (UTC+07:00)` with focus on `#customer-account-heading`; `กลับไปเลือกช่วงเวลาติว` restores `#availability-heading` focus; at `1920×1080`, zero horizontal overflow; `ออกจากระบบ` clears session and private UI | `e2e/availability.calendar.spec.ts` |
+
+- **Verified CI Evidence (prior to this STS-only doc commit):** `f1e9bf49baf7f6dcb436ac850a550768803b331` — CI Run [`43743870949`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43743870949) (all 3 jobs **SUCCESS**, `playwright-edge-report` artifact uploaded). Pending human visual & spec review by `@Tanaboonnnnn`.

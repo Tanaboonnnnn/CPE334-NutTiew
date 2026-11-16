@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import './tutor-dashboard.css';
 
 type IconKind = 'calendar' | 'user' | 'logout' | 'menu' | 'plus' | 'clock' | 'arrow';
@@ -26,9 +26,30 @@ export function TutorDashboardShell({
   children: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeNav, setActiveNav] = useState<'schedule' | 'account'>('schedule');
+  const accountHeadingRef = useRef<HTMLHeadingElement>(null);
+  const scheduleHeadingRef = useRef<HTMLHeadingElement>(null);
+  const pendingFocusRef = useRef<'account' | 'schedule' | null>(null);
   const shortId = accountId.replaceAll('-', '').slice(-8);
   const closeMenu = () => setMenuOpen(false);
-  const focusCreate = () => document.getElementById('slot-date')?.focus();
+  const navigateTo = (target: 'schedule' | 'account') => {
+    pendingFocusRef.current = target;
+    setActiveNav(target);
+    closeMenu();
+  };
+  useEffect(() => {
+    if (pendingFocusRef.current === 'account' && activeNav === 'account') {
+      accountHeadingRef.current?.focus();
+      pendingFocusRef.current = null;
+    } else if (pendingFocusRef.current === 'schedule' && activeNav === 'schedule') {
+      scheduleHeadingRef.current?.focus();
+      pendingFocusRef.current = null;
+    }
+  }, [activeNav]);
+  const focusCreate = () => {
+    setActiveNav('schedule');
+    queueMicrotask(() => document.getElementById('slot-date')?.focus());
+  };
   return <div className="tutor-app">
     <aside className={'tutor-sidebar' + (menuOpen ? ' tutor-sidebar-open' : '')} aria-label="เมนูสำหรับ Tutor">
       <div className="sidebar-top">
@@ -43,11 +64,30 @@ export function TutorDashboardShell({
       </div>
       <nav id="tutor-sidebar-navigation" className="sidebar-navigation" aria-label="ทางลัดบัญชี Tutor">
         <span className="sidebar-section-label">WORKSPACE</span>
-        <a className="sidebar-nav-link sidebar-nav-active" aria-current="page" href="#calendar-section" onClick={closeMenu}>
-          <Icon kind="calendar"/><span>ตารางเวลาของฉัน</span><span className="nav-active-marker" aria-hidden="true" />
+        <a
+          className={'sidebar-nav-link' + (activeNav === 'schedule' ? ' sidebar-nav-active' : '')}
+          aria-current={activeNav === 'schedule' ? 'page' : undefined}
+          href="#calendar-section"
+          onClick={(e) => {
+            e.preventDefault();
+            navigateTo('schedule');
+          }}
+        >
+          <Icon kind="calendar"/><span>ตารางเวลาของฉัน</span>
+          {activeNav === 'schedule' && <span className="nav-active-marker" aria-hidden="true" />}
         </a>
-        <a className="sidebar-nav-link" href="#account-details" onClick={() => setMenuOpen(true)}>
+        <a
+          className={'sidebar-nav-link' + (activeNav === 'account' ? ' sidebar-nav-active' : '')}
+          aria-current={activeNav === 'account' ? 'page' : undefined}
+          href="#tutor-account-panel"
+          data-testid="nav-tutor-account"
+          onClick={(e) => {
+            e.preventDefault();
+            navigateTo('account');
+          }}
+        >
           <Icon kind="user"/><span>บัญชีของฉัน</span>
+          {activeNav === 'account' && <span className="nav-active-marker" aria-hidden="true" />}
         </a>
       </nav>
       <div className="sidebar-account" id="account-details">
@@ -66,25 +106,65 @@ export function TutorDashboardShell({
 
     <div className="dashboard-main-area">
       <div className="dashboard-topbar">
-        <div className="breadcrumb"><span className="breadcrumb-first">NutTiew</span><span aria-hidden="true">/</span><strong>ตารางเวลาของฉัน</strong></div>
+        <div className="breadcrumb">
+          <span className="breadcrumb-first">NutTiew</span>
+          <span aria-hidden="true">/</span>
+          <strong>{activeNav === 'account' ? 'บัญชีของฉัน' : 'ตารางเวลาของฉัน'}</strong>
+        </div>
         <div className="account-status"><span className="status-live-dot" aria-hidden="true"/>
           <span>เข้าสู่ระบบแล้ว</span><span className="topbar-tutor">Tutor · #{shortId}</span></div>
       </div>
 
       <div className="dashboard-inner">
         {logoutError && <p className="dashboard-auth-error" role="alert">{logoutError}</p>}
-        <header className="dashboard-hero">
-          <div className="dashboard-hero-copy">
-            <p className="dashboard-kicker">MY TUTORING SCHEDULE</p>
-            <h1 id="schedule-heading">ตารางเวลาติวของฉัน</h1>
-            <p>จัดการช่วงเวลาที่พร้อมสอนของคุณในที่เดียว ทุกช่วงเวลาเชื่อมต่อกับข้อมูลที่บันทึกไว้จริง</p>
-            <div className="hero-identity"><Icon kind="clock"/><span>เวลาประเทศไทย · <strong>Asia/Bangkok (UTC+07:00)</strong></span></div>
-          </div>
-          <button type="button" className="dashboard-add-cta" onClick={focusCreate}>
-            <Icon kind="plus"/>เพิ่มช่วงเวลาติว
-          </button>
-        </header>
-        {children}
+        {activeNav === 'account' ? (
+          <section className="dashboard-card account-panel-card" id="tutor-account-panel" aria-labelledby="tutor-account-heading">
+            <div className="account-panel-header">
+              <div>
+                <p className="dashboard-kicker">AUTHENTICATED SESSION</p>
+                <h1 id="tutor-account-heading" tabIndex={-1} ref={accountHeadingRef}>บัญชีของฉัน</h1>
+                <p className="account-panel-subtitle">ข้อมูลบัญชีแบบอ่านอย่างเดียวจากเซสชันที่ยืนยันตัวตนแล้ว</p>
+              </div>
+              <button type="button" className="account-back-button" onClick={() => navigateTo('schedule')}>
+                กลับไปหน้าตารางเวลา
+              </button>
+            </div>
+            <dl className="account-readonly-grid">
+              <div className="account-readonly-item">
+                <dt>บทบาท (Role)</dt>
+                <dd>Tutor</dd>
+              </div>
+              <div className="account-readonly-item">
+                <dt>รหัสบัญชีอ้างอิง</dt>
+                <dd><code>#{shortId}</code></dd>
+              </div>
+              <div className="account-readonly-item">
+                <dt>เขตเวลาเริ่มต้น</dt>
+                <dd>Asia/Bangkok (UTC+07:00)</dd>
+              </div>
+            </dl>
+            <div className="account-panel-actions">
+              <button type="button" className="account-panel-logout" disabled={logoutBusy} onClick={() => void onLogout()}>
+                <Icon kind="logout"/><span>{logoutBusy ? 'กำลังออกจากระบบ…' : 'ออกจากระบบ'}</span>
+              </button>
+            </div>
+          </section>
+        ) : (
+          <>
+            <header className="dashboard-hero">
+              <div className="dashboard-hero-copy">
+                <p className="dashboard-kicker">MY TUTORING SCHEDULE</p>
+                <h1 id="schedule-heading" tabIndex={-1} ref={scheduleHeadingRef}>ตารางเวลาติวของฉัน</h1>
+                <p>จัดการช่วงเวลาที่พร้อมสอนของคุณในที่เดียว ทุกช่วงเวลาเชื่อมต่อกับข้อมูลที่บันทึกไว้จริง</p>
+                <div className="hero-identity"><Icon kind="clock"/><span>เวลาประเทศไทย · <strong>Asia/Bangkok (UTC+07:00)</strong></span></div>
+              </div>
+              <button type="button" className="dashboard-add-cta" onClick={focusCreate}>
+                <Icon kind="plus"/>เพิ่มช่วงเวลาติว
+              </button>
+            </header>
+            {children}
+          </>
+        )}
         <footer className="dashboard-footer"><span>NutTiew · Tutor availability</span><span>ข้อมูลจากตารางเวลาของบัญชีนี้เท่านั้น</span></footer>
       </div>
     </div>

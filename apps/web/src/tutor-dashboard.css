@@ -444,4 +444,258 @@ main.dashboard-root {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Studio Desk & Planner Hierarchy (Issue #85) */
+.tutor-app .dashboard-main-area {
+  background-color: var(--tutor-canvas);
+  background-image:
+    linear-gradient(to right, var(--nuttiew-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--nuttiew-grid-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.tutor-app .dashboard-card {
+  border-color: var(--nuttiew-border);
+  box-shadow: var(--nuttiew-shadow-soft);
+}
+.tutor-app .overview-tile {
+  border-color: var(--nuttiew-border);
+  box-shadow: none;
+}
+.tutor-app .overview-tile small {
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+/* Next Booked Lesson Spotlight */
+.tutor-app .next-lesson-spotlight {
+  padding: 20px 24px;
+  margin-bottom: 22px;
+  border-left: 4px solid var(--tutor-navy);
+  background: #ffffff;
+}
+.tutor-app .next-lesson-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.tutor-app .next-lesson-header h2 {
+  margin: 0;
+  font-size: 1.18rem;
+  color: var(--tutor-navy);
+}
+.tutor-app .next-lesson-jump {
+  font-size: 0.875rem;
+  font-weight: 650;
+  color: var(--tutor-orange-dark);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.tutor-app .next-lesson-jump:hover {
+  background: var(--nuttiew-surface-hover);
+}
+.tutor-app .next-lesson-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--nuttiew-surface-muted);
+  border: 1px solid var(--nuttiew-border);
+}
+.tutor-app .next-lesson-datetime {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tutor-app .next-lesson-datetime strong {
+  font-size: 1rem;
+  color: var(--tutor-navy);
+}
+.tutor-app .next-lesson-datetime span {
+  font-size: 0.9rem;
+  color: var(--tutor-ink);
+}
+.tutor-app .next-lesson-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.875rem;
+  color: var(--tutor-muted);
+}
+.tutor-app .next-lesson-empty-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tutor-app .next-lesson-empty {
+  margin: 0;
+  font-size: 0.94rem;
+  color: var(--tutor-muted);
+}
+.tutor-app .next-lesson-cta,
+.tutor-app .empty-slots-cta {
+  background: var(--tutor-orange);
+  color: var(--tutor-navy-deep);
+  border-color: var(--nuttiew-orange-border);
+  border-radius: 9px;
+  padding: 10px 16px;
+}
+.tutor-app .next-lesson-cta:hover,
+.tutor-app .empty-slots-cta:hover {
+  background: var(--nuttiew-orange-hover);
+  border-color: var(--nuttiew-orange-border-hover);
+}
+.tutor-app .empty-slots-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 0 8px;
+}
+
+/* 7-Day Week Strip Overview inside SlotCalendar */
+.tutor-app .tutor-week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 22px;
+  background: var(--nuttiew-surface-muted);
+  border-bottom: 1px solid var(--nuttiew-border);
+}
+.tutor-app .week-strip-day {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  min-height: 58px;
+  border-radius: 9px;
+  background: #ffffff;
+  border: 1px solid var(--nuttiew-card-border);
+  color: var(--tutor-ink);
+  text-align: left;
+  font-weight: 500;
+}
+.tutor-app .week-strip-day:hover {
+  background: var(--nuttiew-surface-hover);
+  border-color: var(--tutor-navy);
+}
+.tutor-app .week-strip-day-active {
+  border-color: var(--tutor-navy);
+  box-shadow: inset 0 0 0 1px var(--tutor-navy);
+  background: #eef3fb;
+}
+.tutor-app .week-strip-label {
+  font-size: 0.78rem;
+  color: var(--tutor-muted);
+}
+.tutor-app .week-strip-date {
+  font-size: 0.88rem;
+  color: var(--tutor-navy);
+  font-weight: 700;
+}
+.tutor-app .week-strip-count {
+  font-size: 0.76rem;
+  color: var(--tutor-ink);
+}
+
+/* Read-only Account Panel */
+.tutor-app .account-panel-card {
+  padding: 28px;
+  max-width: 760px;
+}
+.tutor-app .account-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.tutor-app .account-panel-subtitle {
+  margin: 4px 0 0;
+  color: var(--tutor-muted);
+  font-size: 0.94rem;
+}
+.tutor-app .account-back-button {
+  background: #ffffff;
+  color: var(--tutor-navy);
+  border: 1px solid var(--tutor-control-border);
+  border-radius: 9px;
+  padding: 10px 16px;
+}
+.tutor-app .account-back-button:hover {
+  background: var(--nuttiew-surface-hover);
+}
+.tutor-app .account-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin: 0 0 24px;
+}
+.tutor-app .account-readonly-item {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--nuttiew-surface-muted);
+  border: 1px solid var(--nuttiew-border);
+}
+.tutor-app .account-readonly-item dt {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--tutor-muted);
+  margin-bottom: 4px;
+}
+.tutor-app .account-readonly-item dd {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--tutor-navy);
+  overflow-wrap: anywhere;
+}
+.tutor-app .account-panel-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tutor-app .account-panel-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 9px;
+  background: #ffffff;
+  color: var(--nuttiew-error);
+  border: 1px solid var(--nuttiew-error-border);
+}
+.tutor-app .account-panel-logout:hover {
+  background: var(--nuttiew-error-bg);
+}
+
+@media (max-width: 900px) {
+  .tutor-app .tutor-week-strip {
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    padding: 12px 15px;
+  }
+}
+
+@media (max-width: 640px) {
+  .tutor-app .next-lesson-spotlight,
+  .tutor-app .account-panel-card {
+    padding: 18px 16px;
+  }
 }

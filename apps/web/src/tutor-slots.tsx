@@ -1,19 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { AllSlotsAgenda, SlotCalendar, bangkokClock, bangkokLongDate, type OfferedSlot } from './tutor-calendar.js';
 import { TutorDashboardShell } from './tutor-dashboard-shell.js';
+import { computeTutorKpis, selectNextTutorLesson, type TutorBookingSummary } from './tutor-metrics.js';
 
 type SlotList = { data: OfferedSlot[]; meta: { requestId: string } };
-export type TutorScheduleBooking = {
-  id: string;
-  slotId: string;
-  tutorId: string;
-  customerRef: string;
-  startsAt: string;
-  endsAt: string;
-  status: 'Booked';
-  displayStatus: 'Booked' | 'Past';
-  createdAt: string;
-};
+export type TutorScheduleBooking = TutorBookingSummary;
 
 
 /** A Bangkok wall-clock input must never be interpreted in the device's timezone. */
@@ -111,6 +102,11 @@ export function TutorAvailability({
   const errorRef = useRef<HTMLParagraphElement>(null);
   const preview = bangkokStart(date, startTime);
   const end = preview ? new Date(preview.getTime() + 3_600_000) : null;
+
+  // Derive KPI metrics & Next Booked Lesson strictly from authenticated API state.
+  const nowMs = Date.now();
+  const { offeredCount, occupiedCount, slotsThisWeek } = computeTutorKpis(slots, nowMs);
+  const nextLesson = selectNextTutorLesson(bookings, nowMs);
 
   const refreshSlots = async (showLoading = false) => {
     const current = ++slotsVersion.current;
@@ -255,19 +251,66 @@ export function TutorAvailability({
     <section className="dashboard-overview" aria-label="สรุปเวลาติวจริงจากฐานข้อมูล">
       <div className="overview-tile">
         <span className="overview-label">ช่วงเวลาที่เปิดไว้ทั้งหมด</span>
-        <div><strong>{loading || listError ? '—' : slots.length}</strong><span>ช่วงเวลา</span></div>
-        <small>นับจาก Slot ของบัญชีนี้เท่านั้น</small>
+        <div><strong>{loading || listError ? '—' : offeredCount}</strong><span>ช่วงเวลา</span></div>
+        <small>นับจาก Slot ของบัญชีนี้เท่านั้น (60 นาที/ช่วง)</small>
       </div>
       <div className="overview-tile overview-help">
-        <span className="overview-label">ระยะเวลาต่อช่วง</span>
-        <div><strong>60</strong><span>นาที</span></div>
-        <small>เลือกเวลาเริ่มได้ทุกนาที ไม่จำกัดช่วงเวลาทำการ</small>
+        <span className="overview-label">ช่วงเวลาที่มีผู้จองแล้ว</span>
+        <div><strong>{loading || listError ? '—' : `${occupiedCount} / ${offeredCount}`}</strong><span>มีผู้จอง</span></div>
+        <small>สถานะ Occupied บนตารางของคุณ</small>
       </div>
       <div className="overview-tile overview-timezone">
-        <span className="overview-label">เขตเวลาที่ใช้</span>
-        <div><strong className="overview-timezone-text">UTC+07:00</strong></div>
-        <small>Asia/Bangkok • ไม่ขึ้นกับ Timezone ของอุปกรณ์</small>
+        <span className="overview-label">ช่วงเวลาในสัปดาห์นี้</span>
+        <div><strong>{loading || listError ? '—' : `${slotsThisWeek} ช่วง`}</strong><span>สัปดาห์นี้</span></div>
+        <small>จ–อา ตามเวลาไทย · UTC+07:00</small>
       </div>
+    </section>
+
+    <section className="dashboard-card next-lesson-spotlight" data-testid="tutor-next-booked-lesson" aria-labelledby="next-lesson-heading">
+      <div className="next-lesson-header">
+        <div>
+          <p className="dashboard-kicker">
+            {nextLesson?.phase === 'in-progress' ? 'SCHEDULED WINDOW NOW' : 'NEXT BOOKED LESSON'}
+          </p>
+          <h2 id="next-lesson-heading">
+            {nextLesson?.phase === 'in-progress' ? 'นัดหมายที่อยู่ในช่วงเวลาตามตาราง' : 'นัดหมายติวที่ใกล้ที่สุด'}
+          </h2>
+        </div>
+        <a className="next-lesson-jump" href="#tutor-schedule-bookings-section">ดูรายการนัดหมายทั้งหมด ↓</a>
+      </div>
+      {loadingBookings ? (
+        <p className="next-lesson-empty" role="status">กำลังโหลดข้อมูลนัดหมาย…</p>
+      ) : bookingsError ? (
+        <div className="dashboard-list-error" role="alert">
+          <p className="error">{bookingsError}</p>
+          <button className="retry-button" type="button" onClick={() => void refreshBookings(true)}>โหลดรายการนัดหมายใหม่</button>
+        </div>
+      ) : nextLesson ? (
+        <div className="next-lesson-body">
+          <div className="next-lesson-datetime">
+            <strong>{bangkokLongDate(new Date(nextLesson.lesson.startsAt))}</strong>
+            <span>
+              <time dateTime={nextLesson.lesson.startsAt}>{bangkokClock(new Date(nextLesson.lesson.startsAt))}</time>
+              <span aria-hidden="true"> – </span>
+              <time dateTime={nextLesson.lesson.endsAt}>{bangkokClock(new Date(nextLesson.lesson.endsAt))}</time> น. (Asia/Bangkok)
+            </span>
+          </div>
+          <div className="next-lesson-meta">
+            <span>ผู้จอง: <strong>{nextLesson.lesson.customerRef}</strong></span>
+            <span>รหัส: <code>{nextLesson.lesson.id}</code></span>
+            <span className={nextLesson.phase === 'in-progress' ? 'badge-occupied' : 'badge-booked'}>
+              {nextLesson.phase === 'in-progress' ? 'อยู่ในช่วงเวลานัดหมาย (Booked)' : 'มีนัดหมาย (Booked)'}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="next-lesson-empty-row">
+          <p className="next-lesson-empty">ยังไม่มีนัดหมายติวที่กำลังจะมาถึง</p>
+          <button type="button" className="next-lesson-cta" onClick={() => document.getElementById('slot-date')?.focus()}>
+            เปิดช่วงเวลาติวเพิ่ม
+          </button>
+        </div>
+      )}
     </section>
 
     <div className="dashboard-workspace">

@@ -720,4 +720,36 @@ test.describe('F-S1-03 UX-CAL-01..10 Customer Availability Option A Monthly Cale
     const zoomOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(zoomOverflow).toBe(false);
   });
+
+  test('UX-CAL-11 Customer Account panel, focus management, mobile menu close, 1920px overflow and Logout', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 800 });
+    await signIn(page, customer1Email);
+
+    // Mobile: open menu -> click Account -> menu closes & heading focused
+    await page.getByRole('button', { name: 'เปิดเมนูนำทาง' }).click();
+    await page.getByTestId('nav-customer-account').click();
+    const panel = page.locator('#customer-account-panel');
+    await expect(panel).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'บัญชีของฉัน' })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'เปิดเมนูนำทาง' })).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel).toContainText('Customer');
+    await expect(panel).toContainText('Asia/Bangkok (UTC+07:00)');
+    await page.screenshot({ path: 'test-results/customer-account-320.png', fullPage: true });
+
+    // Return to availability -> heading focused
+    await panel.getByRole('button', { name: 'กลับไปเลือกช่วงเวลาติว' }).click();
+    await expect(page.getByRole('heading', { name: 'เลือกช่วงเวลาติว' })).toBeFocused();
+
+    // Desktop 1920px: open Account, check zero overflow, screenshot & Logout clears session
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.getByTestId('nav-customer-account').click();
+    await expect(panel).toBeVisible();
+    const overflow1920 = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(overflow1920).toBe(false);
+    await page.screenshot({ path: 'test-results/customer-account-1920.png', fullPage: true });
+
+    await panel.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('heading', { name: 'ยินดีต้อนรับ' })).toBeVisible();
+    await expect(panel).toHaveCount(0);
+  });
 });
