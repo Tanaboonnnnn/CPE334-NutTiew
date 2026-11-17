@@ -125,6 +125,20 @@ def main() -> int:
         if not enablement_ids:
             problems.append("release enablement step has no id (credential steps cannot depend on it)")
         enablement_id = enablement_ids[0] if enablement_ids else None
+        enablement = next((s for s in rel_steps if s.get('id') == enablement_id), None)
+        if enablement is not None:
+            bootstrap_var = '${{ vars.NUTTIEW_DB_BOOTSTRAP_DONE }}'
+            if enablement.get('env', {}).get('DB_BOOTSTRAP') != bootstrap_var:
+                problems.append('enablement must read the operator DB bootstrap acknowledgement from vars.NUTTIEW_DB_BOOTSTRAP_DONE')
+            if 'DB_BOOTSTRAP' not in str(enablement.get('run', '')) or '!= "1"' not in str(enablement.get('run', '')):
+                problems.append('enablement must reject DB bootstrap acknowledgement other than exactly 1 before GCP auth')
+        release_step = next((s for s in rel_steps if 'bash deploy/release.sh' in str(s.get('run', ''))), None)
+        if release_step is not None:
+            if release_step.get('env', {}).get('NUTTIEW_DB_BOOTSTRAP_DONE') != '${{ vars.NUTTIEW_DB_BOOTSTRAP_DONE }}':
+                problems.append('release.sh must receive NUTTIEW_DB_BOOTSTRAP_DONE from the operator-confirmed repository variable')
+            for name in ('NUTTIEW_MIN_INSTANCES', 'NUTTIEW_MAX_INSTANCES', 'NUTTIEW_CONCURRENCY', 'NUTTIEW_PORT'):
+                if release_step.get('env', {}).get(name) != '${{ vars.' + name + ' }}':
+                    problems.append(f'release.sh must receive {name} from the reviewed repository variable to preserve production sizing')
         cred_step_names = []
         for s in rel_steps:
             uses = s.get("uses") or ""
