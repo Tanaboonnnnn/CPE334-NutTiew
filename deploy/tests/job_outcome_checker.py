@@ -9,12 +9,13 @@ or later fails.  We therefore scan ALL conditions for a terminal signal.
 
 Terminal rules (in priority order):
   * Any condition with type `Succeeded` is terminal; outcome = `success` if its
-    status is `True`, otherwise `failure`.
+    status is `True`, `failure` if `False`, or pending if `Unknown`.
+  * A `Completed` condition with status `Unknown` is not terminal; keep polling.
   * Any condition with reason `JobExecutionSucceeded` / status `True` => success.
   * Any condition with reason `Failed`/`Cancelled`/`BackoffLimitExceeded`/`RetryLimitExceeded`
     and status `True` => failure/cancelled (terminal).
-  * A condition with type `Succeeded` but status not `True` after the loop that is
-    also marked terminal is a failure.
+  * A condition with type `Succeeded`/`Completed` and status `False` is failure
+    (or cancelled when the reason says so); `Unknown`/missing means pending.
   * Otherwise => still `pending`/`incomplete`.
 
 Exit codes (for the shell wrapper / offline tests):
@@ -39,8 +40,8 @@ def evaluate(payload: dict):
         if ctype in ("Succeeded", "Completed"):
             if state == "True":
                 terminal = "success"
-            else:
-                # Not success; figure out the terminal reason.
+            elif state == "False":
+                # Explicit negative terminal status; Unknown is still pending.
                 if reason == "Cancelled":
                     terminal = "cancelled"
                 else:

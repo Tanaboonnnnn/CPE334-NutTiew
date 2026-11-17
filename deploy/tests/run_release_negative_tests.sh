@@ -250,6 +250,18 @@ if [ -s "$portfile" ]; then
   [ "$rc" -eq 0 ] && pass "happy-path success (real smoke PASS) -> exit 0" || failt "happy-path failed (rc=$rc): $(tail -5 "$logs/out8")"
   rm -rf "$sb"
 
+  # 8a. Cloud Run may report Completed=Unknown on the first poll. Keep
+  # polling THIS execution until Completed=True, then pass the real smoke test.
+  sb="$(make_sandbox)"
+  run_release "$sb" "$logs" FAKE_MIGRATE_RUNNING_FIRST=1 \
+    NUTTIEW_SMOKE_BASE_URL="$HEALTHY_URL" NUTTIEW_READY_ATTEMPTS=3 \
+    NUTTIEW_READY_POLL_SECONDS=0 >"$logs/out8a" 2>&1; rc=$?
+  [ "$rc" -eq 0 ] && pass "migration Unknown then Completed=True -> release succeeds" || failt "release aborted while migration was still running (rc=$rc): $(tail -3 "$logs/out8a")"
+  poll_count="$(grep -c 'gcloud run jobs executions describe' "$logs/gcloud.log" || true)"
+  [ "$poll_count" -ge 2 ] && pass "migration polling waits for terminal success (observed $poll_count polls)" || failt "migration polling stopped early ($poll_count polls)"
+  if grep -q "gcloud run deploy" "$logs/gcloud.log"; then pass "runtime deploy follows successful migration"; else failt "runtime deploy missing after completed migration"; fi
+  rm -rf "$sb"
+
   # 8b. Smoke failure -> non-zero (closed port)
   : > "$logs/gcloud.log"
   sb="$(make_sandbox)"

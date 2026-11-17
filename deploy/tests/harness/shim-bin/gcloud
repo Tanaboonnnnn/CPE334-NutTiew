@@ -42,7 +42,15 @@ case "$cmd" in
         echo '{"metadata":{"name":"exec-fail-1"},"status":{"conditions":[{"type":"Succeeded","status":"False","reason":"Failed"},{"type":"Active","status":"True"}]}}'
         exit 0
       fi
-      echo '{"metadata":{"name":"exec-ok-1"},"status":{"conditions":[{"type":"Active","status":"True"},{"type":"Succeeded","status":"True","reason":"JobExecutionSucceeded"}]}}'
+      if [ "${FAKE_MIGRATE_RUNNING_FIRST:-0}" = "1" ] && [ -n "$LOG" ]; then
+        # The shim logs this invocation at entry; only the first poll is Unknown.
+        seen="$(grep -c 'gcloud run jobs executions describe' "$LOG" || true)"
+        if [ "$seen" = "1" ]; then
+          echo '{"metadata":{"name":"exec-12345"},"status":{"conditions":[{"type":"Completed","status":"Unknown"},{"type":"Started","status":"True"}]}}'
+          exit 0
+        fi
+      fi
+      echo '{"metadata":{"name":"exec-ok-1"},"status":{"succeededCount":1,"completionTime":"2026-11-17T12:29:43Z","conditions":[{"type":"Started","status":"True"},{"type":"Completed","status":"True"}]}}'
       exit 0
     fi
     if [ "$sub" = "deploy" ]; then
