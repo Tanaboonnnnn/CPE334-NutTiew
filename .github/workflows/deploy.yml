@@ -19,6 +19,8 @@
 # CONFIGURATION (repository variables - set ONLY by the team later):
 #   Repository variable    DEPLOY_ENABLED = "true"   (fail-closed default = absent)
 #   Repository variables   NUTTIEW_PROJECT_ID, NUTTIEW_REGION,
+#                          NUTTIEW_DB_BOOTSTRAP_DONE (exactly "1" after the
+#                          operator has verified the existing DB bootstrap),
 #                          NUTTIEW_ARTIFACT_REPO, NUTTIEW_RUNTIME_IMAGE,
 #                          NUTTIEW_MIGRATE_IMAGE, NUTTIEW_CLOUD_RUN_SERVICE,
 #                          NUTTIEW_MIGRATE_JOB, NUTTIEW_ORIGIN,
@@ -197,11 +199,18 @@ jobs:
           WIF_PROVIDER: ${{ vars.NUTTIEW_WIF_PROVIDER }}
           DEPLOY_SA: ${{ vars.NUTTIEW_DEPLOY_SA_EMAIL }}
           GCP_PROJECT: ${{ vars.NUTTIEW_PROJECT_ID }}
+          DB_BOOTSTRAP: ${{ vars.NUTTIEW_DB_BOOTSTRAP_DONE }}
         run: |
           set -euo pipefail
           if [ "${DEPLOY_CD_READY}" != "1" ]; then
             echo "::error::GCP deployment is NOT ready: DEPLOY_CD_READY must be set to 1 by the GCP configuration session."
             echo "::error::No migration, deployment or smoke ran; the release job is failing closed."
+            exit 1
+          fi
+          # This is a human acknowledgement, not a substitute for inspecting
+          # the actual Cloud SQL roles/extensions and readiness. Never infer it.
+          if [ "${DB_BOOTSTRAP}" != "1" ]; then
+            echo "::error::NUTTIEW_DB_BOOTSTRAP_DONE must be exactly 1 after the operator verifies the existing DB bootstrap."
             exit 1
           fi
           [ -n "${WIF_PROVIDER}" ] || { echo "::error::missing NUTTIEW_WIF_PROVIDER (WIF not configured)."; exit 1; }
@@ -246,11 +255,16 @@ jobs:
           NUTTIEW_DB_OWNER_USER: ${{ vars.NUTTIEW_DB_OWNER_USER }}
           NUTTIEW_DB_RUNTIME_USER: ${{ vars.NUTTIEW_DB_RUNTIME_USER }}
           NUTTIEW_RUNTIME_SA_EMAIL: ${{ vars.NUTTIEW_RUNTIME_SA_EMAIL }}
+          NUTTIEW_DB_BOOTSTRAP_DONE: ${{ vars.NUTTIEW_DB_BOOTSTRAP_DONE }}
           NUTTIEW_MIGRATE_SA_EMAIL: ${{ vars.NUTTIEW_MIGRATE_SA_EMAIL }}
           NUTTIEW_DEPLOY_SA_EMAIL: ${{ vars.NUTTIEW_DEPLOY_SA_EMAIL }}
           NUTTIEW_MIGRATE_JOB: ${{ vars.NUTTIEW_MIGRATE_JOB }}
           NUTTIEW_CLOUD_RUN_SERVICE: ${{ vars.NUTTIEW_CLOUD_RUN_SERVICE }}
           NUTTIEW_ORIGIN: ${{ vars.NUTTIEW_ORIGIN }}
+          NUTTIEW_MIN_INSTANCES: ${{ vars.NUTTIEW_MIN_INSTANCES }}
+          NUTTIEW_MAX_INSTANCES: ${{ vars.NUTTIEW_MAX_INSTANCES }}
+          NUTTIEW_CONCURRENCY: ${{ vars.NUTTIEW_CONCURRENCY }}
+          NUTTIEW_PORT: ${{ vars.NUTTIEW_PORT }}
         run: |
           set -euo pipefail
           bash deploy/release.sh
