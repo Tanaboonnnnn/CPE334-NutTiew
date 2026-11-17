@@ -185,6 +185,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # release_tree_check() requires an actual main branch, not detached HEAD.
+          # release.sh independently rejects HEAD != the event's exact SHA.
+          ref: main
           persist-credentials: false
       # Fail-closed enablement check (A/B boundary): real cloud deploy is
       # impossible until a separately authorized GCP session configures WIF/IAM

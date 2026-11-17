@@ -121,6 +121,12 @@ def main() -> int:
         # SUCCESS outcome - never on `!cancelled()` - so a credential can never be
         # exercised after a failed configuration check.
         rel_steps = rel.get("steps", [])
+        # release_tree_check() requires a real main branch (not the default
+        # detached GitHub Actions checkout). A moving ref is still bounded by
+        # release.sh's exact HEAD == selected release SHA preflight.
+        checkouts = [s for s in rel_steps if str(s.get("uses", "")).startswith("actions/checkout@")]
+        if len(checkouts) != 1 or checkouts[0].get("with", {}).get("ref") != "main":
+            problems.append("release job must checkout ref: main so release_tree_check accepts the checked-out branch")
         enablement_ids = [s.get("id") for s in rel_steps if s.get("run") and "DEPLOY_CD_READY" in str(s.get("run", ""))]
         if not enablement_ids:
             problems.append("release enablement step has no id (credential steps cannot depend on it)")
