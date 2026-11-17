@@ -224,14 +224,14 @@ validate_digest() {
 }
 
 # resolve_image_digest <tag-ref> -> emits the digest ONLY (immutable), validated.
-# REAL: `gcloud artifacts docker images describe <ref> --format=value(imageDigest)`;
+# REAL: `gcloud artifacts docker images describe <ref> --format=value(image_summary.digest)`;
 #       a missing/malformed digest is a hard failure (never a `latest` fallback).
 # DRY-RUN: emits a deterministic but clearly-simulated digest of valid syntax.
 resolve_image_digest() {
   local ref="$1"
   if [ "$NUTTIEW_REAL_ARMED" = "1" ]; then
     local dg
-    dg="$(gcloud artifacts docker images describe "$ref" --format='value(imageDigest)' 2>/dev/null)" \
+    dg="$(gcloud artifacts docker images describe "$ref" --format='value(image_summary.digest)' 2>/dev/null)" \
       || fail "could not resolve immutable digest for ${ref} (no fallback to latest)"
     validate_digest "$dg"
     printf '%s' "$dg"
