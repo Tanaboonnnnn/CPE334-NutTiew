@@ -188,6 +188,16 @@ def main() -> int:
         if marker in raw:
             problems.append(f"credential marker present: {marker}")
 
+    # The public NutTiew service already exists. The dedicated CD service
+    # account has Cloud Run Developer, NOT run.services.setIamPolicy. A repeated
+    # --allow-unauthenticated on deploy could fail after modifying the service.
+    # Preserve its existing public access policy rather than widening CD IAM.
+    release_script = HERE.parents[0] / "release.sh"
+    if not release_script.is_file():
+        problems.append("deploy/release.sh missing")
+    elif "--allow-unauthenticated" in release_script.read_text(encoding="utf-8"):
+        problems.append("release must preserve existing public IAM; do not request --allow-unauthenticated")
+
     if problems:
         print("deploy.yml gate validation FAILED:", file=sys.stderr)
         for p in problems:
