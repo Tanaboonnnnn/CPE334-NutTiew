@@ -66,6 +66,7 @@ verify_fake_cli_exec_bits() {
 
 run_suite "fake CLI executable bits" verify_fake_cli_exec_bits
 run_suite "gate behavior"            "$BASH_BIN" "$HERE/test_gate_behavior.sh"
+run_suite "Artifact Registry digest lookup" "$BASH_BIN" "$HERE/test_artifact_digest_lookup.sh"
 run_suite "shell offline (deploy/release)" "$BASH_BIN" "$HERE/run_offline_shell_tests.sh"
 run_suite "release negative (real-mode fake gcloud)" "$BASH_BIN" "$HERE/run_release_negative_tests.sh"
 run_suite "job-outcome fixtures (python)" "$PYTHON_BIN" "$HERE/test_job_outcome_offline.py"
