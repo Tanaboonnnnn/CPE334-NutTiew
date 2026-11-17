@@ -121,10 +121,30 @@ def main() -> int:
         # SUCCESS outcome - never on `!cancelled()` - so a credential can never be
         # exercised after a failed configuration check.
         rel_steps = rel.get("steps", [])
+        # release_tree_check() requires a real main branch (not the default
+        # detached GitHub Actions checkout). A moving ref is still bounded by
+        # release.sh's exact HEAD == selected release SHA preflight.
+        checkouts = [s for s in rel_steps if str(s.get("uses", "")).startswith("actions/checkout@")]
+        if len(checkouts) != 1 or checkouts[0].get("with", {}).get("ref") != "main":
+            problems.append("release job must checkout ref: main so release_tree_check accepts the checked-out branch")
         enablement_ids = [s.get("id") for s in rel_steps if s.get("run") and "DEPLOY_CD_READY" in str(s.get("run", ""))]
         if not enablement_ids:
             problems.append("release enablement step has no id (credential steps cannot depend on it)")
         enablement_id = enablement_ids[0] if enablement_ids else None
+        enablement = next((s for s in rel_steps if s.get('id') == enablement_id), None)
+        if enablement is not None:
+            bootstrap_var = '${{ vars.NUTTIEW_DB_BOOTSTRAP_DONE }}'
+            if enablement.get('env', {}).get('DB_BOOTSTRAP') != bootstrap_var:
+                problems.append('enablement must read the operator DB bootstrap acknowledgement from vars.NUTTIEW_DB_BOOTSTRAP_DONE')
+            if 'DB_BOOTSTRAP' not in str(enablement.get('run', '')) or '!= "1"' not in str(enablement.get('run', '')):
+                problems.append('enablement must reject DB bootstrap acknowledgement other than exactly 1 before GCP auth')
+        release_step = next((s for s in rel_steps if 'bash deploy/release.sh' in str(s.get('run', ''))), None)
+        if release_step is not None:
+            if release_step.get('env', {}).get('NUTTIEW_DB_BOOTSTRAP_DONE') != '${{ vars.NUTTIEW_DB_BOOTSTRAP_DONE }}':
+                problems.append('release.sh must receive NUTTIEW_DB_BOOTSTRAP_DONE from the operator-confirmed repository variable')
+            for name in ('NUTTIEW_MIN_INSTANCES', 'NUTTIEW_MAX_INSTANCES', 'NUTTIEW_CONCURRENCY', 'NUTTIEW_PORT'):
+                if release_step.get('env', {}).get(name) != '${{ vars.' + name + ' }}':
+                    problems.append(f'release.sh must receive {name} from the reviewed repository variable to preserve production sizing')
         cred_step_names = []
         for s in rel_steps:
             uses = s.get("uses") or ""
@@ -167,6 +187,16 @@ def main() -> int:
     for marker in ("BEGIN PRIVATE KEY", "service-account-key.json"):
         if marker in raw:
             problems.append(f"credential marker present: {marker}")
+
+    # The public NutTiew service already exists. The dedicated CD service
+    # account has Cloud Run Developer, NOT run.services.setIamPolicy. A repeated
+    # --allow-unauthenticated on deploy could fail after modifying the service.
+    # Preserve its existing public access policy rather than widening CD IAM.
+    release_script = HERE.parents[0] / "release.sh"
+    if not release_script.is_file():
+        problems.append("deploy/release.sh missing")
+    elif "--allow-unauthenticated" in release_script.read_text(encoding="utf-8"):
+        problems.append("release must preserve existing public IAM; do not request --allow-unauthenticated")
 
     if problems:
         print("deploy.yml gate validation FAILED:", file=sys.stderr)

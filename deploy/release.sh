@@ -113,10 +113,12 @@ run_migration_job_and_wait "${NUTTIEW_MIGRATE_JOB}" "${NUTTIEW_REGION}" "${MIGRA
 # -----------------------------------------------------------------------------
 # Deploy runtime (restricted credential) pinned to the immutable digest, with the
 # exact public HTTPS origin.
+# The service is already public. Preserve its existing IAM policy; the least-
+# privilege deployment SA has Cloud Run Developer, not setIamPolicy.
 # -----------------------------------------------------------------------------
 gcloud_safe "release.deploy" -- run deploy "${NUTTIEW_CLOUD_RUN_SERVICE}" \
   --image="${RUNTIME_DIGEST_REF}" --region="${NUTTIEW_REGION}" --platform=managed \
-  --allow-unauthenticated --service-account="${NUTTIEW_RUNTIME_SA_EMAIL}" \
+  --service-account="${NUTTIEW_RUNTIME_SA_EMAIL}" \
   --min-instances="${NUTTIEW_MIN_INSTANCES}" --max-instances="${NUTTIEW_MAX_INSTANCES}" \
   --concurrency="${NUTTIEW_CONCURRENCY}" --port="${NUTTIEW_PORT}" \
   --add-cloudsql-instances="${NUTTIEW_PROJECT_ID}:${NUTTIEW_REGION}:${NUTTIEW_SQL_INSTANCE}" \
