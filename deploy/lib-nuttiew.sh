@@ -301,9 +301,16 @@ run_migration_job_and_wait() {
     for _ in $(seq 1 "${NUTTIEW_MIGRATE_WAIT_ATTEMPTS:-60}"); do
       exec_row="$(gcloud run jobs executions describe "$exec_name" --region="$region" --format=json 2>/dev/null || true)"
       [ -n "$exec_row" ] || { sleep "${NUTTIEW_MIGRATE_POLL_SECONDS:-5}"; continue; }
-      outcome="$(printf '%s' "$exec_row" | python3 "$checker" - 2>/dev/null || echo pending)"
-      [ "$outcome" != "pending" ] && [ "$outcome" != "incomplete" ] && break
-      sleep "${NUTTIEW_MIGRATE_POLL_SECONDS:-5}"
+      # Checker exits 0=success, 1=failure/cancelled, 3=pending, 2=invalid.
+      # `|| echo pending` appended a second line to failures ("failure\npending")
+      # and made the release stop after a single non-terminal poll.
+      local checker_rc=0
+      outcome="$(printf '%s' "$exec_row" | python3 "$checker" - 2>/dev/null)" || checker_rc=$?
+      case "${checker_rc}:${outcome}" in
+        0:success|1:failure|1:cancelled) break ;;
+        3:pending) sleep "${NUTTIEW_MIGRATE_POLL_SECONDS:-5}" ;;
+        *) fail "invalid migration outcome for ${exec_name} (checker exit=${checker_rc}, outcome=${outcome}); blocking runtime deploy" ;;
+      esac
     done
     case "$outcome" in
       success) log "migration execution ${exec_name} SUCCEEDED" ;;

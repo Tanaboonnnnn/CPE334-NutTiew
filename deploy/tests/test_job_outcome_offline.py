@@ -60,6 +60,16 @@ PENDING_COND = [
     {"type": "Active", "status": "True"},
     {"type": "Ready", "status": "True"},  # misleading: first True, not terminal
 ]
+# Real Cloud Run execution observations may contain a Completed=Unknown
+# condition while the job is still running. Unknown is not a terminal failure.
+UNKNOWN_COMPLETED_COND = [
+    {"type": "Started", "status": "True"},
+    {"type": "Completed", "status": "Unknown"},
+]
+UNKNOWN_SUCCEEDED_COND = [
+    {"type": "Succeeded", "status": "Unknown"},
+    {"type": "Active", "status": "True"},
+]
 # Misleading order: Succeeded=True listed last; a naive conditions[0] (Active=True)
 # must NOT be treated as success by the old logic, but the checker sees the True.
 MISLEAD_COND = [
@@ -85,6 +95,12 @@ def main() -> int:
 
     r = run(_job(PENDING_COND))
     check("pending-not-success", r.returncode == 3 and "pending" in r.stdout, f"rc={r.returncode} out={r.stdout} err={r.stderr}")
+
+    r = run(_job(UNKNOWN_COMPLETED_COND))
+    check("completed-unknown-is-pending", r.returncode == 3 and r.stdout.strip() == "pending", f"rc={r.returncode} out={r.stdout} err={r.stderr}")
+
+    r = run(_job(UNKNOWN_SUCCEEDED_COND))
+    check("succeeded-unknown-is-pending", r.returncode == 3 and r.stdout.strip() == "pending", f"rc={r.returncode} out={r.stdout} err={r.stderr}")
 
     r = run(_job(MISLEAD_COND))
     check("misleading-condition-order", r.returncode == 0 and "success" in r.stdout, f"rc={r.returncode} out={r.stdout} err={r.stderr}")
