@@ -248,6 +248,16 @@ if [ -s "$portfile" ]; then
   sb="$(make_sandbox)"
   run_release "$sb" "$logs" NUTTIEW_SMOKE_BASE_URL="$HEALTHY_URL" NUTTIEW_READY_ATTEMPTS=3 NUTTIEW_READY_POLL_SECONDS=0 >"$logs/out8" 2>&1; rc=$?
   [ "$rc" -eq 0 ] && pass "happy-path success (real smoke PASS) -> exit 0" || failt "happy-path failed (rc=$rc): $(tail -5 "$logs/out8")"
+  if grep -q -- ' --port=3001' "$logs/gcloud.log"; then
+    pass "Cloud Run container port configured with --port=3001"
+  else
+    failt "Cloud Run container port not configured by --port"
+  fi
+  if grep 'gcloud run deploy ' "$logs/gcloud.log" | grep -E -- '--set-env-vars=(PORT=|[^ ]*,PORT=)' >/dev/null; then
+    failt "Cloud Run reserved PORT was provided in --set-env-vars"
+  else
+    pass "Cloud Run reserved PORT excluded from --set-env-vars"
+  fi
   rm -rf "$sb"
 
   # 8a. Cloud Run may report Completed=Unknown on the first poll. Keep
