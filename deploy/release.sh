@@ -122,7 +122,7 @@ gcloud_safe "release.deploy" -- run deploy "${NUTTIEW_CLOUD_RUN_SERVICE}" \
   --min-instances="${NUTTIEW_MIN_INSTANCES}" --max-instances="${NUTTIEW_MAX_INSTANCES}" \
   --concurrency="${NUTTIEW_CONCURRENCY}" --port="${NUTTIEW_PORT}" \
   --add-cloudsql-instances="${NUTTIEW_PROJECT_ID}:${NUTTIEW_REGION}:${NUTTIEW_SQL_INSTANCE}" \
-  --set-env-vars="NODE_ENV=production,AUTH_CANONICAL_ORIGIN=${NUTTIEW_ORIGIN},PORT=${NUTTIEW_PORT},WEB_DIST=/app/apps/web/dist,AUTH_TRUSTED_PROXIES=" \
+  --set-env-vars="NODE_ENV=production,AUTH_CANONICAL_ORIGIN=${NUTTIEW_ORIGIN},WEB_DIST=/app/apps/web/dist,AUTH_TRUSTED_PROXIES=" \
   --update-secrets="DATABASE_URL_APP=${NUTTIEW_DATABASE_URL_APP_SECRET:-DATABASE_URL_APP}:latest" \
   --update-secrets="AUTH_CSRF_HMAC_KEY=${NUTTIEW_CSRF_HMAC_KEY_SECRET:-AUTH_CSRF_HMAC_KEY}:latest" \
   --update-secrets="AUTH_RATE_KEY=${NUTTIEW_RATE_KEY_SECRET:-AUTH_RATE_KEY}:latest"

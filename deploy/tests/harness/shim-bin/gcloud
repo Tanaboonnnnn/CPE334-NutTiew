@@ -55,6 +55,19 @@ case "$cmd" in
     fi
     if [ "$sub" = "deploy" ]; then
       if [ "${FAKE_DEPLOY_FAIL:-0}" = "1" ]; then echo "gcloud(fake): run deploy failed" >&2; exit 42; fi
+      # Cloud Run rejects reserved PORT if supplied through --set-env-vars.
+      # The container port must be configured by --port instead.
+      for arg in "$@"; do
+        case "$arg" in
+          --set-env-vars=*)
+            env_list="${arg#--set-env-vars=}"
+            if printf '%s\n' "$env_list" | grep -Eq '(^|,)PORT='; then
+              echo 'gcloud(fake): reserved env name PORT (use --port)' >&2
+              exit 43
+            fi
+            ;;
+        esac
+      done
       echo "ok"; exit 0
     fi
     if [ "$sub" = "services" ] && [ "${2:-}" = "describe" ]; then
@@ -87,6 +100,17 @@ case "$cmd" in
     fi
     if [ "$sub" = "services" ] && [ "${2:-}" = "update" ]; then
       if [ "${FAKE_DEPLOY_FAIL:-0}" = "1" ]; then echo "gcloud(fake): services update failed" >&2; exit 42; fi
+      for arg in "$@"; do
+        case "$arg" in
+          --set-env-vars=*)
+            env_list="${arg#--set-env-vars=}"
+            if printf '%s\n' "$env_list" | grep -Eq '(^|,)PORT='; then
+              echo 'gcloud(fake): reserved env name PORT (use --port)' >&2
+              exit 43
+            fi
+            ;;
+        esac
+      done
       exit 0
     fi
     if [ "$sub" = "revisions" ] && [ "${2:-}" = "list" ]; then
