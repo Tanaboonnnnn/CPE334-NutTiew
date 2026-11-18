@@ -70,6 +70,7 @@ run_suite "Artifact Registry digest lookup" "$BASH_BIN" "$HERE/test_artifact_dig
 run_suite "shell offline (deploy/release)" "$BASH_BIN" "$HERE/run_offline_shell_tests.sh"
 run_suite "release negative (real-mode fake gcloud)" "$BASH_BIN" "$HERE/run_release_negative_tests.sh"
 run_suite "job-outcome fixtures (python)" "$PYTHON_BIN" "$HERE/test_job_outcome_offline.py"
+run_suite "Cloud Run revision/traffic fixtures (python)" "$PYTHON_BIN" "$HERE/test_cloudrun_release_state_offline.py"
 run_suite "check-runs fixtures (python)" "$PYTHON_BIN" "$HERE/test_check_runs_offline.py"
 run_suite "smoke offline (python)"  "$PYTHON_BIN" "$HERE/test_smoke_offline.py"
 run_suite "deploy gate validation" "$PYTHON_BIN" "$HERE/validate_deploy_gate.py"
