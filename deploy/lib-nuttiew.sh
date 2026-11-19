@@ -350,7 +350,7 @@ wait_for_revision_ready() {
       || fail "PENDING live prerequisite: could not resolve the revision created by this deployment for ${service}"
     # Confirm that exact revision's image matches the expected digest.
     local rev_image=""
-    rev_image="$(gcloud run revisions describe "$rev_name" --service="$service" --region="$region" \
+    rev_image="$(gcloud run revisions describe "$rev_name" --region="$region" \
       --format='value(spec.containers[0].image)' 2>/dev/null || true)"
     local digest="${expected#*@}"
     case "$rev_image" in
@@ -363,7 +363,7 @@ wait_for_revision_ready() {
     local state=""
     log "waiting for revision ${rev_name} (image=${expected}) to become Ready"
     for _ in $(seq 1 "${NUTTIEW_READY_ATTEMPTS}"); do
-      state="$(gcloud run revisions describe "$rev_name" --service="$service" --region="$region" \
+      state="$(gcloud run revisions describe "$rev_name" --region="$region" \
                 --format='value(status.conditions[?(@.type==\"Ready\")].status)' 2>/dev/null)"
       [ "$state" = "True" ] && break
       sleep "${NUTTIEW_READY_POLL_SECONDS}"
@@ -373,6 +373,73 @@ wait_for_revision_ready() {
   else
     plan "revision-ready" "confirm the revision created by this deploy (image ${expected}) is Ready (real mode; live prerequisite)"
   fi
+}
+
+# -----------------------------------------------------------------------------
+# Staged, explicit revision verification and traffic rollout (repeatable CD).
+# Cloud Run can keep 100% on an older named revision after a successful deploy.
+# New revisions get a unique release tag but no production traffic until their
+# exact digest, Ready/Active state and read-only tagged smoke have passed.
+# -----------------------------------------------------------------------------
+cloudrun_state_checker_path() {
+  local checker="${SCRIPT_DIR}/tests/cloudrun_release_state.py"
+  [ -f "$checker" ] || fail "Cloud Run release state checker missing"
+  if command -v cygpath >/dev/null 2>&1 && [[ "$checker" == /* ]]; then
+    checker="$(cygpath -w "$checker")"
+  fi
+  printf '%s\n' "$checker"
+}
+
+wait_for_staged_revision() {
+  local service="$1" region="$2" expected_image="$3" tag="$4"
+  local checker="" service_json="" tagged="" revision="" revision_json="" status="" rc=0
+  checker="$(cloudrun_state_checker_path)"
+  service_json="$(gcloud run services describe "$service" --region="$region" --format=json)" \
+    || fail "could not read staged Cloud Run service metadata"
+  tagged="$(printf '%s' "$service_json" | python3 "$checker" tag "$tag")" \
+    || fail "release tag ${tag} did not bind a new zero-traffic revision"
+  # Native Windows Python emits CRLF in Git Bash; normalize checker output.
+  tagged="${tagged//$'\r'/}"
+  [[ "$tagged" == *$'\n'* ]] || fail "staged revision tag response is malformed"
+  NUTTIEW_VERIFIED_REVISION="${tagged%%$'\n'*}"
+  NUTTIEW_NEW_REVISION_TAG_URL="${tagged#*$'\n'}"
+  revision="$NUTTIEW_VERIFIED_REVISION"
+  log "staged revision=${revision} tag=${tag} traffic=0%; checking immutable image and active readiness"
+  for _ in $(seq 1 "${NUTTIEW_READY_ATTEMPTS:-30}"); do
+    # `gcloud run revisions describe` has no --service flag. Do not suppress
+    # that CLI error or fall back to an older Ready revision.
+    revision_json="$(gcloud run revisions describe "$revision" --region="$region" --format=json)" \
+      || fail "could not inspect staged revision ${revision}"
+    rc=0
+    status="$(printf '%s' "$revision_json" | python3 "$checker" revision "$revision" "$expected_image")" \
+      || rc=$?
+    status="${status//$'\r'/}"
+    case "${rc}:${status}" in
+      0:ready) log "revision ${revision} is active, Ready, and has the exact release digest"; return 0 ;;
+      3:pending) sleep "${NUTTIEW_READY_POLL_SECONDS:-4}" ;;
+      *) fail "staged revision ${revision} is invalid, retired or has the wrong image; no traffic changed" ;;
+    esac
+  done
+  fail "staged revision ${revision} not Ready/Active within configured attempts; no traffic changed"
+}
+
+verify_release_traffic() {
+  local service="$1" region="$2" expected_revision="$3" checker="" service_json="" status="" rc=0
+  checker="$(cloudrun_state_checker_path)"
+  for _ in $(seq 1 "${NUTTIEW_READY_ATTEMPTS:-30}"); do
+    service_json="$(gcloud run services describe "$service" --region="$region" --format=json)" \
+      || fail "could not query Cloud Run production traffic"
+    rc=0
+    status="$(printf '%s' "$service_json" | python3 "$checker" traffic "$expected_revision")" \
+      || rc=$?
+    status="${status//$'\r'/}"
+    case "${rc}:${status}" in
+      0:routed) log "verified production traffic 100% on image-pinned revision ${expected_revision}"; return 0 ;;
+      3:pending) sleep "${NUTTIEW_READY_POLL_SECONDS:-4}" ;;
+      *) fail "Cloud Run traffic status malformed or inconsistent; release not verified" ;;
+    esac
+  done
+  fail "Cloud Run traffic never reached 100% on verified revision ${expected_revision}"
 }
 
 # -----------------------------------------------------------------------------
