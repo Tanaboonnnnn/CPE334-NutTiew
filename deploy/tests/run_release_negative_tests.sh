@@ -61,7 +61,7 @@ make_sandbox() {
   # The migration job checker is invoked by release.sh/lib at
   # deploy/tests/job_outcome_checker.py, so copy the tests dir into the sandbox.
   mkdir -p "$sb/deploy/tests"
-  cp "$DEPLOY_DIR/tests/job_outcome_checker.py" "$sb/deploy/tests/"
+  cp "$DEPLOY_DIR/tests/job_outcome_checker.py" "$DEPLOY_DIR/tests/cloudrun_release_state.py" "$sb/deploy/tests/"
   git -C "$sb" add deploy
   git -C "$sb" commit -q -m seed
   echo "$sb"
@@ -94,7 +94,7 @@ run_release() {
   (
     cd "$sb" && PATH="${SHIM_DIR}:${PATH}" \
     FAKE_GCLOUD_LOG="$log" FAKE_DOCKER_LOG="$logs/docker.log" \
-    FAKE_ACTIVE_PROJECT="a-test-project-123" \
+    FAKE_ACTIVE_PROJECT="a-test-project-123" FAKE_REQUIRE_STAGED_RELEASE=1 \
     env "${BASE[@]}" NUTTIEW_RELEASE_SHA="$head" \
       NUTTIEW_MIGRATE_WAIT_ATTEMPTS=3 NUTTIEW_MIGRATE_POLL_SECONDS=0 \
       "$@" "$RUN_BASH" deploy/release.sh
@@ -151,6 +151,17 @@ if grep -qE "run deploy [^ ]*:[0123456789abcdef]{40}(\s|\$)" "$logs/gcloud.log";
 else
   pass "Cloud Run deploy did not use a mutable :<sha> tag"
 fi
+if grep 'gcloud run deploy ' "$logs/gcloud.log" | grep -q -- '--no-traffic' && \
+   grep 'gcloud run deploy ' "$logs/gcloud.log" | grep -q -- '--tag=cd-'; then
+  pass "new revision is staged with no traffic and a release-scoped URL tag"
+else
+  failt "new revision was not staged safely with --no-traffic and a release tag"
+fi
+if grep -qE 'gcloud run services update-traffic .*--to-revisions=nuttiew-[a-z0-9-]+=100' "$logs/gcloud.log"; then
+  pass "traffic promotion explicitly pins a verified revision name"
+else
+  failt "release never explicitly promoted the pinned new revision"
+fi
 kill "$FIXPID2C" 2>/dev/null || true
 rm -rf "$sb" "$portfile2c"
 
@@ -183,6 +194,31 @@ rm -rf "$sb"
 sb="$(make_sandbox)"
 run_release "$sb" "$logs" FAKE_READY_TIMEOUT=1 NUTTIEW_READY_ATTEMPTS=2 NUTTIEW_READY_POLL_SECONDS=0 >"$logs/out4" 2>&1; rc=$?
 [ "$rc" -ne 0 ] && pass "readiness timeout -> non-zero" || failt "readiness timeout did not abort (rc=$rc)"
+if grep -q 'gcloud run services update-traffic ' "$logs/gcloud.log"; then
+  failt "traffic was promoted despite staged readiness timeout"
+else
+  pass "no traffic promotion before new revision is ready"
+fi
+rm -rf "$sb"
+
+sb="$(make_sandbox)"
+run_release "$sb" "$logs" FAKE_STAGE_WRONG_IMAGE=1 >"$logs/out4d" 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "staged image mismatch -> fail closed" || failt "accepted wrong staged digest"
+if grep -q 'gcloud run services update-traffic ' "$logs/gcloud.log"; then
+  failt "traffic was promoted for a wrong staged digest"
+else
+  pass "wrong staged digest cannot receive traffic"
+fi
+rm -rf "$sb"
+
+sb="$(make_sandbox)"
+run_release "$sb" "$logs" FAKE_STAGE_RETIRED=1 >"$logs/out4e" 2>&1; rc=$?
+[ "$rc" -ne 0 ] && pass "retired staged revision -> fail closed" || failt "accepted inactive retired revision"
+if grep -q 'gcloud run services update-traffic ' "$logs/gcloud.log"; then
+  failt "traffic was promoted for a retired revision"
+else
+  pass "retired revision cannot receive traffic"
+fi
 rm -rf "$sb"
 
 # =============================================================================
@@ -248,6 +284,13 @@ if [ -s "$portfile" ]; then
   sb="$(make_sandbox)"
   run_release "$sb" "$logs" NUTTIEW_SMOKE_BASE_URL="$HEALTHY_URL" NUTTIEW_READY_ATTEMPTS=3 NUTTIEW_READY_POLL_SECONDS=0 >"$logs/out8" 2>&1; rc=$?
   [ "$rc" -eq 0 ] && pass "happy-path success (real smoke PASS) -> exit 0" || failt "happy-path failed (rc=$rc): $(tail -5 "$logs/out8")"
+  smoke_count="$(grep -c 'running read-only smoke' "$logs/out8" || true)"
+  [ "$smoke_count" -eq 2 ] && pass "staged revision smoke and post-traffic public smoke both executed" || failt "expected two smoke invocations, got $smoke_count"
+  if grep -q 'gcloud run services update-traffic ' "$logs/gcloud.log"; then
+    pass "happy path updates traffic only after staged verification"
+  else
+    failt "happy path did not promote traffic to the new revision"
+  fi
   if grep -q -- ' --port=3001' "$logs/gcloud.log"; then
     pass "Cloud Run container port configured with --port=3001"
   else
@@ -257,6 +300,30 @@ if [ -s "$portfile" ]; then
     failt "Cloud Run reserved PORT was provided in --set-env-vars"
   else
     pass "Cloud Run reserved PORT excluded from --set-env-vars"
+  fi
+  rm -rf "$sb"
+
+  # A successful promotion API call is NOT enough: ensure service traffic is
+  # actually 100% on the expected new revision, not an older pinned revision.
+  sb="$(make_sandbox)"
+  run_release "$sb" "$logs" FAKE_TRAFFIC_STAYS_OLD=1 NUTTIEW_SMOKE_BASE_URL="$HEALTHY_URL" \
+    NUTTIEW_READY_ATTEMPTS=2 NUTTIEW_READY_POLL_SECONDS=0 >"$logs/out8traffic" 2>&1; rc=$?
+  [ "$rc" -ne 0 ] && pass "traffic stays pinned to old revision -> release fails" || failt "incorrectly accepted old revision still serving 100 percent"
+  if grep -q 'gcloud run services update-traffic ' "$logs/gcloud.log"; then
+    pass "traffic-pinned regression reaches the promotion step before verifying live traffic"
+  else
+    failt "traffic-pinned regression failed too early to test post-promotion traffic"
+  fi
+  rm -rf "$sb"
+
+  sb="$(make_sandbox)"
+  run_release "$sb" "$logs" FAKE_TRAFFIC_PROMOTION_FAIL=1 NUTTIEW_SMOKE_BASE_URL="$HEALTHY_URL" \
+    >"$logs/out8promote" 2>&1; rc=$?
+  [ "$rc" -ne 0 ] && pass "traffic promotion API error -> fail closed" || failt "ignored traffic promotion API error"
+  if grep -q 'gcloud run services update-traffic ' "$logs/gcloud.log"; then
+    pass "promotion-failure regression reached the traffic API"
+  else
+    failt "promotion-failure regression failed before traffic API"
   fi
   rm -rf "$sb"
 
@@ -277,6 +344,11 @@ if [ -s "$portfile" ]; then
   sb="$(make_sandbox)"
   run_release "$sb" "$logs" NUTTIEW_SMOKE_BASE_URL="http://127.0.0.1:1" NUTTIEW_READY_ATTEMPTS=3 NUTTIEW_READY_POLL_SECONDS=0 >"$logs/out8b" 2>&1; rc=$?
   [ "$rc" -ne 0 ] && pass "smoke failure -> non-zero" || failt "smoke failure did not abort (rc=$rc)"
+  if grep -q 'running read-only smoke' "$logs/out8b" && ! grep -q 'gcloud run services update-traffic ' "$logs/gcloud.log"; then
+    pass "failed staged smoke prevents all traffic promotion"
+  else
+    failt "failed staged smoke was not reached or traffic was changed despite failure"
+  fi
   rm -rf "$sb"
 else
   failt "could not start healthy fixture (skip happy-path)"

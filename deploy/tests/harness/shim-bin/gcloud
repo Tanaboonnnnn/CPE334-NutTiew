@@ -55,6 +55,17 @@ case "$cmd" in
     fi
     if [ "$sub" = "deploy" ]; then
       if [ "${FAKE_DEPLOY_FAIL:-0}" = "1" ]; then echo "gcloud(fake): run deploy failed" >&2; exit 42; fi
+      if [ "${FAKE_REQUIRE_STAGED_RELEASE:-0}" = "1" ]; then
+        has_no_traffic=0; has_tag=0
+        for arg in "$@"; do
+          [ "$arg" = "--no-traffic" ] && has_no_traffic=1
+          case "$arg" in --tag=cd-*) has_tag=1 ;; esac
+        done
+        if [ "$has_no_traffic" -ne 1 ] || [ "$has_tag" -ne 1 ]; then
+          echo 'gcloud(fake): live release must stage tagged revision with --no-traffic' >&2
+          exit 44
+        fi
+      fi
       # Cloud Run rejects reserved PORT if supplied through --set-env-vars.
       # The container port must be configured by --port instead.
       for arg in "$@"; do
@@ -71,6 +82,16 @@ case "$cmd" in
       echo "ok"; exit 0
     fi
     if [ "$sub" = "services" ] && [ "${2:-}" = "describe" ]; then
+      if printf '%s' "$*" | grep -q -- '--format=json'; then
+        rev="${FAKE_CREATED_REVISION:-nuttiew-00005-newrev}"
+        tag="cd-${NUTTIEW_RELEASE_SHA:0:12}"
+        old_pct=100; new_pct=0
+        if [ -n "$LOG" ] && grep -q '^gcloud run services update-traffic ' "$LOG" && [ "${FAKE_TRAFFIC_STAYS_OLD:-0}" != "1" ]; then
+          old_pct=0; new_pct=100
+        fi
+        printf '{"status":{"latestCreatedRevisionName":"%s","traffic":[{"revisionName":"nuttiew-00003-old","percent":%s,"tag":"preview-old"},{"revisionName":"%s","percent":%s,"tag":"%s","url":"https://cd-test---nuttiew-example.a.run.app"}]}}\n' "$rev" "$old_pct" "$rev" "$new_pct" "$tag"
+        exit 0
+      fi
       if printf '%s' "$*" | grep -q "latestCreatedRevisionName"; then
         echo "${FAKE_CREATED_REVISION:-nuttiew-00005-newrev}"
         exit 0
@@ -86,6 +107,21 @@ case "$cmd" in
       echo "https://nuttiew-xyz-uc.a.run.app"; exit 0
     fi
     if [ "$sub" = "revisions" ] && [ "${2:-}" = "describe" ]; then
+      for arg in "$@"; do
+        case "$arg" in --service=*) echo 'gcloud(fake): revisions describe does not accept --service' >&2; exit 45 ;; esac
+      done
+      if printf '%s' "$*" | grep -q -- '--format=json'; then
+        rev="${FAKE_CREATED_REVISION:-nuttiew-00005-newrev}"
+        image="${FAKE_REVISION_IMAGE:-${NUTTIEW_RUNTIME_IMAGE:-asia-southeast1-docker.pkg.dev/a-test-project-123/repo/nuttiew}@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
+        if [ "${FAKE_STAGE_WRONG_IMAGE:-0}" = "1" ]; then
+          image='asia-southeast1-docker.pkg.dev/a-test-project-123/repo/nuttiew@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+        fi
+        ready=True; active=True
+        if [ "${FAKE_NEW_REVISION_NOT_READY:-0}" = "1" ] || [ "${FAKE_READY_TIMEOUT:-0}" = "1" ]; then ready=Unknown; fi
+        if [ "${FAKE_STAGE_RETIRED:-0}" = "1" ]; then active=False; fi
+        printf '{"metadata":{"name":"%s"},"spec":{"containers":[{"image":"%s"}]},"status":{"conditions":[{"type":"Ready","status":"%s"},{"type":"Active","status":"%s"}]}}\n' "$rev" "$image" "$ready" "$active"
+        exit 0
+      fi
       if printf '%s' "$*" | grep -q "containers\[0\].image"; then
         echo "${FAKE_REVISION_IMAGE:-asia-southeast1-docker.pkg.dev/a-test-project-123/repo/nuttiew@sha256:0000000000000000000000000000000000000000000000000000000000000000}"
         exit 0
@@ -112,6 +148,17 @@ case "$cmd" in
         esac
       done
       exit 0
+    fi
+    if [ "$sub" = "services" ] && [ "${2:-}" = "update-traffic" ]; then
+      if [ "${FAKE_TRAFFIC_PROMOTION_FAIL:-0}" = "1" ]; then
+        echo 'gcloud(fake): traffic update refused' >&2; exit 42
+      fi
+      rev="${FAKE_CREATED_REVISION:-nuttiew-00005-newrev}"
+      for arg in "$@"; do
+        [ "$arg" = "--to-revisions=${rev}=100" ] && { echo 'traffic updated'; exit 0; }
+      done
+      echo 'gcloud(fake): traffic update not pinned to expected revision' >&2
+      exit 45
     fi
     if [ "$sub" = "revisions" ] && [ "${2:-}" = "list" ]; then
       [ "${FAKE_READY_TIMEOUT:-0}" = "1" ] && echo "False" || echo "True"

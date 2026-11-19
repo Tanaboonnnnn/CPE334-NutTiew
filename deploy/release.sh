@@ -116,8 +116,10 @@ run_migration_job_and_wait "${NUTTIEW_MIGRATE_JOB}" "${NUTTIEW_REGION}" "${MIGRA
 # The service is already public. Preserve its existing IAM policy; the least-
 # privilege deployment SA has Cloud Run Developer, not setIamPolicy.
 # -----------------------------------------------------------------------------
+RELEASE_TAG="cd-${RELEASE_SHA:0:12}"
 gcloud_safe "release.deploy" -- run deploy "${NUTTIEW_CLOUD_RUN_SERVICE}" \
   --image="${RUNTIME_DIGEST_REF}" --region="${NUTTIEW_REGION}" --platform=managed \
+  --no-traffic --tag="${RELEASE_TAG}" \
   --service-account="${NUTTIEW_RUNTIME_SA_EMAIL}" \
   --min-instances="${NUTTIEW_MIN_INSTANCES}" --max-instances="${NUTTIEW_MAX_INSTANCES}" \
   --concurrency="${NUTTIEW_CONCURRENCY}" --port="${NUTTIEW_PORT}" \
@@ -130,13 +132,21 @@ gcloud_safe "release.deploy" -- run deploy "${NUTTIEW_CLOUD_RUN_SERVICE}" \
 SERVICE_URL=""
 if [ "$NUTTIEW_REAL_ARMED" = "1" ]; then
   SERVICE_URL="$(gcloud run services describe "${NUTTIEW_CLOUD_RUN_SERVICE}" --region="${NUTTIEW_REGION}" --format='value(status.url)')"
-  # Revision-specific readiness (finding #7): confirm the revision carrying the
-  # expected immutable digest is Ready, not merely the newest unrelated revision.
-  wait_for_revision_ready "${NUTTIEW_CLOUD_RUN_SERVICE}" "${NUTTIEW_REGION}" "${RUNTIME_DIGEST_REF}"
+  # Do NOT send users to an unchecked revision. First identify the zero-traffic
+  # tagged revision, verify its exact digest and Ready/Active condition, then
+  # smoke its isolated HTTPS URL before any live traffic change.
+  wait_for_staged_revision "${NUTTIEW_CLOUD_RUN_SERVICE}" "${NUTTIEW_REGION}" "${RUNTIME_DIGEST_REF}" "${RELEASE_TAG}"
+  run_smoke_test "${NUTTIEW_NEW_REVISION_TAG_URL}" "${REPO_ROOT}"
+  # A successful `gcloud run deploy` is not proof of live traffic: this service
+  # currently pins 100% to an older named revision. Promote only the exact
+  # tested revision; never use moving LATEST or accept unrelated Ready revisions.
+  gcloud_safe "release.traffic" -- run services update-traffic "${NUTTIEW_CLOUD_RUN_SERVICE}" \
+    --region="${NUTTIEW_REGION}" --to-revisions="${NUTTIEW_VERIFIED_REVISION}=100"
+  verify_release_traffic "${NUTTIEW_CLOUD_RUN_SERVICE}" "${NUTTIEW_REGION}" "${NUTTIEW_VERIFIED_REVISION}"
   log "Cloud Run URL=${SERVICE_URL}"
 else
   SERVICE_URL="${NUTTIEW_ORIGIN}"
-  plan "release.url" "Cloud Run URL resolved at real deploy time; canonical HTTPS origin=${NUTTIEW_ORIGIN}"
+  plan "release.url" "stage a tagged 0%-traffic revision, verify immutable digest and readiness, smoke tag URL, pin 100% to exact revision, verify traffic, smoke public origin in real mode"
 fi
 
 # -----------------------------------------------------------------------------
