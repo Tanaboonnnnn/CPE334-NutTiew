@@ -1,21 +1,30 @@
-# NutTiew — Deployment Automation Preparation (Lab 5 / GH-05)
+# NutTiew — Lab 5 Deployment Runbook and Verified Production Evidence
 
-> **Status: OFFLINE PREPARATION ONLY.** This is a draft runbook + offline evidence
-> for the GitHub-side deployment automation. **No live Cloud Run revision, no
-> persistent Cloud SQL database, no automatic release exists** until it is
-> actually demonstrated in a separately authorized GCP session (marked `PENDING`
-> below). Nothing in this file claims a successful real deployment.
+> **Current status (20 November 2026): LIVE PRODUCTION VERIFIED.**
+> The accepted Sprint 1 application has been released from protected `main`,
+> served by Cloud Run, and checked through its real UI/API and persistent Cloud SQL.
+> The last inspected serving revision is `nuttiew-00007-69p` (100% traffic),
+> created by a **no-change Cloud Run Console redeploy** on 19 November 2026.
+> That Console action did **not** build a new Git commit or run the GitHub CD
+> pipeline again. The deployed source lineage remains the previously verified
+> `main@ff55ac766ca792f0cc3ae29adad39d71ea4bca11` release.
 
-**Verification status legend used throughout:** `IMPLEMENTED` = the code/script is
-written; `TESTED OFFLINE` = verified by the offline suite; `REQUIRES LIVE GCP
-CONFIGURATION` = needs IAM/WIF/Cloud SQL/etc. set up in a separate session;
-`PENDING` = gated/not yet demonstrated; `NOT IMPLEMENTED` = explicitly not built.
-No feature here is claimed as a live cloud deployment or live readiness.
+This document began as the **GH-05 offline-preparation runbook**. Sections B–J
+retain the original preparation choices and safe operator commands for
+repeatability; historical `PENDING`/planned notes in those sections refer to
+the **pre-deployment GH-05 phase**, not the current production status.
+**Section K is the source of truth for live verification and any remaining
+limitations.** `IMPLEMENTED` refers to code present, `TESTED OFFLINE` to
+locally verified scripts, and `VERIFIED LIVE` only to observed GCP, GitHub
+Actions or public-application evidence. Uninspected IAM/provider details
+remain explicitly unverified.
 
 - **Repository:** [Tanaboonnnnn/CPE334-NutTiew](https://github.com/Tanaboonnnnn/CPE334-NutTiew)
 - **Issue:** [GH-05 — Deployment Automation Preparation (#68)](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/68)
-- **Branch:** `chore/68-deployment-prep` (from `origin/sprint1`)
-- **Lab 5 traceability:** Handout §4.1 (R-02, R-07, R-08, R-09), §4.3, §5; Student Guide Episodes 4–7. Live checks C-04/C-05/C-06 are **PENDING**, not demonstrated here.
+- **Preparation branch (historical):** `chore/68-deployment-prep` (from `origin/sprint1`)
+- **Verified release:** [PR #99](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/99) → [CD run #44455509285](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/44455509285), `main@ff55ac766ca792f0cc3ae29adad39d71ea4bca11`
+- **Live URL:** https://nuttiew-nxe2keefba-as.a.run.app/
+- **Lab 5 traceability:** Handout R-01–R-12 and C-01–C-06; [C-04 live workflow](c04-production-evidence.md), [C-05 persistence](c05-persistence-evidence.md), and the live CD link above.
 
 ---
 
@@ -37,7 +46,8 @@ No feature here is claimed as a live cloud deployment or live readiness.
    │    nuttiew_runtime -> non-owner runtime  (DATABASE_URL_APP)
 ```
 
-Supporting infrastructure used by a real deployment (all `PENDING`):
+Supporting infrastructure **now used by the verified Production release**
+(historically planned during GH-05):
 
 - **Artifact Registry** — stores the runtime and migration Docker images, tagged
   with the **full Git commit SHA** and immutable digest.
@@ -90,7 +100,7 @@ Sources of truth: `.env.example`, `docker-compose.yml`, `compose/db-init.sh`,
 `compose/init-db.mjs`, `apps/api/src/config.ts`, `apps/api/src/server.ts`, and the
 deploy scripts.
 
-| Name | Purpose | Required | Secret | Used by | Source of value | Local dev | In GCP (PENDING) |
+| Name | Purpose | Required | Secret | Used by | Source of value | Local dev | GCP Production configuration |
 |---|---|---|---|---|---|---|---|
 | `DATABASE_URL` | Migration/admin connection URL | yes | yes | Prisma CLI, migrate job | operator-generated password | `nuttiew_owner` on `127.0.0.1` | Secret Manager, migration job only; **never in runtime container** |
 | `DATABASE_URL_APP` | Restricted runtime connection URL | yes | yes | API runtime, seed | operator-generated password | `nuttiew_runtime` on `127.0.0.1` | Secret Manager, mounted to Cloud Run runtime |
@@ -112,22 +122,23 @@ deploy scripts.
 
 > **No real secret value appears** in this document or in any repository file.
 
-### Deployment feature status (finding F — GH-05 is GitHub-only preparation)
+### Deployment feature status (original GH-05 scope; updated after live release)
 
 | Feature | Status | Live GCP needed? |
 |---|---|---|
-| Offline deploy/release/smoke/check-runs/gate tests | **IMPLEMENTED + TESTED OFFLINE** | no |
-| `deploy.sh` / `release.sh` guarded real-execution paths | **IMPLEMENTED** (must be verified live) | yes (run `DRY_RUN=0` only in an authorized session) |
-| `deploy.yml` fail-closed gate + `DEPLOY_CD_READY` + `demo` Environment + WIF auth | **PREPARED** (not verified against GitHub/GCP) | WIF/IAM + repository variables |
-| Cloud SQL instance/Database | **PENDING live configuration** (edition/version/tier subject to availability + Free Trial; explicit approval required) | yes |
-| Cloud SQL DB roles + extensions bootstrap | **PREPARED offline**; `NUTTIEW_DB_BOOTSTRAP_DONE=1` is an operator ACKNOWLEDGEMENT, not proof the DB is operational — a read-only readiness preflight also runs before migrations (real mode) | yes |
-| Cloud Run migration job (Cloud SQL connection + `DATABASE_URL` only) | **PREPARED offline**; completion is checked on the exact execution started by the release (not a stale one) | yes |
-| Immutable `@sha256:` digest deploy (no `latest` fallback) | **IMPLEMENTED + TESTED OFFLINE** | yes (registry must exist) |
-| Live readiness / smoke against a public URL | **PENDING** (no live URL exists) | yes |
-| Live persistence / rollback / release evidence | **PENDING / NOT IMPLEMENTED** | yes |
+| Offline deploy/release/smoke/check-runs/gate tests | **IMPLEMENTED + TESTED OFFLINE**, plus passing PR CI | no |
+| `deploy.sh` / `release.sh` guarded real-execution paths | **VERIFIED LIVE** for the successful main release/CD path; retain explicit operator review of paid-resource operations | yes |
+| `deploy.yml` fail-closed gate + `DEPLOY_CD_READY` + `demo` Environment + WIF auth | **VERIFIED LIVE EXECUTION** via successful [CD #44455509285](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/44455509285); exact WIF provider IAM conditions not independently audited | yes |
+| Cloud SQL instance/Database | **VERIFIED LIVE**: `nuttiew-pg` reported `RUNNABLE`, live booking retrieved after two new Cloud Run revisions | yes |
+| Cloud SQL DB roles + extensions bootstrap | Runtime successfully reads its data; the original live migration job completed; **individual role grants/extension lists not re-audited** during C-05 | yes |
+| Cloud Run migration job | **VERIFIED LIVE** in successful release run; no migration was rerun during C-05 | yes |
+| Immutable `@sha256:` digest deployment | **VERIFIED LIVE** for approved release digest `sha256:ac1c9b0e…996e`; image digests for the later no-change Console revisions were not independently recorded | yes |
+| Live readiness / smoke against public URL | **VERIFIED LIVE**: `/` HTTP 200, `/api/ready` HTTP 200 (`{"status":"ready"}`) | yes |
+| Persistent booking across application replacement and redeploy | **VERIFIED LIVE**: same confirmed Booking ID before/after `00006-sen` → `00006-lkt` → `00007-69p`; no forced in-place restart | yes |
+| Rollback | **NOT TESTED LIVE** (optional guidance, not a separate Lab 5 requirement) | yes |
 
-No committed feature claims a production-ready deployment: every live GCP step stays
-`PENDING` until a separately authorized GCP session verifies it.
+The original GH-05 version of this table described **planned** infrastructure.
+The evidence-based current status and precise limits are in §K.
 
 ---
 
@@ -172,21 +183,22 @@ python3 deploy/smoke_test.py --base-url http://127.0.0.1:PORT_FOR_LOCAL_INSTANCE
 
 ---
 
-## E. GCP resource plan (intended names/placeholders — PENDING)
+## E. GCP resources — current verified values and remaining configuration placeholders
 
-The team's candidate project (non-secret, previously configured) is
-`project-a4c95fa2-28c5-4e9a-89d`. The final project/region are **subject to
-verification**; the deploy scripts read all of these from environment/GitHub
-variables — nothing is hard-coded into executable logic.
+The live GCP Project ID is `project-a4c95fa2-28c5-4e9a-89d`, region
+`asia-southeast1`, service `nuttiew`, Cloud SQL instance `nuttiew-pg`.
+The deployment scripts continue to read values from environment/GitHub variables.
+**Items not independently inspected in the final C-05 session remain
+configuration references**, not claims that every provider binding was audited.
 
 | Resource | Intended name / placeholder | Notes |
 |---|---|---|
-| GCP project | `NUTTIEW_PROJECT_ID` (candidate `project-a4c95fa2-28c5-4e9a-89d`) | deploy scripts require it |
-| Region | `NUTTIEW_REGION` (e.g. `asia-southeast1`) | availability @ team verification |
+| GCP project | `project-a4c95fa2-28c5-4e9a-89d` (via `NUTTIEW_PROJECT_ID`) | live project |
+| Region | `asia-southeast1` (via `NUTTIEW_REGION`) | live Cloud Run and Cloud SQL region |
 | Artifact Registry repo | `NUTTIEW_ARTIFACT_REPO` | docker format, region-mirrored |
 | Runtime image | `NUTTIEW_RUNTIME_IMAGE` | `gcr`/docker AR path; tag = full SHA + digest |
 | Migration image | `NUTTIEW_MIGRATE_IMAGE` | same working tree, `migrate` target |
-| Cloud SQL instance | `NUTTIEW_SQL_INSTANCE` | PostgreSQL; edition/version/tier must be a valid combination (default `ENTERPRISE`/`POSTGRES_15`/`db-f1-micro`, shared-core — see §J). PENDING live availability |
+| Cloud SQL instance | `nuttiew-pg` (`NUTTIEW_SQL_INSTANCE`) | observed `RUNNABLE`; exact tier and edition not re-checked in this evidence session |
 | Database | `nuttiew` (`NUTTIEW_SQL_DB_NAME`) | owner = `nuttiew_owner` |
 | DB owner role | `nuttiew_owner` | owns schema; used by migration job |
 | DB runtime role | `nuttiew_runtime` | non-owner, grants per §I |
@@ -194,13 +206,13 @@ variables — nothing is hard-coded into executable logic.
 | Deploy SA | `NUTTIEW_DEPLOY_SA_EMAIL` | Artifact Registry writer, Cloud Run dev, Cloud SQL client, Secret Manager (deploy-time) |
 | Migration SA | `NUTTIEW_MIGRATE_SA_EMAIL` | **dedicated migration identity** (finding #4): Cloud SQL client + read ONLY the migration `DATABASE_URL` secret; no deployment admin / no broad Secret Manager |
 | Secrets | `DATABASE_URL`, `DATABASE_URL_APP`, `AUTH_CSRF_HMAC_KEY`, `AUTH_RATE_KEY` | Secret Manager; only refs in runtime |
-| Migration job | `NUTTIEW_MIGRATE_JOB` (default `<service>-migrate`) | isolated Cloud Run job |
-| Cloud Run service | `NUTTIEW_CLOUD_RUN_SERVICE` (e.g. `nuttiew`) | single origin UI+API |
+| Migration job | `nuttiew-migrate` (`NUTTIEW_MIGRATE_JOB`) | release job execution verified in [CD run](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/44455509285) |
+| Cloud Run service | `nuttiew` (`NUTTIEW_CLOUD_RUN_SERVICE`) | single origin UI+API; last serving revision `nuttiew-00007-69p` |
 | Bootstrap password secrets | `NUTTIEW_SQL_POSTGRES_PASSWORD_SECRET`, `NUTTIEW_SQL_OWNER_PASSWORD_SECRET`, `NUTTIEW_SQL_RUNTIME_PASSWORD_SECRET` | **required in REAL mode** — three Secret Manager refs holding the postgres superuser, DB owner and DB runtime passwords; each must EXIST, be readable and carry a NONEMPTY value before any mutation (audited finding F2). Values are never generated or printed by the scripts |
 | Secret creation ordering | `secrets create` for `DATABASE_URL`/`DATABASE_URL_APP`/`AUTH_CSRF_HMAC_KEY`/`AUTH_RATE_KEY` | created idempotently (reuse if present) BEFORE the service-account IAM bindings, so the migration SA secret IAM binding always targets an existing secret (audited finding F3). Migration SA receives only `roles/secretmanager.secretAccessor` on the migration `DATABASE_URL` secret — least privilege, never broad Secret Manager |
 | GitHub Environment | `demo` | protection restricts deploy to `main` |
 
-**Cloud SQL connection method (PENDING).** The application uses `pg` (node-postgres,
+**Cloud SQL connection method (implemented and live; detailed connector IAM not re-audited).** The application uses `pg` (node-postgres,
 `apps/api/package.json` → `"pg"` ≥8) whose `connectionString` supports the
 standard `postgresql://` scheme. Two compatible options for Cloud Run:
 
@@ -211,17 +223,21 @@ standard `postgresql://` scheme. Two compatible options for Cloud Run:
    URL. Works with `pg`, but requires VPC/private-net and the runtime SA having
    `roles/cloudsql.client`.
 
-Exact socket host/port and the connection-string form will be finalized and
-verified during the GCP phase; until then mark **connection method = PENDING /
-unverified**.
+The live runtime `DATABASE_URL_APP` reference was observed to target localhost,
+consistent with a Cloud SQL Auth Proxy/connector path. Its secret value was not
+printed or stored; the public readiness endpoint and confirmed booking provide
+real application-to-database evidence. This check does **not** independently
+certify all network/IAM settings or Cloud SQL IP restrictions.
 
 ---
 
 ## F. First deployment (safe operator runbook)
 
-> Everything below is a dry-run/simulation until a **separately authorized**
-> session validates configuration and runs a real `DRY_RUN=0` execution. The
-> first-deployment runbook is implemented in `deploy/deploy.sh`.
+> **Historical first-deployment procedure, already executed in an authorized GCP
+> session.** Retained below so another operator can reproduce the release safely.
+> The live first-deploy/release result is evidenced by
+> [CD #44455509285](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/44455509285);
+> do **not** rerun this script just to reproduce screenshots.
 
 Step 1 — **Preflight** (read-only, no cost):
 ```bash
@@ -255,7 +271,8 @@ to the Secret Manager secrets.
 > `describe`-first probe (`ensure_secret_create` / `ensure_iam_sa`): an existing
 > resource is reused without modification; a missing resource is created; and a
 > permission-denied or unexpected error fails closed before anything is deployed —
-> never `|| true` over an aborting `gcloud_safe`. All live GCP verification is `PENDING`.
+> never `|| true` over an aborting `gcloud_safe`. This text records the
+> original GH-05 preflight design; §K documents the later live verification.
 
 Step 3 — **Build + publish** tagged images (full SHA + digest).
 
@@ -277,6 +294,20 @@ Step 8 — **Record** SHA, digest, revision, URL into the evidence doc.
 ---
 
 ## G. Repeatable release
+
+**Observed live release:** [reviewed release PR #99](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/99)
+merged into protected `main` at
+`ff55ac766ca792f0cc3ae29adad39d71ea4bca11`; successful
+[GitHub Actions CD #44455509285](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/44455509285)
+was **manually dispatched** against that `main` SHA after the reviewed release.
+The CD run completed the migration, staged revision readiness verification,
+tagged smoke, 100%-traffic switch and public smoke. Its released revision was
+`nuttiew-00006-sen`, image digest
+`sha256:ac1c9b0eb8e77d3245982ede48f5917494bfd020c6755134836da684db5d996e`.
+This is evidence of the **human-reviewed, repeatable GitHub Actions deployment
+path**, not evidence that the initial automatic `push` attempt succeeded (the
+earlier push-triggered CD run failed). Later C-05 **Console** no-change redeploys
+were separate operations and did not generate a new GitHub Actions run.
 
 The agreed release procedure (matches the review workflow in `AGENTS.md`):
 
@@ -330,9 +361,11 @@ alongside the deployed revision and public URL.
   `Slot`/`Booking`; no trigger/constraint bypass (`compose/init-db.mjs`).
 - **Secret Manager:** secrets are never echoed; the runtime only reads its own
   restricted secret; the migration/admin URL is never mounted into the runtime.
-- **Workload Identity Federation / OIDC:** future GitHub auth must be scoped with
-  exact Workload Identity Federation conditions so credentials can only be
-  requested for this release. Planned conditions (all required, none omitted):
+- **Workload Identity Federation / OIDC:** the successful real CD used the
+  repository's configured authentication workflow. The list below records
+  the **intended least-privilege provider restrictions** from GH-05;
+  the provider's actual live claim/attribute policy was **not independently
+  audited for C-05**, so do not claim every condition was proven:
   - repository identity: `repos/Tanaboonnnnn/CPE334-NutTiew`
     (`attribute.repository` exact), plus the persistent owner/repo numeric
     identifiers where supported (`attribute.repository_owner_id` /
@@ -353,10 +386,10 @@ alongside the deployed revision and public URL.
 - **Docker registry auth (finding #2):** images are pushed only after
   `gcloud auth configure-docker <region>-docker.pkg.dev` succeeds on the real path;
   there is no anonymous or insecure registry fallback.
-- **Migration identity (finding #4):** `NUTTIEW_MIGRATE_SA_EMAIL` is a dedicated
-  least-privilege SA for the Cloud Run migration job (Cloud SQL client + read only
-  the `DATABASE_URL` secret); it never receives deployment administration or broad
-  Secret Manager access. (Future IAM bindings are PENDING until GCP configuration.)
+- **Migration identity (finding #4):** `NUTTIEW_MIGRATE_SA_EMAIL` is the
+  configured dedicated migration SA for the Cloud Run job; the successful
+  migration job is recorded in the CD run. Its complete effective IAM bindings
+  were **not independently re-audited** during C-05.
 - **GitHub Environment protection + branch protection** on `main` (Ruleset
   #27154099) gate the real deploy.
 
@@ -373,10 +406,11 @@ configured Budget Alert (background only):
   combination (default `ENTERPRISE` / `POSTGRES_15` / `db-f1-micro`, shared-core).
   **No assumed zero cost** — Cloud SQL bills for instance uptime + storage + backup
   regardless of usage; region availability and Free Trial limits apply per Region.
-  Storage and automated-backup choices (default off here to keep cost low) affect
-  the bill; an explicit `db-f1-micro` (shared-core) is offered under ENTERPRISE,
-  NOT Enterprise Plus (which requires at least standard tier). **Explicit operator
-  approval is required before any Cloud SQL provisioning** — this stays PENDING.
+  Storage and automated-backup choices affect the bill. The originally planned
+  default tier was `db-f1-micro` under Enterprise, but the **actual live tier was
+  not checked in this C-05 session**, so no exact billed instance tier is claimed.
+  The existing `nuttiew-pg` instance was observed `RUNNABLE`; any further
+  provisioning, resize or cost change requires explicit operator approval.
 - No automatically destructive teardown. Paid resources are created only by an
   explicit, confirmed operator action; ongoing Cloud SQL charges are a tracked
   risk. The service must remain available through the grading window — **do not
@@ -384,21 +418,42 @@ configured Budget Alert (background only):
 
 ---
 
-## K. Lab 5 evidence status + traceability
+## K. Current Lab 5 evidence status and submission index
 
-See also [quality-gate-evidence.md](./quality-gate-evidence.md) (GH-04, R-05/R-06
-/C-01/C-02).
+**Last verified 19 November 2026 (Asia/Bangkok)**; updated in this runbook
+20 November 2026. This section supersedes the earlier GH-05 `PENDING` statuses.
+The course handout defines R-01–R-12 and C-01–C-06; the original GH-05-only
+labels elsewhere in this runbook are engineering shorthand, **not a substitute
+for the handout's actual requirement IDs**.
 
-| Lab label | Item | Status (GH-05) |
-|---|---|---|
-| R-02 | CI/required checks on supported envs | **Offline/implemented** (existing CI + GH-03 Docker verification preserved) |
-| R-07 | Production build & unit tests on deploy path | **Prepared + verified offline** (npm test/typecheck/build) |
-| R-08 | Dockerized runtime image | **Prepared + verified** locally (build targets) |
-| R-09 | Deployment configuration & **deploy workflow** | **Prepared offline**; `deploy.sh`/`release.sh`/`deploy.yml` ready |
-| C-04 | Live Cloud Run deployment | **PENDING** — no live GCP verification |
-| C-05 | Live persistent Cloud SQL / migration on cloud | **PENDING** — not demonstrated |
-| C-06 | Automatic release + smoke on live URL | **PENDING** — offline smoke only; no public URL exists |
+| Handout ID | Live/CI status | Direct checkable evidence |
+| --- | --- | --- |
+| R-01/R-02, C-03 | **PASS (local reproducibility)**: clean clone, Docker Compose, isolated PostgreSQL, no committed secrets | [fresh-clone-docker-evidence.md](fresh-clone-docker-evidence.md), [PR #77](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/77), `Dockerfile`, `.dockerignore`, `.env.example` |
+| R-05, C-01 | **PASS**: reviewed PR with tests/types/build, DB/race, Edge E2E, Docker | [quality-gate-evidence.md](quality-gate-evidence.md), [PR #72](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/72), [CI #43458545343](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43458545343) |
+| R-06, C-02 | **PASS**: deliberately broken temporary PR blocked by required check; not merged | [PR #73](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/73), [failed CI #43486762424](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/43486762424), [Ruleset #27154099](https://github.com/Tanaboonnnnn/CPE334-NutTiew/rules/27154099) |
+| R-03, C-04 | **PASS**: Tutor Login → create Slot → overlap rejected → Customer Login/Booking → both roles see confirmed booking; 401/403 restrictions | [C-04 live evidence](c04-production-evidence.md), [PR #101](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/101), [public URL](https://nuttiew-nxe2keefba-as.a.run.app/) |
+| R-04, C-05 | **PASS for app revision replacement/redeploy**, with honest limitation: no forced in-place process kill | [C-05 persistence report](c05-persistence-evidence.md) + images; booking `a971b49d-52e4-4a9f-ba90-05058c63ecaf`, `00006-sen` → `00006-lkt` → `00007-69p` |
+| R-07/R-08, C-06 | **VERIFIED for reviewed release + manually dispatched successful CD**; **automatic post-merge push-trigger not demonstrated as successful**, so do not present this as fully automatic | [PR #98](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/98) → [PR #99](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/99) → [successful CD #44455509285](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/44455509285), SHA `ff55ac766ca792f0cc3ae29adad39d71ea4bca11`, digest `sha256:ac1c9b0e…996e` |
+| R-09/R-10/R-11 | **Evidence to cross-check at submission**: Project #6, `lab5` labels, real teammate reviews and two-member contributions | [GitHub Project #6](https://github.com/users/Tanaboonnnnn/projects/6), [PR #72](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/72), [PR #99](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/99), [PR #101](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/101) |
+| R-12 | **Repository visibility to confirm again on submission date** | [Public repository](https://github.com/Tanaboonnnnn/CPE334-NutTiew) |
 
-> **Nothing in this doc claims a live Cloud Run revision, persistent Cloud SQL,
-> public URL, or automatic release until actually verified.** All such claims are
-> marked PENDING.
+### Latest Production identity
+
+- **Public URL:** https://nuttiew-nxe2keefba-as.a.run.app/
+- **Git source lineage / last GitHub release:** `main@ff55ac766ca792f0cc3ae29adad39d71ea4bca11`; original release image `sha256:ac1c9b0eb8e77d3245982ede48f5917494bfd020c6755134836da684db5d996e`.
+- **First verified CD revision:** `nuttiew-00006-sen`, 100% traffic at deployment time.
+- **Current observed Cloud Run revision after C-05:** `nuttiew-00007-69p`, 100% traffic. Created with the same service configuration through Console; **no fresh Git commit or CD run**. The exact Console revision image digest was not independently read, so it is not asserted to equal the prior digest.
+- **Database:** `nuttiew-pg`, observed `RUNNABLE`; existing Customer Booking unchanged after both revision replacements.
+- **Final smoke:** `/` HTTP 200 and `/api/ready` HTTP 200 with `{"status":"ready"}`.
+- **Security:** No demo credentials or connection strings in source/report; GCP permissions/Workload Identity configuration must be verified from Console if TAs ask for individual live IAM bindings.
+
+### How to assemble the PDF (Handout §12)
+
+Submit **one PDF per team**, titled `lab5_sec<section>_<group name>.pdf`,
+with **Answer Part 0–4** in order. Include both students' names, student IDs,
+GitHub handles and section **only in the controlled LEB2 submission**, not
+in the public repository. Keep the evidence concise and use captions
+identifying C-/R-ID, URLs, PR/run numbers and exact release SHA. The
+[C-04 screenshots](c04-production-evidence.md) and
+[C-05 screenshots](c05-persistence-evidence.md) supply Part 3 without
+inventing a restart command or automatic CD run.
