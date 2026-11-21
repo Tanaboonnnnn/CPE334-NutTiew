@@ -1081,7 +1081,7 @@ export function CustomerAvailability({
     setRescheduleOffersLoading(true);
     setRescheduleOffersError('');
     try {
-      const result = await fetchAvailability(new AbortController().signal, accountId);
+      const result = await fetchAvailability(new AbortController().signal, sessionBinding);
       if (sessionEpoch.current !== epoch) return;
       setRescheduleOffers(result.data.filter(offer => offer.slotId !== currentSlotId));
     } catch (error) {

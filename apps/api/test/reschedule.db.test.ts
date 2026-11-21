@@ -81,12 +81,14 @@ const book = (a: Auth, slotId: string, server = app) =>
 let hourOffset = 100;
 async function createSlot(tutorId: string, minutesFromNow?: number) {
   const mins = minutesFromNow ?? 60 * hourOffset++;
+  const start = new Date(Date.now() + mins * 60_000);
+  const end = new Date(start.getTime() + 60 * 60_000);
   const rows = (
     await admin.query(
       `INSERT INTO "Slot" ("tutorId","startsAt","endsAt","lifecycle")
-       VALUES ($1, clock_timestamp() + make_interval(mins => $2), clock_timestamp() + make_interval(mins => $3), 'Offered')
+       VALUES ($1, $2, $3, 'Offered')
        RETURNING *`,
-      [tutorId, mins, mins + 60],
+      [tutorId, start, end],
     )
   ).rows;
   return rows[0];
