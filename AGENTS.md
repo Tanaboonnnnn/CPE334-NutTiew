@@ -26,8 +26,16 @@ Scope: the entire `CPE334-NutTiew` repository. These are executable working rule
 4. Commit **only authorized files** for this Issue. Review staged paths and `git diff --cached --check`; keep commits coherent, messages meaningful and scope small. Do not add exploratory artifacts, unrelated context docs, secret files or empty contracts.
 5. Push the dedicated Issue branch; open/update an **Issue-linked PR with base `sprint1`**, explaining scope, dependencies, files, verification, limitations and explicit reviewer requests. When @Tanaboonnnnn is the author, request @Chxtamos; when @Chxtamos is the author, request @Tanaboonnnnn. Confirm the real GitHub reviewer request and later review state.
 6. Leave the PR **open for human approval**. Never approve your own PR, self-merge, merge on the user's behalf without a fresh explicit request, or directly push to `sprint1` / `main`. Later release work uses a separately reviewed `sprint1 → main` PR.
-7. Update Project #6 Kanban to the **verified** stage (Backlog → Specified → Started → PR Review → Fixing → Done), and Sprint field. `Done` requires the actual Issue DoD; `PR Review` means awaiting review; `Fixing` means review changes are being addressed.
+7. **Keep GitHub Project status synchronized throughout each Issue, not just at handoff.** Before work, discover every Project containing the Issue and its current status (currently Project #6 for existing Lab 6/Lab 7 work; Project #7 for Sprint 2/Deliverable 2). Follow the mandatory transition rules below, and update the Sprint field where applicable. Never assume Project #6 is the only board.
 8. **Destructive Git operations** (force-push, history rewrite, delete branch/Issue/Project, `reset --hard`, `clean`, rebase of shared work) require a fresh explicit user authorization and remote-SHA safety check. Creation of an Issue/PR alone never authorizes deleting another item.
+
+### GitHub Project status transitions — mandatory for every Issue
+
+- **When to sync:** Read the Issue's live Project item(s) during preflight and at every meaningful phase boundary. **Immediately update each Project containing the Issue** when a status condition below becomes true; do not defer updates until the end of the task, PR, or session. If the verified stage has not changed, leave it unchanged.
+- **Backlog:** Work is queued; the Issue has not actually started or is awaiting prerequisites. **Specified:** Scope, acceptance criteria and relevant feature contract/STS are established and, where required, human-reviewed, but implementation has not begun. For non-code Issues, use the equivalent agreed plan/evidence criteria.
+- **Started:** Actual scoped implementation, testing, documentation or evidence work has begun. **PR Review:** An Issue-linked PR has actually been opened and is awaiting substantive teammate review. **Fixing:** Review feedback, a failing required check, or verified rework is actively being addressed; move back to PR Review when the corrected PR is ready for review again.
+- **Done:** The Issue's full Definition of Done is **verified**, including required human approval, passing checks, merge/integration, deployment, acceptance and evidence **when those are part of that Issue**. A local edit, green test, opened PR or approval alone does not qualify. Do not force an Issue through inapplicable stages or advance it on assumptions.
+- **How to verify:** Update the Project's `Status` field and keep any separate `Workflow Stage` field consistent where that board uses both. Re-read each Project item after the write; record the board link, previous/current stage and supporting Issue/PR/check evidence in the handoff. If access, membership or an update fails, report the exact blocker and last verified status; never claim a move that was not confirmed. Never change another Issue's Project item.
 
 For an **AGENTS.md-only task**, its PR may contain `AGENTS.md` alone. It is not an invitation to edit README, SRS, tests, configurations or Issue #9. Never use the agent guidance PR as a shortcut to start the next task.
 
@@ -111,7 +119,7 @@ End every task with the following evidence, concise but complete:
 
 1. **Issue and scope:** linked Issue, requested output, explicit out-of-scope.
 2. **Changes:** exact file paths and concise content summary.
-3. **Git:** branch, base and head SHA, commits, PR URL/base, requested reviewer, merge status and Project stage.
+3. **Git:** branch, base and head SHA, commits, PR URL/base, requested reviewer, merge status; for every containing Project, its URL, last verified stage and any stage transitions (with evidence or update blocker).
 4. **Verification:** exact checks run and their observed PASS/FAIL results; any checks not run and why.
 5. **Traceability:** requirements/AC/STS IDs covered, remaining gaps and source/approval status.
 6. **Risks/blockers:** open decisions, failed checks, dependency issues and next authorized action.
