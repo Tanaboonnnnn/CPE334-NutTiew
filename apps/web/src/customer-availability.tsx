@@ -65,8 +65,11 @@ export type CustomerBookingItem = {
   tutorRef: string;
   startsAt: string;
   endsAt: string;
-  status: 'Booked';
-  displayStatus: 'Booked' | 'Past';
+  status: 'Booked' | 'Cancelled';
+  displayStatus: 'Booked' | 'Past' | 'Cancelled';
+  cancellationActor: 'Customer' | 'Tutor' | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
   createdAt: string;
 };
 
@@ -313,6 +316,41 @@ function isUnknownCommitError(error: unknown): boolean {
   );
 }
 
+function bookingLabel(status: CustomerBookingItem['displayStatus']) {
+  return status === 'Cancelled' ? 'ยกเลิกแล้ว' : status === 'Past' ? 'สิ้นสุดแล้ว' : 'ยืนยันแล้ว';
+}
+
+function CancellationDialog({ booking, busy, feedback, uncertain, enabled, close, confirm, check }: {
+  booking: CustomerBookingItem; busy: boolean; feedback: string; uncertain: boolean; enabled: boolean;
+  close: () => void; confirm: () => void; check: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const node = dialog.current;
+    node?.showModal();
+    heading.current?.focus();
+    return () => { node?.close(); };
+  }, []);
+  useEffect(() => { if (busy) heading.current?.focus(); }, [busy]);
+  return (
+    <dialog ref={dialog} className="customer-modal cancellation-dialog" aria-modal="true"
+      aria-labelledby="cancel-heading" aria-describedby="cancel-summary cancel-rule cancel-feedback"
+      aria-busy={busy} onCancel={event => { event.preventDefault(); if (!busy) close(); }}>
+      <div className="modal-header"><h2 ref={heading} id="cancel-heading" tabIndex={-1}>ยกเลิกการจอง</h2></div>
+      <p id="cancel-summary"><strong>{booking.tutorRef}</strong><br />
+        {bangkokLongDate(new Date(booking.startsAt))}, {bangkokClock(new Date(booking.startsAt))} – {bangkokClock(new Date(booking.endsAt))} น. (Asia/Bangkok)</p>
+      <p id="cancel-rule">ยกเลิกได้ก่อนเวลาเริ่มอย่างน้อย 30 นาที และย้อนกลับไม่ได้</p>
+      <p id="cancel-feedback" role="status">{busy ? 'กำลังดำเนินการ…' : feedback}</p>
+      <div className="modal-actions cancellation-actions">
+        <button type="button" className="view-detail-btn" disabled={busy} onClick={close}>ปิด</button>
+        {uncertain ? <button type="button" className="modal-close-btn" disabled={busy} onClick={check}>ตรวจสอบสถานะการจอง</button> :
+          <button type="button" className="modal-close-btn" disabled={busy || !enabled} onClick={confirm}>ยืนยันการยกเลิก</button>}
+      </div>
+    </dialog>
+  );
+}
+
 export function CustomerAvailability({
   accountId,
   sessionBinding,
@@ -353,6 +391,14 @@ export function CustomerAvailability({
   const [selectedBookingDetail, setSelectedBookingDetail] = useState<CustomerBookingDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [cancelTarget, setCancelTarget] = useState<CustomerBookingItem | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelFeedback, setCancelFeedback] = useState('');
+  const [cancelNotice, setCancelNotice] = useState('');
+  const [uncertain, setUncertain] = useState<ReadonlySet<string>>(new Set());
+  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+  const cancelRequest = useRef<AbortController | null>(null);
+  const cancelInvoker = useRef<HTMLButtonElement | null>(null);
   const [bookingBanner, setBookingBanner] = useState<BookingBannerState | null>(null);
   const [unknownOutcome, setUnknownOutcome] = useState<UnknownBookingOutcome | null>(null);
   const [viewedMonthKey, setViewedMonthKey] = useState<string | null>(null);
@@ -417,6 +463,17 @@ export function CustomerAvailability({
   };
 
   const clearProtectedState = () => {
+    version.current++;
+    pendingGet.current?.abort();
+    pendingPost.current?.abort();
+    cancelRequest.current?.abort();
+    cancelRequest.current = null;
+    setCancelTarget(null);
+    setCancelBusy(false);
+    setCancelFeedback('');
+    setCancelNotice('');
+    setUncertain(new Set());
+    setClosed(new Set());
     pendingFocusGroupKeyRef.current = null;
     sessionEpoch.current++;
     csrfVersion.current++;
@@ -660,6 +717,7 @@ export function CustomerAvailability({
       pendingGet.current?.abort();
       pendingCsrf.current?.abort();
       pendingPost.current?.abort();
+      cancelRequest.current?.abort();
       pendingBookingsGet.current?.abort();
       pendingDetailGet.current?.abort();
     };
@@ -782,9 +840,12 @@ export function CustomerAvailability({
         sessionBinding === capturedBinding &&
         !controller.signal.aborted
       ) {
-        if (body?.data && typeof body.data.id === 'string') {
-          setSelectedBookingDetail(body.data);
+        if (body?.data?.id === bookingId && ['Booked', 'Cancelled'].includes(body.data.status)) {
+          const latest = body.data as CustomerBookingDetail;
+          setSelectedBookingDetail(latest);
+          setMyBookings(rows => rows.map(row => row.id === bookingId ? latest : row));
           setDetailError('');
+          return latest;
         } else {
           setDetailError('LOAD_FAILED');
         }
@@ -813,7 +874,7 @@ export function CustomerAvailability({
   }, [activeTab]);
 
   useEffect(() => {
-    if (!selectedBookingDetail && !detailError && !loadingDetail) return;
+    if (cancelTarget || (!selectedBookingDetail && !detailError && !loadingDetail)) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setSelectedBookingDetail(null);
@@ -822,7 +883,105 @@ export function CustomerAvailability({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedBookingDetail, detailError, loadingDetail]);
+  }, [selectedBookingDetail, detailError, loadingDetail, cancelTarget]);
+
+  const canCancel = (booking: CustomerBookingItem) => booking.status === 'Booked' &&
+    booking.displayStatus === 'Booked' && !closed.has(booking.id);
+
+  function closeCancel() {
+    setCancelTarget(null);
+    const invoker = cancelInvoker.current;
+    window.requestAnimationFrame(() => {
+      if (invoker?.isConnected) invoker.focus();
+      else (document.getElementById('modal-heading') ?? bookingsHeadingRef.current)?.focus();
+    });
+  }
+
+  async function checkCancellation() {
+    if (!cancelTarget || cancelRequest.current || cancelBusy) return;
+    const id = cancelTarget.id;
+    const epoch = sessionEpoch.current;
+    setCancelBusy(true);
+    const latest = await openBookingDetail(id);
+    if (sessionEpoch.current !== epoch) return;
+    setCancelBusy(false);
+    if (!latest) { setCancelFeedback('ตรวจสอบสถานะไม่ได้ กรุณาลองอีกครั้ง'); return; }
+    setUncertain(previous => { const next = new Set(previous); next.delete(id); return next; });
+    closeCancel();
+    setCancelNotice(latest.status === 'Cancelled' ? 'การจองนี้ยกเลิกแล้ว' : 'ตรวจสอบแล้ว การจองยังไม่ถูกยกเลิก');
+    void fetchMyBookings();
+    void refresh(false, true);
+  }
+
+  async function confirmCancellation() {
+    if (!cancelTarget || !canCancel(cancelTarget) || !csrfToken || logoutBusy || logoutError || cancelRequest.current || uncertain.has(cancelTarget.id)) return;
+    const id = cancelTarget.id;
+    const epoch = sessionEpoch.current;
+    const request = new AbortController();
+    cancelRequest.current = request;
+    const timeout = window.setTimeout(() => request.abort(), 10_000);
+    setCancelBusy(true);
+    setCancelFeedback('');
+    const markUnknown = () => {
+      setUncertain(previous => new Set(previous).add(id));
+      setCancelFeedback('ยังยืนยันผลการยกเลิกไม่ได้ กรุณาตรวจสอบสถานะก่อนทำรายการอีกครั้ง');
+    };
+    try {
+      const response = await fetch('/api/v1/customer/bookings/' + encodeURIComponent(id) + '/cancel', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: request.signal,
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken, 'X-NutTiew-Expected-Session-Binding': sessionBinding },
+        body: '{}',
+      });
+      const body = await response.json().catch(() => null);
+      if (sessionEpoch.current !== epoch) return;
+      const code = body?.error?.code;
+      if (code === 'SESSION_BINDING_MISMATCH' || code === 'CSRF_DENIED' ||
+          (response.ok && response.headers.get('X-NutTiew-Session-Binding') !== sessionBinding)) {
+        handleSessionBindingChanged(); return;
+      }
+      if (response.status === 401 || response.status === 403) { clearProtectedState(); onUnauthorized(); return; }
+      if (response.status === 200 && body?.data?.id === id && body.data.status === 'Cancelled' && body.data.displayStatus === 'Cancelled') {
+        const data = body.data as CustomerBookingDetail;
+        detailVersion.current++;
+        pendingDetailGet.current?.abort();
+        setLoadingDetail(false);
+        setMyBookings(rows => rows.map(row => row.id === id ? data : row));
+        setSelectedBookingDetail(row => row?.id === id ? data : row);
+        closeCancel();
+        setCancelNotice('ยกเลิกการจองแล้ว');
+        void fetchMyBookings();
+        void refresh(false, true);
+      } else if (response.status === 409 || response.status === 422 || response.status === 404) {
+        setClosed(previous => new Set(previous).add(id));
+        setCancelFeedback(response.status === 422 ? 'ยกเลิกไม่ได้ เพราะเหลือเวลาไม่ถึง 30 นาทีก่อนเริ่มติว' :
+          response.status === 409 ? 'การจองนี้ไม่สามารถยกเลิกได้แล้ว' : 'ไม่พบข้อมูลการจองนี้');
+        if (selectedBookingDetail?.id === id) void openBookingDetail(id);
+        void fetchMyBookings();
+      } else if (code === 'SERVICE_UNAVAILABLE' || code === 'TRANSACTION_RETRY_EXHAUSTED' || response.status === 400) {
+        setCancelFeedback('ยังยกเลิกการจองไม่ได้ กรุณาลองใหม่');
+      } else {
+        markUnknown();
+      }
+    } catch {
+      if (sessionEpoch.current === epoch) markUnknown();
+    } finally {
+      window.clearTimeout(timeout);
+      if (cancelRequest.current === request) { cancelRequest.current = null; setCancelBusy(false); }
+    }
+  }
+
+  function renderCancel(booking: CustomerBookingItem) {
+    return canCancel(booking) && <button type="button" className="view-detail-btn cancel-booking-btn" data-testid="cancel-booking"
+      onClick={event => {
+        cancelInvoker.current = event.currentTarget;
+        setCancelTarget(booking);
+        setCancelNotice('');
+        setCancelFeedback(uncertain.has(booking.id) ? 'กรุณาตรวจสอบผลก่อนยกเลิกอีกครั้ง' : '');
+        if (!csrfToken && !csrfLoading) void loadCsrfBootstrap();
+      }}>
+      {uncertain.has(booking.id) ? 'ตรวจสอบผลการยกเลิก' : 'ยกเลิกการจอง'}
+    </button>;
+  }
 
   const handleLogout = () => {
     version.current++;
@@ -1425,10 +1584,10 @@ export function CustomerAvailability({
                       <div className="card-top-row">
                         <span className="booking-tutor-ref">ผู้สอน: <strong>{b.tutorRef}</strong></span>
                         <span
-                          className={b.displayStatus === 'Past' ? 'badge-past' : 'badge-booked'}
+                          className={b.displayStatus === 'Booked' ? 'badge-booked' : 'badge-past'}
                           data-testid="customer-booking-status-badge"
                         >
-                          {b.displayStatus === 'Past' ? 'สิ้นสุดแล้ว' : 'ยืนยันแล้ว'}
+                          {bookingLabel(b.displayStatus)}
                         </span>
                       </div>
                       <div className="card-mid-row">
@@ -1448,6 +1607,7 @@ export function CustomerAvailability({
                         >
                           ดูรายละเอียด
                         </button>
+                        {renderCancel(b)}
                       </div>
                     </div>
                   ))}
@@ -1955,6 +2115,12 @@ export function CustomerAvailability({
             </>
           )}
 
+          <p role="status" className={cancelNotice ? 'availability-surface' : undefined}>{cancelNotice}</p>
+          {!logoutBusy && !logoutError && cancelTarget && (
+            <CancellationDialog booking={cancelTarget} busy={cancelBusy} feedback={cancelFeedback || csrfError}
+              uncertain={uncertain.has(cancelTarget.id)} enabled={canCancel(cancelTarget) && !!csrfToken}
+              close={closeCancel} confirm={() => void confirmCancellation()} check={() => void checkCancellation()} />
+          )}
           {!logoutBusy && !logoutError && (selectedBookingDetail || detailError || loadingDetail) && (
             <div
               className="customer-modal-backdrop"
@@ -1970,7 +2136,7 @@ export function CustomerAvailability({
             >
               <div className="customer-modal" id="customer-booking-detail-modal">
                 <div className="modal-header">
-                  <h2 id="modal-heading">รายละเอียดการจอง</h2>
+                  <h2 id="modal-heading" tabIndex={-1}>รายละเอียดการจอง</h2>
                   <button
                     type="button"
                     className="modal-close-icon-btn"
@@ -2010,8 +2176,8 @@ export function CustomerAvailability({
                       </dd>
                       <dt>สถานะ (Status)</dt>
                       <dd>
-                        <span className={selectedBookingDetail.displayStatus === 'Past' ? 'badge-past' : 'badge-booked'} data-testid="detail-status-badge">
-                          {selectedBookingDetail.displayStatus === 'Past' ? 'สิ้นสุดแล้ว' : 'ยืนยันแล้ว'}
+                        <span className={selectedBookingDetail.displayStatus === 'Booked' ? 'badge-booked' : 'badge-past'} data-testid="detail-status-badge">
+                          {bookingLabel(selectedBookingDetail.displayStatus)}
                         </span>
                         {selectedBookingDetail.displayStatus === 'Past' && (
                           <span className="past-notice"> • การนัดหมายนี้สิ้นสุดลงแล้ว</span>
@@ -2020,7 +2186,8 @@ export function CustomerAvailability({
                       <dt>วันที่ทำรายการ (Booked At)</dt>
                       <dd>{bangkokLongDate(new Date(selectedBookingDetail.createdAt))} {bangkokClock(new Date(selectedBookingDetail.createdAt))} น.</dd>
                     </dl>
-                    <div className="modal-actions">
+                    <div className="modal-actions cancellation-actions">
+                      {renderCancel(selectedBookingDetail)}
                       <button
                         type="button"
                         className="modal-close-btn"
