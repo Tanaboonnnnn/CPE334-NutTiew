@@ -177,6 +177,50 @@ async function fetchAvailability(
   }
 }
 
+async function fetchRescheduleOptions(
+  externalSignal: AbortSignal,
+  bookingId: string,
+  expectedBinding: string,
+): Promise<AvailabilityResponse> {
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  if (externalSignal.aborted) stop();
+  else externalSignal.addEventListener('abort', stop, { once: true });
+  const timeout = window.setTimeout(stop, 10_000);
+  try {
+    const response = await fetch(
+      '/api/v1/customer/bookings/' + encodeURIComponent(bookingId) + '/reschedule/options',
+      {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: controller.signal,
+      },
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error?.code ?? 'HTTP_' + response.status);
+    }
+    if (response.headers.get('X-NutTiew-Session-Binding') !== expectedBinding) {
+      throw new Error('SESSION_MISMATCH');
+    }
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      !Array.isArray(payload.data) ||
+      !isValidUtcIso(payload?.meta?.evaluatedAt) ||
+      typeof payload?.meta?.requestId !== 'string' ||
+      payload.meta.requestId.trim().length === 0 ||
+      !payload.data.every(isValidAvailabilityOffer)
+    ) {
+      throw new Error('INVALID_AVAILABILITY_RESPONSE');
+    }
+    return payload as AvailabilityResponse;
+  } finally {
+    window.clearTimeout(timeout);
+    externalSignal.removeEventListener('abort', stop);
+  }
+}
+
 /**
  * F-S1-04 UI §2 step 2: Obtain the Session-bound CSRF token from GET /api/v1/auth/csrf,
  * then immediately call GET /api/v1/auth/me and verify that the returned session binding
@@ -557,6 +601,8 @@ export function CustomerAvailability({
   const [rescheduleUsedIds, setRescheduleUsedIds] = useState<ReadonlySet<string>>(new Set());
   const [rescheduleUncertain, setRescheduleUncertain] = useState<ReadonlySet<string>>(new Set());
   const rescheduleRequest = useRef<AbortController | null>(null);
+  const rescheduleOffersVersion = useRef(0);
+  const pendingRescheduleOffers = useRef<AbortController | null>(null);
   const rescheduleInvoker = useRef<HTMLButtonElement | null>(null);
   const [bookingBanner, setBookingBanner] = useState<BookingBannerState | null>(null);
   const [unknownOutcome, setUnknownOutcome] = useState<UnknownBookingOutcome | null>(null);
@@ -635,6 +681,9 @@ export function CustomerAvailability({
     setClosed(new Set());
     rescheduleRequest.current?.abort();
     rescheduleRequest.current = null;
+    rescheduleOffersVersion.current++;
+    pendingRescheduleOffers.current?.abort();
+    pendingRescheduleOffers.current = null;
     setRescheduleTarget(null);
     setRescheduleSlotId(null);
     setRescheduleOffers([]);
@@ -688,12 +737,14 @@ export function CustomerAvailability({
     csrfVersion.current++;
     bookingsVersion.current++;
     detailVersion.current++;
+    rescheduleOffersVersion.current++;
     sessionEpoch.current++;
     pendingGet.current?.abort();
     pendingCsrf.current?.abort();
     pendingPost.current?.abort();
     pendingBookingsGet.current?.abort();
     pendingDetailGet.current?.abort();
+    pendingRescheduleOffers.current?.abort();
     clearProtectedState();
     if (onSessionBindingChanged) {
       void onSessionBindingChanged();
@@ -890,6 +941,8 @@ export function CustomerAvailability({
       pendingPost.current?.abort();
       cancelRequest.current?.abort();
       rescheduleRequest.current?.abort();
+      rescheduleOffersVersion.current++;
+      pendingRescheduleOffers.current?.abort();
       pendingBookingsGet.current?.abort();
       pendingDetailGet.current?.abort();
     };
@@ -1015,7 +1068,7 @@ export function CustomerAvailability({
         if (body?.data?.id === bookingId && ['Booked', 'Cancelled'].includes(body.data.status)) {
           const latest = body.data as CustomerBookingDetail;
           setSelectedBookingDetail(latest);
-          setMyBookings(rows => rows.map(row => row.id === bookingId ? latest : row));
+          setMyBookings(rows => rows.map(row => row.id === bookingId ? { ...latest, hasRescheduled: row.hasRescheduled } : row));
           setDetailError('');
           return latest;
         } else {
@@ -1067,6 +1120,10 @@ export function CustomerAvailability({
     booking.displayStatus === 'Booked' && !isRescheduleUsed(booking) && !closed.has(booking.id) && !uncertain.has(booking.id);
 
   function closeReschedule() {
+    rescheduleOffersVersion.current++;
+    pendingRescheduleOffers.current?.abort();
+    pendingRescheduleOffers.current = null;
+    setRescheduleOffersLoading(false);
     setRescheduleTarget(null);
     setRescheduleSlotId(null);
     const invoker = rescheduleInvoker.current;
@@ -1076,16 +1133,33 @@ export function CustomerAvailability({
     });
   }
 
-  async function loadRescheduleOffers(currentSlotId: string) {
+  async function loadRescheduleOffers(bookingId: string) {
+    const reqVersion = ++rescheduleOffersVersion.current;
     const epoch = sessionEpoch.current;
+    pendingRescheduleOffers.current?.abort();
+    const controller = new AbortController();
+    pendingRescheduleOffers.current = controller;
+    setRescheduleOffers([]);
     setRescheduleOffersLoading(true);
     setRescheduleOffersError('');
     try {
-      const result = await fetchAvailability(new AbortController().signal, sessionBinding);
-      if (sessionEpoch.current !== epoch) return;
-      setRescheduleOffers(result.data.filter(offer => offer.slotId !== currentSlotId));
+      const result = await fetchRescheduleOptions(controller.signal, bookingId, sessionBinding);
+      if (
+        rescheduleOffersVersion.current !== reqVersion ||
+        sessionEpoch.current !== epoch ||
+        controller.signal.aborted
+      ) {
+        return;
+      }
+      setRescheduleOffers(result.data);
     } catch (error) {
-      if (sessionEpoch.current !== epoch) return;
+      if (
+        rescheduleOffersVersion.current !== reqVersion ||
+        sessionEpoch.current !== epoch ||
+        controller.signal.aborted
+      ) {
+        return;
+      }
       if (isSessionBindingOrCsrfMismatch(error)) {
         handleSessionBindingChanged(); return;
       }
@@ -1094,7 +1168,10 @@ export function CustomerAvailability({
       }
       setRescheduleOffersError('ไม่สามารถโหลดช่วงเวลาที่เปิดรับจองได้ กรุณาลองใหม่');
     } finally {
-      if (sessionEpoch.current === epoch) setRescheduleOffersLoading(false);
+      if (rescheduleOffersVersion.current === reqVersion && sessionEpoch.current === epoch) {
+        setRescheduleOffersLoading(false);
+        pendingRescheduleOffers.current = null;
+      }
     }
   }
 
@@ -1207,7 +1284,7 @@ export function CustomerAvailability({
           setRescheduleNotice('');
           setRescheduleFeedback(rescheduleUncertain.has(booking.id) ? 'กรุณาตรวจสอบผลก่อนเลื่อนนัดอีกครั้ง' : '');
           if (!csrfToken && !csrfLoading) void loadCsrfBootstrap();
-          if (!rescheduleUncertain.has(booking.id)) void loadRescheduleOffers(booking.slotId);
+          if (!rescheduleUncertain.has(booking.id)) void loadRescheduleOffers(booking.id);
         }}
       >
         {rescheduleUncertain.has(booking.id) ? 'ตรวจสอบผลการเลื่อนนัด' : 'เลื่อนนัด'}
@@ -1272,7 +1349,7 @@ export function CustomerAvailability({
         detailVersion.current++;
         pendingDetailGet.current?.abort();
         setLoadingDetail(false);
-        setMyBookings(rows => rows.map(row => row.id === id ? data : row));
+        setMyBookings(rows => rows.map(row => row.id === id ? { ...data, hasRescheduled: row.hasRescheduled } : row));
         setSelectedBookingDetail(row => row?.id === id ? data : row);
         closeCancel();
         setCancelNotice('ยกเลิกการจองแล้ว');
@@ -1315,12 +1392,14 @@ export function CustomerAvailability({
     csrfVersion.current++;
     bookingsVersion.current++;
     detailVersion.current++;
+    rescheduleOffersVersion.current++;
     sessionEpoch.current++;
     pendingGet.current?.abort();
     pendingCsrf.current?.abort();
     pendingPost.current?.abort();
     pendingBookingsGet.current?.abort();
     pendingDetailGet.current?.abort();
+    pendingRescheduleOffers.current?.abort();
     clearProtectedState();
     void onLogout();
   };
@@ -2452,7 +2531,7 @@ export function CustomerAvailability({
               offersError={rescheduleOffersError}
               selectedSlotId={rescheduleSlotId}
               onSelectSlot={setRescheduleSlotId}
-              onReloadOffers={() => void loadRescheduleOffers(rescheduleTarget.slotId)}
+              onReloadOffers={() => void loadRescheduleOffers(rescheduleTarget.id)}
               busy={rescheduleBusy}
               feedback={rescheduleFeedback || csrfError}
               uncertain={rescheduleUncertain.has(rescheduleTarget.id)}

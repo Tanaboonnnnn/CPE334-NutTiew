@@ -2,7 +2,7 @@ import { requireSession,requireRole,getPrincipal } from './guards.js';
 import { clientIp } from './client-ip.js';
 import { parseSlotStart } from './slot-time.js';
 import { listOwnSlots, publishOwnSlot, SlotError } from './slots.js';
-import { listCustomerAvailability } from './availability.js';
+import { listCustomerAvailability, listRescheduleAvailability } from './availability.js';
 import { BookingError, createCustomerBooking, isValidUuid, type BookingAdapterHooks } from './bookings.js';
 import { cancelCustomerBooking, type CancellationHooks } from './cancellation.js';
 import { rescheduleCustomerBooking, type RescheduleHooks } from './reschedule.js';
@@ -193,6 +193,22 @@ export async function createApp(pool:Pool, config:Config) {
    const data = await cancelCustomerBooking(pool, ctx.principal, ctx.id, config.cancellationHooks);
    res.setHeader('X-NutTiew-Session-Binding', ctx.binding);
    res.json({data, meta:{requestId:res.locals.requestId}});
+  } catch (error) {
+   if (error instanceof BookingError) return void code(res, error.status, error.errorCode);
+   code(res, 503, 'SERVICE_UNAVAILABLE');
+  }
+ });
+ app.get('/api/v1/customer/bookings/:id/reschedule/options', guard, customerRole, async (req, res) => {
+  if (Object.keys(req.query).length !== 0) return void code(res, 400, 'INVALID_INPUT');
+  const id = req.params.id;
+  if (typeof id !== 'string' || !isValidUuid(id)) return void code(res, 400, 'INVALID_INPUT');
+  const principal = getPrincipal(req);
+  if (!principal) return void code(res, 401, 'UNAUTHENTICATED');
+  try {
+   const clock = config.availabilityClock ? await config.availabilityClock() : undefined;
+   const result = await listRescheduleAvailability(pool, principal.userId, id, clock);
+   res.setHeader('X-NutTiew-Session-Binding', sessionBinding(principal.userId, principal.sessionId));
+   res.json({ data: result.data, meta: { requestId: res.locals.requestId, evaluatedAt: result.evaluatedAt } });
   } catch (error) {
    if (error instanceof BookingError) return void code(res, error.status, error.errorCode);
    code(res, 503, 'SERVICE_UNAVAILABLE');

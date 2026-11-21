@@ -1,4 +1,8 @@
+import { spawn } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Pool, type PoolClient } from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -105,8 +109,34 @@ async function fixture(minutes = 240, destMinutes = 480) {
 }
 
 const storedBooking = async (id: string) => (await admin.query('SELECT * FROM "Booking" WHERE id=$1', [id])).rows[0];
+const storedSlot = async (id: string) => (await admin.query('SELECT * FROM "Slot" WHERE id=$1', [id])).rows[0];
 const storedHistory = async (bookingId: string) =>
   (await admin.query('SELECT * FROM "RescheduleHistory" WHERE "bookingId"=$1', [bookingId])).rows;
+const storedNotifications = async (bookingId: string) =>
+  (await admin.query('SELECT * FROM "Notification" WHERE "bookingId"=$1', [bookingId])).rows;
+const activeOnSlot = async (slotId: string) =>
+  (await admin.query(`SELECT id FROM "Booking" WHERE "currentSlotId"=$1 AND status='Booked'`, [slotId])).rows;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(r => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+const pid = async (c: PoolClient) => (await c.query<{ p: number }>('SELECT pg_backend_pid() AS p')).rows[0].p;
+async function blocked(waiterPid: number, holderPid: number) {
+  for (let i = 0; i < 80; i++) {
+    const { rows } = await admin.query<{ ok: boolean }>(
+      'SELECT $2::int = ANY(pg_blocking_pids($1::int)) AS ok',
+      [waiterPid, holderPid],
+    );
+    if (rows[0]?.ok) return;
+    await new Promise(r => setTimeout(r, 25));
+  }
+  throw new Error(`Waiter ${waiterPid} did not block on holder ${holderPid}`);
+}
 
 it('RSC-01/02/14: cross-Tutor reschedule preserves Booking ID, creates 1 history row, reopens old Slot, hides history', async () => {
   const { customer, tutorA, tutorB, oldSlot, destSlot, bookingId } = await fixture();
@@ -260,7 +290,52 @@ it('RSC-04/05/06/07/08: rejects foreign/unknown, second attempt, occupied/overla
   expect(await storedHistory(bookingId)).toHaveLength(1);
 });
 
-it('RSC-09/10/12: rollback leaves state unchanged; concurrent same-Booking and destination races commit at most once', async () => {
+it('RSC-options: same-time cross-Tutor offer is returned by /reschedule/options while excluded from S1 /availability', async () => {
+  const { customer, tutorB, oldSlot, bookingId } = await fixture(240, 480);
+  const other = await user('Customer');
+
+  // Create a destination offer on Tutor B at the EXACT same startsAt/endsAt as oldSlot.
+  const sameTimeSlot = (
+    await admin.query(
+      `INSERT INTO "Slot" ("tutorId","startsAt","endsAt","lifecycle")
+       VALUES ($1, $2, $3, 'Offered')
+       RETURNING *`,
+      [tutorB.id, oldSlot.startsAt, oldSlot.endsAt],
+    )
+  ).rows[0];
+
+  // Sprint 1 availability still excludes sameTimeSlot because customer has an overlapping active Booking.
+  const s1Avail = await request(app).get('/api/v1/customer/availability').set('Cookie', customer.cookie).expect(200);
+  expect(s1Avail.body.data.some((o: { slotId: string }) => o.slotId === sameTimeSlot.id)).toBe(false);
+
+  // Reschedule options excludes the moving Booking from overlap checks, so sameTimeSlot IS returned (and oldSlot is not).
+  const opts = await request(app)
+    .get(`/api/v1/customer/bookings/${bookingId}/reschedule/options`)
+    .set('Cookie', customer.cookie)
+    .expect(200);
+  expect(opts.headers['x-nuttiew-session-binding']).toBe(customer.binding);
+  expect(opts.body.data).toEqual(expect.arrayContaining([expect.objectContaining({ slotId: sameTimeSlot.id })]));
+  expect(opts.body.data.some((o: { slotId: string }) => o.slotId === oldSlot.id)).toBe(false);
+
+  // Foreign and unknown booking IDs return identical 404 BOOKING_NOT_FOUND.
+  const foreign = await request(app)
+    .get(`/api/v1/customer/bookings/${bookingId}/reschedule/options`)
+    .set('Cookie', other.cookie)
+    .expect(404);
+  const missing = await request(app)
+    .get(`/api/v1/customer/bookings/${randomUUID()}/reschedule/options`)
+    .set('Cookie', customer.cookie)
+    .expect(404);
+  expect(foreign.body.error).toEqual(missing.body.error);
+  expect(foreign.body.error.code).toBe('BOOKING_NOT_FOUND');
+
+  // Rescheduling to the same-time cross-Tutor slot succeeds atomically.
+  const moved = await reschedule(customer, bookingId, sameTimeSlot.id).expect(200);
+  expect(moved.body.data).toMatchObject({ id: bookingId, slotId: sameTimeSlot.id, tutorId: tutorB.id, status: 'Booked' });
+  expect(await storedHistory(bookingId)).toHaveLength(1);
+});
+
+it('RSC-09/10: rollback leaves state unchanged; concurrent same-Booking reschedules commit at most once', async () => {
   const { customer, tutorB, destSlot, bookingId } = await fixture(240, 480);
   const altSlot = await createSlot(tutorB.id, 720);
   const before = await storedBooking(bookingId);
@@ -301,6 +376,281 @@ it('RSC-09/10/12: rollback leaves state unchanged; concurrent same-Booking and d
   expect([r1.status, r2.status].sort()).toEqual([200, 409]);
   expect(await storedHistory(bookingId)).toHaveLength(1);
 });
+
+it.each(['reschedule first', 'book first'] as const)(
+  'RSC-12: reschedule vs new Booking for same destination (%s)',
+  async order => {
+    const { customer, oldSlot, destSlot, bookingId } = await fixture(240, 480);
+    const other = await user('Customer');
+    const first = deferred<number>();
+    const second = deferred<number>();
+    const release = deferred<void>();
+    const rescheduleFirst = order === 'reschedule first';
+
+    const server = await createApp(db, {
+      ...config,
+      rescheduleHooks: rescheduleFirst
+        ? {
+            beforeCommit: async c => {
+              first.resolve(await pid(c));
+              await release.promise;
+            },
+          }
+        : {
+            beforeMutation: async c => {
+              second.resolve(await pid(c));
+            },
+          },
+      bookingHooks: rescheduleFirst
+        ? {
+            onLockStep: async e => {
+              if (e.phase === 'user') second.resolve(e.backendPid);
+            },
+          }
+        : {
+            beforeCommit: async ctx => {
+              first.resolve(ctx.backendPid);
+              await release.promise;
+            },
+          },
+    });
+
+    const startReschedule = () => reschedule(customer, bookingId, destSlot.id, server).then(r => r);
+    const startBook = () => book(other, destSlot.id, server).then(r => r);
+    const winner = (rescheduleFirst ? startReschedule : startBook)();
+    let waiter: Promise<request.Response> | undefined;
+    try {
+      const holder = await first.promise;
+      waiter = (rescheduleFirst ? startBook : startReschedule)();
+      await blocked(await second.promise, holder);
+    } finally {
+      release.resolve();
+      await Promise.allSettled([winner, waiter]);
+    }
+
+    const winRes = await winner;
+    const loseRes = await waiter!;
+    if (rescheduleFirst) {
+      expect(winRes.status).toBe(200);
+      expect(loseRes.status).toBe(409);
+      expect(loseRes.body.error.code).toBe('SLOT_UNAVAILABLE');
+      expect((await storedBooking(bookingId)).currentSlotId).toBe(destSlot.id);
+      expect(await storedHistory(bookingId)).toHaveLength(1);
+      expect((await activeOnSlot(destSlot.id)).map(r => r.id)).toEqual([bookingId]);
+    } else {
+      expect(winRes.status).toBe(201);
+      expect(loseRes.status).toBe(409);
+      expect(loseRes.body.error.code).toBe('SLOT_UNAVAILABLE');
+      expect((await storedBooking(bookingId)).currentSlotId).toBe(oldSlot.id);
+      expect(await storedHistory(bookingId)).toHaveLength(0);
+      expect((await activeOnSlot(destSlot.id)).map(r => r.id)).toEqual([winRes.body.data.id]);
+    }
+  },
+  15_000,
+);
+
+it.each(['tutor cancel first', 'reschedule first'] as const)(
+  'RSC-11: TutorCancel vs Customer Reschedule race (%s)',
+  async order => {
+    const { customer, tutorA, oldSlot, destSlot, bookingId } = await fixture(240, 480);
+    const tutorFirst = order === 'tutor cancel first';
+    const first = deferred<number>();
+    const second = deferred<number>();
+    const release = deferred<void>();
+
+    const server = await createApp(db, {
+      ...config,
+      rescheduleHooks: tutorFirst
+        ? {
+            beforeMutation: async c => {
+              second.resolve(await pid(c));
+            },
+          }
+        : {
+            beforeCommit: async c => {
+              first.resolve(await pid(c));
+              await release.promise;
+            },
+          },
+    });
+
+    const runTutorCancel = async (holdBeforeCommit: boolean) => {
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+        if (!holdBeforeCommit) second.resolve(await pid(client));
+        await client.query("SELECT public.s2_mutate('TutorCancel',$1,$2,$3,NULL,$4)", [
+          tutorA.id,
+          tutorA.sid,
+          bookingId,
+          'Tutor emergency',
+        ]);
+        if (holdBeforeCommit) {
+          first.resolve(await pid(client));
+          await release.promise;
+        }
+        await client.query('COMMIT');
+        return { ok: true as const };
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        return { ok: false as const, code: (err as { code?: string })?.code };
+      } finally {
+        client.release();
+      }
+    };
+
+    const startReschedule = () => reschedule(customer, bookingId, destSlot.id, server).then(r => r);
+
+    if (tutorFirst) {
+      const tutorTx = runTutorCancel(true);
+      let reschPromise: Promise<request.Response> | undefined;
+      try {
+        const holder = await first.promise;
+        reschPromise = startReschedule();
+        await blocked(await second.promise, holder);
+      } finally {
+        release.resolve();
+        await Promise.allSettled([tutorTx, reschPromise]);
+      }
+      expect(await tutorTx).toEqual({ ok: true });
+      const reschRes = await reschPromise!;
+      expect(reschRes.status).toBe(409);
+      expect(reschRes.body.error.code).toBe('RESCHEDULE_NOT_APPLICABLE');
+      expect(await storedBooking(bookingId)).toMatchObject({
+        status: 'Cancelled',
+        cancellationActor: 'Tutor',
+        currentSlotId: oldSlot.id,
+      });
+      expect((await storedSlot(oldSlot.id)).lifecycle).toBe('Withdrawn');
+      expect(await storedHistory(bookingId)).toHaveLength(0);
+      expect(await storedNotifications(bookingId)).toHaveLength(1);
+    } else {
+      const reschPromise = startReschedule();
+      let tutorTx: Promise<{ ok: true } | { ok: false; code: string | undefined }> | undefined;
+      try {
+        const holder = await first.promise;
+        tutorTx = runTutorCancel(false);
+        await blocked(await second.promise, holder);
+      } finally {
+        release.resolve();
+        await Promise.allSettled([reschPromise, tutorTx]);
+      }
+      expect((await reschPromise).status).toBe(200);
+      const tutorResult = await tutorTx!;
+      expect(tutorResult.ok).toBe(false);
+      expect(['40001', 'P0002']).toContain(tutorResult.ok ? '' : tutorResult.code);
+      // Fresh retry by former Tutor A is definitively rejected with P0002.
+      const retryTutor = await runTutorCancel(false);
+      expect(retryTutor).toEqual({ ok: false, code: 'P0002' });
+      expect(await storedBooking(bookingId)).toMatchObject({ status: 'Booked', currentSlotId: destSlot.id });
+      expect((await storedSlot(oldSlot.id)).lifecycle).toBe('Offered');
+      expect(await storedHistory(bookingId)).toHaveLength(1);
+      expect(await storedNotifications(bookingId)).toHaveLength(0);
+    }
+  },
+  15_000,
+);
+
+it('RSC-15: lost COMMIT acknowledgement returns 503 MUTATION_OUTCOME_UNKNOWN; re-read shows moved booking and retry returns 409', async () => {
+  const { customer, tutorB, destSlot, bookingId } = await fixture(240, 480);
+  const thirdSlot = await createSlot(tutorB.id, 720);
+  const uncertainApp = await createApp(db, {
+    ...config,
+    rescheduleHooks: {
+      afterCommit: async () => {
+        throw new Error('lost acknowledgement');
+      },
+    },
+  });
+
+  const lost = await reschedule(customer, bookingId, destSlot.id, uncertainApp).expect(503);
+  expect(lost.body.error.code).toBe('MUTATION_OUTCOME_UNKNOWN');
+
+  // Re-reading booking detail shows the committed move.
+  const detail = await request(app)
+    .get(`/api/v1/customer/bookings/${bookingId}`)
+    .set('Cookie', customer.cookie)
+    .expect(200);
+  expect(detail.body.data).toMatchObject({ id: bookingId, slotId: destSlot.id, status: 'Booked' });
+
+  // Retrying reschedule does not create a second move or history row.
+  const retry = await reschedule(customer, bookingId, thirdSlot.id).expect(409);
+  expect(retry.body.error.code).toBe('RESCHEDULE_ALREADY_USED');
+  expect(await storedHistory(bookingId)).toHaveLength(1);
+});
+
+it('RSC-16: committed reschedule, reopened old Slot, and history survive an actual API process restart', async () => {
+  const { customer, oldSlot, destSlot, bookingId } = await fixture(240, 480);
+  const source = `
+    import { createApp } from './src/app.ts';
+    import { createPool } from './src/config.ts';
+    const app = await createApp(createPool(), {
+      origin: process.env.AUTH_CANONICAL_ORIGIN,
+      production: false,
+      csrfKey: Buffer.from(process.env.RESCHEDULE_TEST_CSRF, 'hex'), rateKey: Buffer.alloc(32),
+    });
+    const server = app.listen(0, '127.0.0.1', () => console.log('READY ' + server.address().port));
+  `;
+  async function inProcess<T>(work: (base: string) => Promise<T>) {
+    const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', source], {
+      cwd: resolve(dirname(fileURLToPath(import.meta.url)), '..'),
+      env: { ...process.env, AUTH_CANONICAL_ORIGIN: origin, RESCHEDULE_TEST_CSRF: config.csrfKey.toString('hex') },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    const exited = once(child, 'exit');
+    let output = '';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const port = await new Promise<string>((ok, fail) => {
+        child.stdout.on('data', chunk => {
+          output += String(chunk);
+          const match = /READY (\d+)/.exec(output);
+          if (match) ok(match[1]);
+        });
+        child.stderr.resume();
+        child.once('error', fail);
+        child.once('exit', () => fail(new Error('Test API exited before readiness')));
+        controller.signal.addEventListener('abort', () => fail(new Error('API start timeout')), { once: true });
+      });
+      return await work('http://127.0.0.1:' + port);
+    } finally {
+      clearTimeout(timeout);
+      if (child.exitCode === null) child.kill();
+      await exited;
+    }
+  }
+
+  const committed = await inProcess(async base => {
+    const res = await fetch(base + path(bookingId), {
+      method: 'POST',
+      headers: { ...auth(customer), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slotId: destSlot.id }),
+      signal: AbortSignal.timeout(5000),
+    });
+    expect(res.status).toBe(200);
+    return (await res.json()).data;
+  });
+
+  await inProcess(async base => {
+    const get = (p: string) =>
+      fetch(base + '/api/v1/customer/' + p, { headers: { Cookie: customer.cookie }, signal: AbortSignal.timeout(5000) });
+    const detail = await get('bookings/' + bookingId);
+    expect(detail.status).toBe(200);
+    expect((await detail.json()).data).toEqual(committed);
+    const list = await get('bookings');
+    expect(list.status).toBe(200);
+    expect((await list.json()).data[0]).toMatchObject({ id: bookingId, slotId: destSlot.id, hasRescheduled: true });
+    const availability = await get('availability');
+    expect(availability.status).toBe(200);
+    expect((await availability.json()).data).toEqual(
+      expect.arrayContaining([expect.objectContaining({ slotId: oldSlot.id })]),
+    );
+  });
+
+  expect(await storedHistory(bookingId)).toHaveLength(1);
+}, 30_000);
 
 it('RSC-13: direct SQL cannot move Booking without history or insert a second history row', async () => {
   const { customer, tutorB, destSlot, bookingId } = await fixture(240, 480);
