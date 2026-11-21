@@ -160,8 +160,8 @@ it('RSC-01/02/14: cross-Tutor reschedule preserves Booking ID, creates 1 history
   expect(avail.body.data.some((o: { slotId: string }) => o.slotId === destSlot.id)).toBe(false);
 
   // Former Tutor A loses the booking; new Tutor B sees it; list marks hasRescheduled=true.
-  const schedA = await request(app).get('/api/v1/tutor/schedule/bookings').set('Cookie', tutorA.cookie).expect(200);
-  const schedB = await request(app).get('/api/v1/tutor/schedule/bookings').set('Cookie', tutorB.cookie).expect(200);
+  const schedA = await request(app).get('/api/v1/tutor/bookings').set('Cookie', tutorA.cookie).expect(200);
+  const schedB = await request(app).get('/api/v1/tutor/bookings').set('Cookie', tutorB.cookie).expect(200);
   expect(schedA.body.data).toEqual([]);
   expect(schedB.body.data).toEqual([expect.objectContaining({ id: bookingId, slotId: destSlot.id })]);
   const list = await request(app).get('/api/v1/customer/bookings').set('Cookie', customer.cookie).expect(200);
@@ -169,25 +169,53 @@ it('RSC-01/02/14: cross-Tutor reschedule preserves Booking ID, creates 1 history
 });
 
 it('RSC-03: enforces >=60m boundary on both original and destination starts', async () => {
-  const customer = await user('Customer');
-  const tutor = await user('Tutor');
-  const oldSoon = await createSlot(tutor.id, 59);
-  const destOk = await createSlot(tutor.id, 240);
-  const bookingId = (
-    await admin.query(
-      'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,$5) RETURNING id',
-      [customer.id, oldSoon.id, oldSoon.startsAt, oldSoon.endsAt, 'Booked'],
-    )
-  ).rows[0].id as string;
+  const { customer, tutorB, oldSlot, destSlot, bookingId } = await fixture(240, 480);
 
-  await reschedule(customer, bookingId, destOk.id).expect(422);
+  // HTTP 422 when destination starts <60m away
+  const destSoon = await createSlot(tutorB.id, 55);
+  const tooSoonHttp = await reschedule(customer, bookingId, destSoon.id).expect(422);
+  expect(tooSoonHttp.body.error.code).toBe('RESCHEDULE_WINDOW_CLOSED');
   expect(await storedHistory(bookingId)).toHaveLength(0);
 
-  const oldOk = await createSlot(tutor.id, 300);
-  const destSoon = await createSlot(tutor.id, 59);
-  const booking2 = (await book(customer, oldOk.id).expect(201)).body.data.id as string;
-  await reschedule(customer, booking2, destSoon.id).expect(422);
-  expect(await storedHistory(booking2)).toHaveLength(0);
+  // Exact 60:00 vs 59:59.999 boundary on original start via rolled-back decision clock override
+  const client = await admin.connect();
+  try {
+    await client.query('BEGIN');
+    const {
+      rows: [{ definition }],
+    } = await client.query<{ definition: string }>(
+      "SELECT pg_get_functiondef('public.s2_mutate(text,uuid,uuid,uuid,uuid,text)'::regprocedure) AS definition",
+    );
+    const anchor = 'decision := clock_timestamp();';
+    expect(definition.split(anchor)).toHaveLength(2);
+    const installClock = async (base: Date, deltaMs: number) => {
+      const stamp = new Date(base.getTime() - 60 * 60_000 + deltaMs).toISOString();
+      await client.query(definition.replace(anchor, "decision := TIMESTAMPTZ '" + stamp + "';"));
+    };
+    const invoke = () =>
+      client.query("SELECT public.s2_mutate('Reschedule',$1,$2,$3,$4)", [
+        customer.id,
+        customer.sid,
+        bookingId,
+        destSlot.id,
+      ]);
+
+    await installClock(oldSlot.startsAt, 1);
+    await client.query('SAVEPOINT too_late');
+    await expect(invoke()).rejects.toMatchObject({ code: 'P0B05' });
+    await client.query('ROLLBACK TO SAVEPOINT too_late');
+
+    await installClock(oldSlot.startsAt, 0);
+    await invoke();
+    const { rows: [moved] } = await client.query('SELECT "currentSlotId" FROM "Booking" WHERE id=$1', [bookingId]);
+    expect(moved.currentSlotId).toBe(destSlot.id);
+  } finally {
+    try {
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
+  }
 });
 
 it('RSC-04/05/06/07/08: rejects foreign/unknown, second attempt, occupied/overlap/same-slot without consuming quota', async () => {
@@ -216,8 +244,9 @@ it('RSC-04/05/06/07/08: rejects foreign/unknown, second attempt, occupied/overla
   expect(await storedHistory(bookingId)).toHaveLength(0);
 
   // Customer overlap -> 409 CUSTOMER_OVERLAP (quota untouched)
+  const tutorC = await user('Tutor');
   const overlapSlotA = await createSlot(tutorB.id, 960);
-  const overlapSlotB = await createSlot(tutorB.id, 980);
+  const overlapSlotB = await createSlot(tutorC.id, 980);
   await book(customer, overlapSlotA.id).expect(201);
   const ovRes = await reschedule(customer, bookingId, overlapSlotB.id).expect(409);
   expect(ovRes.body.error.code).toBe('CUSTOMER_OVERLAP');
