@@ -477,7 +477,7 @@ it.each(['tutor cancel first', 'reschedule first'] as const)(
     const runTutorCancel = async (holdBeforeCommit: boolean) => {
       const client = await db.connect();
       try {
-        await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+        await client.query('BEGIN');
         if (!holdBeforeCommit) second.resolve(await pid(client));
         await client.query("SELECT public.s2_mutate('TutorCancel',$1,$2,$3,NULL,$4)", [
           tutorA.id,
