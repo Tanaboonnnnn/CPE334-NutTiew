@@ -10,6 +10,8 @@ import { listCustomerAvailability } from '../src/availability.js';
 
 const runtimePool = createPool();
 const ownerPool = new Pool({ connectionString: process.env.DATABASE_URL!, max: 6 });
+const fixtureDb = process.env.S2_FIXTURE_DATABASE_URL
+  ? new Pool({ connectionString: process.env.S2_FIXTURE_DATABASE_URL }) : null;
 const origin = 'http://localhost:5173';
 const headers = { Origin: origin };
 const marker = randomUUID().slice(0, 12);
@@ -56,6 +58,12 @@ async function createBooking(
   slot: { id: string; startsAt: Date; endsAt: Date },
   status: 'Booked' | 'Cancelled' = 'Booked',
 ): Promise<string> {
+  if (status === 'Cancelled' && fixtureDb) {
+    return (await fixtureDb.query<{ id: string }>(
+      'INSERT INTO "Booking" ("customerId","currentSlotId","startsAt","endsAt","status","cancellationActor","cancelledAt") VALUES ($1,$2,$3,$4,$5,$6,clock_timestamp()) RETURNING "id"',
+      [customerId,slot.id,slot.startsAt,slot.endsAt,status,'Customer'],
+    )).rows[0].id;
+  }
   const res = await ownerPool.query<{ id: string }>(
     'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,$5) RETURNING "id"',
     [customerId, slot.id, slot.startsAt, slot.endsAt, status],
@@ -103,7 +111,7 @@ afterAll(async () => {
       [tutorAId, tutorBId, tutorCId, inactiveTutorId, customer1Id, customer2Id].filter(Boolean),
     ])
     .catch(() => {});
-  await Promise.all([runtimePool.end(), ownerPool.end()]);
+  await Promise.all([runtimePool.end(), ownerPool.end(), fixtureDb?.end()]);
 });
 
 describe('F-S1-03 Customer Availability real PostgreSQL integration (AVA-01..10, AVA-14..18)', () => {

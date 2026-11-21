@@ -5,34 +5,38 @@ datasource db {
  provider = "postgresql"
 }
 model User {
- id String @id @default(uuid()) @db.Uuid
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
  email String @unique
  passwordHash String
  role String
  isActive Boolean @default(true)
  createdAt DateTime @default(now()) @db.Timestamptz(6)
- updatedAt DateTime @updatedAt @db.Timestamptz(6)
+ updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
  sessions Session[]
  slots Slot[]
  customerBookings Booking[] @relation("BookingCustomer")
+ notifications Notification[] @relation("NotificationRecipient")
 }
 model Slot {
- id String @id @default(uuid()) @db.Uuid
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
  tutorId String @db.Uuid
- tutor User @relation(fields:[tutorId], references:[id], onDelete:Restrict)
+ tutor User @relation(fields:[tutorId], references:[id], onDelete:Restrict,onUpdate:NoAction)
  startsAt DateTime @db.Timestamptz(6)
  endsAt DateTime @db.Timestamptz(6)
  lifecycle String @default("Offered")
  createdAt DateTime @default(now()) @db.Timestamptz(6)
  withdrawnAt DateTime? @db.Timestamptz(6)
  bookings Booking[] @relation("BookingCurrentSlot")
+ versionGuard SlotVersionGuard?
+ historyAsOldSlot RescheduleHistory[] @relation("RescheduleOldSlot")
+ historyAsNewSlot RescheduleHistory[] @relation("RescheduleNewSlot")
  @@unique([id, startsAt, endsAt], map: "slot_id_window_unique")
- @@index([tutorId, startsAt, id])
+ @@index([tutorId, startsAt, id], map: "Slot_tutorId_startsAt_idx")
 }
 model Session {
- id String @id @default(uuid()) @db.Uuid
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
  userId String @db.Uuid
- user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade,onUpdate:NoAction)
  tokenDigest Bytes @unique
  csrfNonce Bytes
  csrfKeyVersion String @default("v1")
@@ -51,7 +55,7 @@ model AuthAttemptBucket {
  @@id([kind,keyDigest,windowStart])
 }
 model AuthAttemptReservation {
- id String @id @default(uuid()) @db.Uuid
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
  accountKeyDigest Bytes
  ipKeyDigest Bytes
  windowStart DateTime @db.Timestamptz(6)
@@ -59,11 +63,11 @@ model AuthAttemptReservation {
  leaseUntil DateTime @db.Timestamptz(6)
  createdAt DateTime @default(now()) @db.Timestamptz(6)
  settledAt DateTime? @db.Timestamptz(6)
- @@index([state,leaseUntil])
+ @@index([state,leaseUntil], map: "AuthAttemptReservation_pending_idx")
 }
 
 model Booking {
- id String @id @default(uuid()) @db.Uuid
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
  customerId String @db.Uuid
  currentSlotId String @db.Uuid
  startsAt DateTime @db.Timestamptz(6)
@@ -71,10 +75,57 @@ model Booking {
  status String @default("Booked")
  createdAt DateTime @default(now()) @db.Timestamptz(6)
  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+ cancellationActor String?
+ cancelledAt DateTime? @db.Timestamptz(6)
+ tutorCancellationReason String?
+ rescheduleHistory RescheduleHistory?
+ notifications Notification[] @relation("NotificationBooking")
 
  customer User @relation("BookingCustomer", fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "booking_customer_fk")
  currentSlot Slot @relation("BookingCurrentSlot", fields: [currentSlotId, startsAt, endsAt], references: [id, startsAt, endsAt], onDelete: Restrict, onUpdate: Restrict, map: "booking_current_slot_window_fk")
 
  @@index([customerId], map: "Booking_customerId_idx")
  @@index([currentSlotId], map: "Booking_currentSlotId_idx")
+}
+
+// Internal concurrency state. No application DML grants.
+model SlotVersionGuard {
+ slotId String @id @map("slot_id") @db.Uuid
+ version BigInt @default(0)
+ slot Slot @relation(fields: [slotId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "s2_slot_guard_slot_id_fkey")
+
+ @@map("s2_slot_guard")
+}
+
+model RescheduleHistory {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ bookingId String @unique(map: "reschedule_history_booking_unique") @db.Uuid
+ oldSlotId String @db.Uuid
+ oldTutorId String @db.Uuid
+ oldStartsAt DateTime @db.Timestamptz(6)
+ oldEndsAt DateTime @db.Timestamptz(6)
+ newSlotId String @db.Uuid
+ newTutorId String @db.Uuid
+ newStartsAt DateTime @db.Timestamptz(6)
+ newEndsAt DateTime @db.Timestamptz(6)
+ changedAt DateTime @db.Timestamptz(6)
+
+ booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "reschedule_history_booking_fk")
+ oldSlot Slot @relation("RescheduleOldSlot", fields: [oldSlotId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "reschedule_history_old_slot_fk")
+ newSlot Slot @relation("RescheduleNewSlot", fields: [newSlotId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "reschedule_history_new_slot_fk")
+}
+
+model Notification {
+ id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+ recipientCustomerId String @db.Uuid
+ bookingId String @db.Uuid
+ kind String
+ createdAt DateTime @db.Timestamptz(6)
+ readAt DateTime? @db.Timestamptz(6)
+
+ recipient User @relation("NotificationRecipient", fields: [recipientCustomerId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "notification_recipient_fk")
+ booking Booking @relation("NotificationBooking", fields: [bookingId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "notification_booking_fk")
+
+ @@unique([bookingId, kind], map: "notification_one_per_booking_kind")
+ @@index([recipientCustomerId, createdAt(sort: Desc), id(sort: Desc)], map: "notification_recipient_created_idx")
 }
