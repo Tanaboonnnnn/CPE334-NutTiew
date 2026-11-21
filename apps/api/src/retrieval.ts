@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { BookingError, isValidUuid } from './bookings.js';
 
-export type CustomerBookingListItemDto = {
+type CustomerBookingBaseDto = {
   id: string;
   slotId: string;
   tutorId: string;
@@ -16,7 +16,11 @@ export type CustomerBookingListItemDto = {
   createdAt: string;
 };
 
-export type CustomerBookingDetailDto = CustomerBookingListItemDto & {
+export type CustomerBookingListItemDto = CustomerBookingBaseDto & {
+  hasRescheduled: boolean;
+};
+
+export type CustomerBookingDetailDto = CustomerBookingBaseDto & {
   updatedAt: string;
 };
 
@@ -57,6 +61,10 @@ type CustomerBookingRow = {
   evaluatedAt: string;
 };
 
+type CustomerBookingListRow = CustomerBookingRow & {
+  hasRescheduled: boolean;
+};
+
 type CustomerBookingDetailRow = CustomerBookingRow & {
   updatedAt: string;
 };
@@ -87,7 +95,7 @@ export async function listCustomerBookings(
   customerId: string,
   evalDate?: Date,
 ): Promise<ListCustomerBookingsResult> {
-  const res = await pool.query<CustomerBookingRow>(
+  const res = await pool.query<CustomerBookingListRow>(
     `WITH eval_snapshot AS (
        SELECT COALESCE($2::timestamptz, statement_timestamp()) AS evaluated_at
      )
@@ -101,6 +109,7 @@ export async function listCustomerBookings(
        to_char(b."cancelledAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "cancelledAt",
        CASE WHEN b."cancellationActor" = 'Tutor' THEN b."tutorCancellationReason" END AS "cancellationReason",
        to_char(b."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
+       EXISTS (SELECT 1 FROM "RescheduleHistory" h WHERE h."bookingId" = b."id") AS "hasRescheduled",
        CASE
          WHEN b."status" = 'Cancelled' THEN 'Cancelled'
          WHEN b."endsAt" <= s_clock.evaluated_at THEN 'Past'
@@ -129,6 +138,7 @@ export async function listCustomerBookings(
     cancelledAt: row.cancelledAt,
     cancellationReason: row.cancellationReason,
     displayStatus: row.displayStatus,
+    hasRescheduled: row.hasRescheduled,
     createdAt: row.createdAt,
   }));
 
