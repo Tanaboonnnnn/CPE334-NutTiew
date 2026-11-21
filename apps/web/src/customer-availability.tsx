@@ -70,6 +70,7 @@ export type CustomerBookingItem = {
   cancellationActor: 'Customer' | 'Tutor' | null;
   cancelledAt: string | null;
   cancellationReason: string | null;
+  hasRescheduled?: boolean;
   createdAt: string;
 };
 
@@ -151,6 +152,50 @@ async function fetchAvailability(
       cache: 'no-store',
       signal: controller.signal,
     });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.error?.code ?? 'HTTP_' + response.status);
+    }
+    if (response.headers.get('X-NutTiew-Session-Binding') !== expectedBinding) {
+      throw new Error('SESSION_MISMATCH');
+    }
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      !Array.isArray(payload.data) ||
+      !isValidUtcIso(payload?.meta?.evaluatedAt) ||
+      typeof payload?.meta?.requestId !== 'string' ||
+      payload.meta.requestId.trim().length === 0 ||
+      !payload.data.every(isValidAvailabilityOffer)
+    ) {
+      throw new Error('INVALID_AVAILABILITY_RESPONSE');
+    }
+    return payload as AvailabilityResponse;
+  } finally {
+    window.clearTimeout(timeout);
+    externalSignal.removeEventListener('abort', stop);
+  }
+}
+
+async function fetchRescheduleOptions(
+  externalSignal: AbortSignal,
+  bookingId: string,
+  expectedBinding: string,
+): Promise<AvailabilityResponse> {
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  if (externalSignal.aborted) stop();
+  else externalSignal.addEventListener('abort', stop, { once: true });
+  const timeout = window.setTimeout(stop, 10_000);
+  try {
+    const response = await fetch(
+      '/api/v1/customer/bookings/' + encodeURIComponent(bookingId) + '/reschedule/options',
+      {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: controller.signal,
+      },
+    );
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(payload?.error?.code ?? 'HTTP_' + response.status);
@@ -351,6 +396,152 @@ function CancellationDialog({ booking, busy, feedback, uncertain, enabled, close
   );
 }
 
+function RescheduleDialog({
+  booking,
+  offers,
+  offersLoading,
+  offersError,
+  selectedSlotId,
+  onSelectSlot,
+  onReloadOffers,
+  busy,
+  feedback,
+  uncertain,
+  enabled,
+  close,
+  confirm,
+  check,
+}: {
+  booking: CustomerBookingItem;
+  offers: CustomerAvailabilityOffer[];
+  offersLoading: boolean;
+  offersError: string;
+  selectedSlotId: string | null;
+  onSelectSlot: (slotId: string) => void;
+  onReloadOffers: () => void;
+  busy: boolean;
+  feedback: string;
+  uncertain: boolean;
+  enabled: boolean;
+  close: () => void;
+  confirm: () => void;
+  check: () => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const node = dialog.current;
+    node?.showModal();
+    heading.current?.focus();
+    return () => { node?.close(); };
+  }, []);
+  useEffect(() => { if (busy) heading.current?.focus(); }, [busy]);
+  const selectedOffer = offers.find(o => o.slotId === selectedSlotId) ?? null;
+
+  return (
+    <dialog
+      ref={dialog}
+      className="customer-modal reschedule-dialog"
+      aria-modal="true"
+      aria-labelledby="reschedule-heading"
+      aria-describedby="reschedule-rule reschedule-feedback"
+      aria-busy={busy}
+      onCancel={event => { event.preventDefault(); if (!busy) close(); }}
+    >
+      <div className="modal-header">
+        <h2 ref={heading} id="reschedule-heading" tabIndex={-1}>เลื่อนนัด</h2>
+      </div>
+      <p id="reschedule-rule" className="reschedule-rule-note">
+        เลื่อนนัดได้เพียง 1 ครั้งเท่านั้น • ทั้งเวลาเดิมและเวลาใหม่ต้องเหลืออย่างน้อย 60 นาทีก่อนเริ่มติว (Asia/Bangkok)
+      </p>
+
+      <div className="reschedule-comparison">
+        <div className="reschedule-box">
+          <span className="reschedule-box-label">นัดหมายเดิม</span>
+          <strong>{booking.tutorRef}</strong>
+          <span>
+            {bangkokLongDate(new Date(booking.startsAt))}, {bangkokClock(new Date(booking.startsAt))} – {bangkokClock(new Date(booking.endsAt))} น. (Asia/Bangkok)
+          </span>
+        </div>
+        <div className="reschedule-box">
+          <span className="reschedule-box-label">ช่วงเวลาใหม่ที่เลือก</span>
+          {selectedOffer ? (
+            <>
+              <strong>{selectedOffer.tutorRef}</strong>
+              <span>
+                {bangkokLongDate(new Date(selectedOffer.startsAt))}, {bangkokClock(new Date(selectedOffer.startsAt))} – {bangkokClock(new Date(selectedOffer.endsAt))} น. (Asia/Bangkok)
+              </span>
+            </>
+          ) : (
+            <span className="reschedule-placeholder">ยังไม่ได้เลือกช่วงเวลาใหม่</span>
+          )}
+        </div>
+      </div>
+
+      {!uncertain && (
+        <div className="reschedule-offers-section">
+          <div className="reschedule-offers-header">
+            <span>เลือกช่วงเวลาใหม่ (รวมทุกผู้สอนที่เปิดสอน)</span>
+            <button type="button" className="view-detail-btn" disabled={busy || offersLoading} onClick={onReloadOffers}>
+              รีเฟรชตัวเลือก
+            </button>
+          </div>
+          {offersLoading ? (
+            <p role="status">กำลังโหลดช่วงเวลาที่เปิดรับจอง...</p>
+          ) : offersError ? (
+            <p role="alert">{offersError}</p>
+          ) : offers.length === 0 ? (
+            <p>ยังไม่มีช่วงเวลาอื่นที่เปิดรับจองในขณะนี้</p>
+          ) : (
+            <ul className="reschedule-offer-list" role="radiogroup" aria-label="ช่วงเวลาใหม่สำหรับเลื่อนนัด">
+              {offers.map(offer => {
+                const isSelected = offer.slotId === selectedSlotId;
+                const label = `${bangkokLongDate(new Date(offer.startsAt))} ${bangkokClock(new Date(offer.startsAt))} – ${bangkokClock(new Date(offer.endsAt))} น. (Asia/Bangkok) • ${offer.tutorRef}`;
+                return (
+                  <li key={offer.slotId}>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      aria-label={label}
+                      data-testid="reschedule-offer-option"
+                      data-slot-id={offer.slotId}
+                      className={`reschedule-offer-btn${isSelected ? ' is-selected' : ''}`}
+                      disabled={busy}
+                      onClick={() => onSelectSlot(offer.slotId)}
+                    >
+                      <span>{bangkokLongDate(new Date(offer.startsAt))}, {bangkokClock(new Date(offer.startsAt))} – {bangkokClock(new Date(offer.endsAt))} น. (Asia/Bangkok)</span>
+                      <strong>{offer.tutorRef}</strong>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <p id="reschedule-feedback" role="status">{busy ? 'กำลังดำเนินการ…' : feedback}</p>
+      <div className="modal-actions cancellation-actions">
+        <button type="button" className="view-detail-btn" disabled={busy} onClick={close}>ปิด</button>
+        {uncertain ? (
+          <button type="button" className="modal-close-btn" disabled={busy} onClick={check}>ตรวจสอบสถานะการจอง</button>
+        ) : (
+          <button
+            type="button"
+            className="modal-close-btn"
+            data-testid="confirm-reschedule-btn"
+            disabled={busy || !enabled || !selectedSlotId}
+            onClick={confirm}
+          >
+            ยืนยันการเลื่อนนัด
+          </button>
+        )}
+      </div>
+    </dialog>
+  );
+}
+
 export function CustomerAvailability({
   accountId,
   sessionBinding,
@@ -399,6 +590,20 @@ export function CustomerAvailability({
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
   const cancelRequest = useRef<AbortController | null>(null);
   const cancelInvoker = useRef<HTMLButtonElement | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] = useState<CustomerBookingItem | null>(null);
+  const [rescheduleSlotId, setRescheduleSlotId] = useState<string | null>(null);
+  const [rescheduleOffers, setRescheduleOffers] = useState<CustomerAvailabilityOffer[]>([]);
+  const [rescheduleOffersLoading, setRescheduleOffersLoading] = useState(false);
+  const [rescheduleOffersError, setRescheduleOffersError] = useState('');
+  const [rescheduleBusy, setRescheduleBusy] = useState(false);
+  const [rescheduleFeedback, setRescheduleFeedback] = useState('');
+  const [rescheduleNotice, setRescheduleNotice] = useState('');
+  const [rescheduleUsedIds, setRescheduleUsedIds] = useState<ReadonlySet<string>>(new Set());
+  const [rescheduleUncertain, setRescheduleUncertain] = useState<ReadonlySet<string>>(new Set());
+  const rescheduleRequest = useRef<AbortController | null>(null);
+  const rescheduleOffersVersion = useRef(0);
+  const pendingRescheduleOffers = useRef<AbortController | null>(null);
+  const rescheduleInvoker = useRef<HTMLButtonElement | null>(null);
   const [bookingBanner, setBookingBanner] = useState<BookingBannerState | null>(null);
   const [unknownOutcome, setUnknownOutcome] = useState<UnknownBookingOutcome | null>(null);
   const [viewedMonthKey, setViewedMonthKey] = useState<string | null>(null);
@@ -474,6 +679,21 @@ export function CustomerAvailability({
     setCancelNotice('');
     setUncertain(new Set());
     setClosed(new Set());
+    rescheduleRequest.current?.abort();
+    rescheduleRequest.current = null;
+    rescheduleOffersVersion.current++;
+    pendingRescheduleOffers.current?.abort();
+    pendingRescheduleOffers.current = null;
+    setRescheduleTarget(null);
+    setRescheduleSlotId(null);
+    setRescheduleOffers([]);
+    setRescheduleOffersLoading(false);
+    setRescheduleOffersError('');
+    setRescheduleBusy(false);
+    setRescheduleFeedback('');
+    setRescheduleNotice('');
+    setRescheduleUsedIds(new Set());
+    setRescheduleUncertain(new Set());
     pendingFocusGroupKeyRef.current = null;
     sessionEpoch.current++;
     csrfVersion.current++;
@@ -517,12 +737,14 @@ export function CustomerAvailability({
     csrfVersion.current++;
     bookingsVersion.current++;
     detailVersion.current++;
+    rescheduleOffersVersion.current++;
     sessionEpoch.current++;
     pendingGet.current?.abort();
     pendingCsrf.current?.abort();
     pendingPost.current?.abort();
     pendingBookingsGet.current?.abort();
     pendingDetailGet.current?.abort();
+    pendingRescheduleOffers.current?.abort();
     clearProtectedState();
     if (onSessionBindingChanged) {
       void onSessionBindingChanged();
@@ -718,6 +940,9 @@ export function CustomerAvailability({
       pendingCsrf.current?.abort();
       pendingPost.current?.abort();
       cancelRequest.current?.abort();
+      rescheduleRequest.current?.abort();
+      rescheduleOffersVersion.current++;
+      pendingRescheduleOffers.current?.abort();
       pendingBookingsGet.current?.abort();
       pendingDetailGet.current?.abort();
     };
@@ -843,7 +1068,7 @@ export function CustomerAvailability({
         if (body?.data?.id === bookingId && ['Booked', 'Cancelled'].includes(body.data.status)) {
           const latest = body.data as CustomerBookingDetail;
           setSelectedBookingDetail(latest);
-          setMyBookings(rows => rows.map(row => row.id === bookingId ? latest : row));
+          setMyBookings(rows => rows.map(row => row.id === bookingId ? { ...latest, hasRescheduled: row.hasRescheduled } : row));
           setDetailError('');
           return latest;
         } else {
@@ -874,7 +1099,7 @@ export function CustomerAvailability({
   }, [activeTab]);
 
   useEffect(() => {
-    if (cancelTarget || (!selectedBookingDetail && !detailError && !loadingDetail)) return;
+    if (cancelTarget || rescheduleTarget || (!selectedBookingDetail && !detailError && !loadingDetail)) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setSelectedBookingDetail(null);
@@ -883,10 +1108,189 @@ export function CustomerAvailability({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedBookingDetail, detailError, loadingDetail, cancelTarget]);
+  }, [selectedBookingDetail, detailError, loadingDetail, cancelTarget, rescheduleTarget]);
 
   const canCancel = (booking: CustomerBookingItem) => booking.status === 'Booked' &&
-    booking.displayStatus === 'Booked' && !closed.has(booking.id);
+    booking.displayStatus === 'Booked' && !closed.has(booking.id) && !rescheduleUncertain.has(booking.id);
+
+  const isRescheduleUsed = (booking: CustomerBookingItem) =>
+    Boolean(booking.hasRescheduled || rescheduleUsedIds.has(booking.id) || myBookings.find(r => r.id === booking.id)?.hasRescheduled);
+
+  const canReschedule = (booking: CustomerBookingItem) => booking.status === 'Booked' &&
+    booking.displayStatus === 'Booked' && !isRescheduleUsed(booking) && !closed.has(booking.id) && !uncertain.has(booking.id);
+
+  function closeReschedule() {
+    rescheduleOffersVersion.current++;
+    pendingRescheduleOffers.current?.abort();
+    pendingRescheduleOffers.current = null;
+    setRescheduleOffersLoading(false);
+    setRescheduleTarget(null);
+    setRescheduleSlotId(null);
+    const invoker = rescheduleInvoker.current;
+    window.requestAnimationFrame(() => {
+      if (invoker?.isConnected) invoker.focus();
+      else (document.getElementById('modal-heading') ?? bookingsHeadingRef.current)?.focus();
+    });
+  }
+
+  async function loadRescheduleOffers(bookingId: string) {
+    const reqVersion = ++rescheduleOffersVersion.current;
+    const epoch = sessionEpoch.current;
+    pendingRescheduleOffers.current?.abort();
+    const controller = new AbortController();
+    pendingRescheduleOffers.current = controller;
+    setRescheduleOffers([]);
+    setRescheduleOffersLoading(true);
+    setRescheduleOffersError('');
+    try {
+      const result = await fetchRescheduleOptions(controller.signal, bookingId, sessionBinding);
+      if (
+        rescheduleOffersVersion.current !== reqVersion ||
+        sessionEpoch.current !== epoch ||
+        controller.signal.aborted
+      ) {
+        return;
+      }
+      setRescheduleOffers(result.data);
+    } catch (error) {
+      if (
+        rescheduleOffersVersion.current !== reqVersion ||
+        sessionEpoch.current !== epoch ||
+        controller.signal.aborted
+      ) {
+        return;
+      }
+      if (isSessionBindingOrCsrfMismatch(error)) {
+        handleSessionBindingChanged(); return;
+      }
+      if (isAccessDeniedOrExpired(error)) {
+        clearProtectedState(); onUnauthorized(); return;
+      }
+      setRescheduleOffersError('ไม่สามารถโหลดช่วงเวลาที่เปิดรับจองได้ กรุณาลองใหม่');
+    } finally {
+      if (rescheduleOffersVersion.current === reqVersion && sessionEpoch.current === epoch) {
+        setRescheduleOffersLoading(false);
+        pendingRescheduleOffers.current = null;
+      }
+    }
+  }
+
+  async function checkReschedule() {
+    if (!rescheduleTarget || rescheduleRequest.current || rescheduleBusy) return;
+    const id = rescheduleTarget.id;
+    const previousSlotId = rescheduleTarget.slotId;
+    const epoch = sessionEpoch.current;
+    setRescheduleBusy(true);
+    const latest = await openBookingDetail(id);
+    if (sessionEpoch.current !== epoch) return;
+    setRescheduleBusy(false);
+    if (!latest) { setRescheduleFeedback('ตรวจสอบสถานะไม่ได้ กรุณาลองอีกครั้ง'); return; }
+    setRescheduleUncertain(previous => { const next = new Set(previous); next.delete(id); return next; });
+    if (latest.slotId !== previousSlotId && latest.status === 'Booked') {
+      setRescheduleUsedIds(previous => new Set(previous).add(id));
+      setRescheduleNotice('เลื่อนนัดสำเร็จแล้ว');
+    } else {
+      setRescheduleNotice(latest.status === 'Cancelled' ? 'การจองนี้ถูกยกเลิกแล้ว' : 'ตรวจสอบแล้ว การจองยังอยู่ที่เวลาเดิม');
+    }
+    closeReschedule();
+    void fetchMyBookings();
+    void refresh(false, true);
+  }
+
+  async function confirmReschedule() {
+    if (!rescheduleTarget || !rescheduleSlotId || !canReschedule(rescheduleTarget) || !csrfToken || logoutBusy || logoutError || rescheduleRequest.current || rescheduleUncertain.has(rescheduleTarget.id)) return;
+    const id = rescheduleTarget.id;
+    const targetSlotId = rescheduleSlotId;
+    const epoch = sessionEpoch.current;
+    const request = new AbortController();
+    rescheduleRequest.current = request;
+    const timeout = window.setTimeout(() => request.abort(), 10_000);
+    setRescheduleBusy(true);
+    setRescheduleFeedback('');
+    const markUnknown = () => {
+      setRescheduleUncertain(previous => new Set(previous).add(id));
+      setRescheduleFeedback('ยังยืนยันผลการเลื่อนนัดไม่ได้ กรุณาตรวจสอบสถานะก่อนทำรายการอีกครั้ง');
+    };
+    try {
+      const response = await fetch('/api/v1/customer/bookings/' + encodeURIComponent(id) + '/reschedule', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: request.signal,
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken, 'X-NutTiew-Expected-Session-Binding': sessionBinding },
+        body: JSON.stringify({ slotId: targetSlotId }),
+      });
+      const body = await response.json().catch(() => null);
+      if (sessionEpoch.current !== epoch) return;
+      const errCode = body?.error?.code;
+      if (errCode === 'SESSION_BINDING_MISMATCH' || errCode === 'CSRF_DENIED' ||
+          (response.ok && response.headers.get('X-NutTiew-Session-Binding') !== sessionBinding)) {
+        handleSessionBindingChanged(); return;
+      }
+      if (response.status === 401 || response.status === 403) { clearProtectedState(); onUnauthorized(); return; }
+      if (response.status === 200 && body?.data?.id === id && body.data.status === 'Booked' && body.data.slotId === targetSlotId) {
+        const data = body.data as CustomerBookingDetail;
+        detailVersion.current++;
+        pendingDetailGet.current?.abort();
+        setLoadingDetail(false);
+        setRescheduleUsedIds(previous => new Set(previous).add(id));
+        setMyBookings(rows => rows.map(row => row.id === id ? { ...data, hasRescheduled: true } : row));
+        setSelectedBookingDetail(row => row?.id === id ? data : row);
+        closeReschedule();
+        setRescheduleNotice('เลื่อนนัดสำเร็จแล้ว');
+        void fetchMyBookings();
+        void refresh(false, true);
+      } else if (errCode === 'RESCHEDULE_ALREADY_USED') {
+        setRescheduleUsedIds(previous => new Set(previous).add(id));
+        setRescheduleFeedback('การจองนี้ใช้สิทธิ์เลื่อนนัดครบ 1 ครั้งแล้ว');
+        if (selectedBookingDetail?.id === id) void openBookingDetail(id);
+        void fetchMyBookings();
+      } else if (errCode === 'SLOT_UNAVAILABLE' || errCode === 'SLOT_NOT_FOUND') {
+        setRescheduleOffers(prev => prev.filter(o => o.slotId !== targetSlotId));
+        setRescheduleSlotId(null);
+        setRescheduleFeedback('ช่วงเวลาที่เลือกไม่ว่างแล้ว กรุณาเลือกช่วงเวลาใหม่');
+      } else if (errCode === 'CUSTOMER_OVERLAP') {
+        setRescheduleFeedback('ช่วงเวลาที่เลือกทับซ้อนกับการจองอื่นของคุณ');
+      } else if (errCode === 'RESCHEDULE_WINDOW_CLOSED') {
+        setRescheduleFeedback('เลื่อนนัดไม่ได้ เพราะเวลานัดเดิมหรือเวลาใหม่เหลือไม่ถึง 60 นาทีก่อนเริ่มติว');
+      } else if (errCode === 'RESCHEDULE_NOT_APPLICABLE' || response.status === 404) {
+        setClosed(previous => new Set(previous).add(id));
+        setRescheduleFeedback(response.status === 404 ? 'ไม่พบข้อมูลการจองนี้' : 'ไม่สามารถเลื่อนนัดรายการนี้ได้');
+        if (selectedBookingDetail?.id === id) void openBookingDetail(id);
+        void fetchMyBookings();
+      } else if (errCode === 'SERVICE_UNAVAILABLE' || errCode === 'TRANSACTION_RETRY_EXHAUSTED' || response.status === 400) {
+        setRescheduleFeedback('ยังเลื่อนนัดไม่ได้ กรุณาลองใหม่');
+      } else {
+        markUnknown();
+      }
+    } catch {
+      if (sessionEpoch.current === epoch) markUnknown();
+    } finally {
+      window.clearTimeout(timeout);
+      if (rescheduleRequest.current === request) { rescheduleRequest.current = null; setRescheduleBusy(false); }
+    }
+  }
+
+  function renderReschedule(booking: CustomerBookingItem) {
+    if (booking.status === 'Booked' && booking.displayStatus === 'Booked' && isRescheduleUsed(booking)) {
+      return <span className="reschedule-used-note" data-testid="reschedule-used-note">ใช้สิทธิ์เลื่อนนัดแล้ว (1 ครั้ง)</span>;
+    }
+    return canReschedule(booking) && (
+      <button
+        type="button"
+        className="view-detail-btn reschedule-booking-btn"
+        data-testid="reschedule-booking"
+        onClick={event => {
+          rescheduleInvoker.current = event.currentTarget;
+          setRescheduleTarget(booking);
+          setRescheduleSlotId(null);
+          setRescheduleNotice('');
+          setRescheduleFeedback(rescheduleUncertain.has(booking.id) ? 'กรุณาตรวจสอบผลก่อนเลื่อนนัดอีกครั้ง' : '');
+          if (!csrfToken && !csrfLoading) void loadCsrfBootstrap();
+          if (!rescheduleUncertain.has(booking.id)) void loadRescheduleOffers(booking.id);
+        }}
+      >
+        {rescheduleUncertain.has(booking.id) ? 'ตรวจสอบผลการเลื่อนนัด' : 'เลื่อนนัด'}
+      </button>
+    );
+  }
 
   function closeCancel() {
     setCancelTarget(null);
@@ -945,7 +1349,7 @@ export function CustomerAvailability({
         detailVersion.current++;
         pendingDetailGet.current?.abort();
         setLoadingDetail(false);
-        setMyBookings(rows => rows.map(row => row.id === id ? data : row));
+        setMyBookings(rows => rows.map(row => row.id === id ? { ...data, hasRescheduled: row.hasRescheduled } : row));
         setSelectedBookingDetail(row => row?.id === id ? data : row);
         closeCancel();
         setCancelNotice('ยกเลิกการจองแล้ว');
@@ -988,12 +1392,14 @@ export function CustomerAvailability({
     csrfVersion.current++;
     bookingsVersion.current++;
     detailVersion.current++;
+    rescheduleOffersVersion.current++;
     sessionEpoch.current++;
     pendingGet.current?.abort();
     pendingCsrf.current?.abort();
     pendingPost.current?.abort();
     pendingBookingsGet.current?.abort();
     pendingDetailGet.current?.abort();
+    pendingRescheduleOffers.current?.abort();
     clearProtectedState();
     void onLogout();
   };
@@ -1607,6 +2013,7 @@ export function CustomerAvailability({
                         >
                           ดูรายละเอียด
                         </button>
+                        {renderReschedule(b)}
                         {renderCancel(b)}
                       </div>
                     </div>
@@ -2115,7 +2522,25 @@ export function CustomerAvailability({
             </>
           )}
 
-          <p role="status" className={cancelNotice ? 'availability-surface' : undefined}>{cancelNotice}</p>
+          <p role="status" className={cancelNotice || rescheduleNotice ? 'availability-surface' : undefined}>{cancelNotice || rescheduleNotice}</p>
+          {!logoutBusy && !logoutError && rescheduleTarget && (
+            <RescheduleDialog
+              booking={rescheduleTarget}
+              offers={rescheduleOffers}
+              offersLoading={rescheduleOffersLoading}
+              offersError={rescheduleOffersError}
+              selectedSlotId={rescheduleSlotId}
+              onSelectSlot={setRescheduleSlotId}
+              onReloadOffers={() => void loadRescheduleOffers(rescheduleTarget.id)}
+              busy={rescheduleBusy}
+              feedback={rescheduleFeedback || csrfError}
+              uncertain={rescheduleUncertain.has(rescheduleTarget.id)}
+              enabled={canReschedule(rescheduleTarget) && !!csrfToken}
+              close={closeReschedule}
+              confirm={() => void confirmReschedule()}
+              check={() => void checkReschedule()}
+            />
+          )}
           {!logoutBusy && !logoutError && cancelTarget && (
             <CancellationDialog booking={cancelTarget} busy={cancelBusy} feedback={cancelFeedback || csrfError}
               uncertain={uncertain.has(cancelTarget.id)} enabled={canCancel(cancelTarget) && !!csrfToken}
@@ -2187,6 +2612,7 @@ export function CustomerAvailability({
                       <dd>{bangkokLongDate(new Date(selectedBookingDetail.createdAt))} {bangkokClock(new Date(selectedBookingDetail.createdAt))} น.</dd>
                     </dl>
                     <div className="modal-actions cancellation-actions">
+                      {renderReschedule(selectedBookingDetail)}
                       {renderCancel(selectedBookingDetail)}
                       <button
                         type="button"

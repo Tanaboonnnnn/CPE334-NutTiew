@@ -2,9 +2,10 @@ import { requireSession,requireRole,getPrincipal } from './guards.js';
 import { clientIp } from './client-ip.js';
 import { parseSlotStart } from './slot-time.js';
 import { listOwnSlots, publishOwnSlot, SlotError } from './slots.js';
-import { listCustomerAvailability } from './availability.js';
+import { listCustomerAvailability, listRescheduleAvailability } from './availability.js';
 import { BookingError, createCustomerBooking, isValidUuid, type BookingAdapterHooks } from './bookings.js';
 import { cancelCustomerBooking, type CancellationHooks } from './cancellation.js';
+import { rescheduleCustomerBooking, type RescheduleHooks } from './reschedule.js';
 import { listCustomerBookings, getCustomerBookingDetail, listTutorScheduleBookings } from './retrieval.js';
 import express, { type Request, type Response, type NextFunction, type RequestHandler } from 'express';
 import cookieParser from 'cookie-parser';
@@ -13,8 +14,8 @@ import argon2 from 'argon2';
 import type { Pool } from 'pg';
 import { admit, csrf, digest, hmac, QuotaError, randomToken, safeTokenMatch, settle, verifyPassword } from './security.js';
 
-type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword; availabilityClock?:()=>Date|Promise<Date>; bookingHooks?:BookingAdapterHooks; cancellationHooks?:CancellationHooks };
-const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',SLOT_NOT_FOUND:'Slot not found',BOOKING_NOT_FOUND:'Booking not found',BOOKING_NOT_CANCELLABLE:'Booking is no longer cancellable',CANCELLATION_WINDOW_CLOSED:'Cancellation window has closed',MUTATION_OUTCOME_UNKNOWN:'Cancellation outcome could not be confirmed',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',SESSION_BINDING_MISMATCH:'Session binding mismatch',RATE_LIMITED:'Too many login attempts',SLOT_INVALID_TIME:'Slot must start in the future',SLOT_OVERLAP:'Slot overlaps an existing offer',SLOT_UNAVAILABLE:'Selected slot is unavailable',CUSTOMER_OVERLAP:'Customer has an overlapping booking',BOOKING_NOT_ELIGIBLE:'Slot is no longer eligible for booking',TRANSACTION_RETRY_EXHAUSTED:'Transaction retry budget exhausted',BOOKING_OUTCOME_UNKNOWN:'Booking outcome could not be confirmed',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
+type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword; availabilityClock?:()=>Date|Promise<Date>; bookingHooks?:BookingAdapterHooks; cancellationHooks?:CancellationHooks; rescheduleHooks?:RescheduleHooks };
+const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',SLOT_NOT_FOUND:'Slot not found',BOOKING_NOT_FOUND:'Booking not found',BOOKING_NOT_CANCELLABLE:'Booking is no longer cancellable',CANCELLATION_WINDOW_CLOSED:'Cancellation window has closed',RESCHEDULE_ALREADY_USED:'Booking has already been rescheduled',RESCHEDULE_NOT_APPLICABLE:'Booking cannot be rescheduled to the selected slot',RESCHEDULE_WINDOW_CLOSED:'Reschedule window has closed',MUTATION_OUTCOME_UNKNOWN:'Cancellation outcome could not be confirmed',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',SESSION_BINDING_MISMATCH:'Session binding mismatch',RATE_LIMITED:'Too many login attempts',SLOT_INVALID_TIME:'Slot must start in the future',SLOT_OVERLAP:'Slot overlaps an existing offer',SLOT_UNAVAILABLE:'Selected slot is unavailable',CUSTOMER_OVERLAP:'Customer has an overlapping booking',BOOKING_NOT_ELIGIBLE:'Slot is no longer eligible for booking',TRANSACTION_RETRY_EXHAUSTED:'Transaction retry budget exhausted',BOOKING_OUTCOME_UNKNOWN:'Booking outcome could not be confirmed',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
 const code=(res:Response,status:number,error:string)=>res.status(status).json({error:{code:error,message:messages[error]??'Request failed'},requestId:res.locals.requestId??randomUUID()});
 const cookieName=(c:Config)=>c.production?'nuttiew_session':'nuttiew_session_dev';
 const cookieOptions=(c:Config)=>({httpOnly:true,secure:c.production,sameSite:'lax' as const,path:'/' as const});
@@ -166,30 +167,69 @@ export async function createApp(pool:Pool, config:Config) {
    code(res,503,'SERVICE_UNAVAILABLE');
   }
  });
- app.post('/api/v1/customer/bookings/:id/cancel', guard, customerRole, async (req, res) => {
-  if (!allowedOrigin(req, config)) return void code(res, 403, 'ORIGIN_DENIED');
+ const verifyCustomerBookingMutation = (req: Request, res: Response): { principal: { userId: string; sessionId: string }; binding: string; id: string } | null => {
+  if (!allowedOrigin(req, config)) { code(res, 403, 'ORIGIN_DENIED'); return null; }
   const principal = getPrincipal(req);
-  if (!principal) return void code(res, 401, 'UNAUTHENTICATED');
+  if (!principal) { code(res, 401, 'UNAUTHENTICATED'); return null; }
   const binding = sessionBinding(principal.userId, principal.sessionId);
-  if (req.headers['x-nuttiew-expected-session-binding'] !== binding) return void code(res, 403, 'SESSION_BINDING_MISMATCH');
+  if (req.headers['x-nuttiew-expected-session-binding'] !== binding) { code(res, 403, 'SESSION_BINDING_MISMATCH'); return null; }
   const key = sessionCsrfKey(config, principal.csrfKeyVersion);
-  if (!key) return void code(res, 503, 'SERVICE_UNAVAILABLE');
-  if (!safeTokenMatch(req.headers['x-csrf-token'], csrf(key, principal.sessionId, principal.csrfNonce))) return void code(res, 403, 'CSRF_DENIED');
+  if (!key) { code(res, 503, 'SERVICE_UNAVAILABLE'); return null; }
+  if (!safeTokenMatch(req.headers['x-csrf-token'], csrf(key, principal.sessionId, principal.csrfNonce))) { code(res, 403, 'CSRF_DENIED'); return null; }
   const id = req.params.id;
+  if (typeof id !== 'string' || !isValidUuid(id) || Object.keys(req.query).length || !req.is('application/json') || !jsonPayloads.has(req)) {
+   code(res, 400, 'INVALID_INPUT'); return null;
+  }
+  return { principal, binding, id };
+ };
+ app.post('/api/v1/customer/bookings/:id/cancel', guard, customerRole, async (req, res) => {
+  const ctx = verifyCustomerBookingMutation(req, res);
+  if (!ctx) return;
   const body = req.body;
-  if (typeof id !== 'string' || !isValidUuid(id) || Object.keys(req.query).length || !req.is('application/json') || !jsonPayloads.has(req) ||
-      !body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) {
    return void code(res, 400, 'INVALID_INPUT');
   }
   try {
-   const data = await cancelCustomerBooking(pool, principal, id, config.cancellationHooks);
-   res.setHeader('X-NutTiew-Session-Binding', binding);
+   const data = await cancelCustomerBooking(pool, ctx.principal, ctx.id, config.cancellationHooks);
+   res.setHeader('X-NutTiew-Session-Binding', ctx.binding);
    res.json({data, meta:{requestId:res.locals.requestId}});
   } catch (error) {
    if (error instanceof BookingError) return void code(res, error.status, error.errorCode);
    code(res, 503, 'SERVICE_UNAVAILABLE');
   }
  });
- app.use((err:unknown,_req:Request,res:Response,_next:NextFunction)=>{if(res.headersSent)return;const e=err as {type?:string;status?:number};code(res,e.type==='entity.too.large'?(_req.method==='POST' && /^\/api\/v1\/customer\/bookings\/[^/]+\/cancel\/?$/i.test(_req.path)?400:413):e.status===400?400:500,e.type==='entity.too.large'?'INVALID_INPUT':e.status===400?'INVALID_INPUT':'INTERNAL_ERROR');});
+ app.get('/api/v1/customer/bookings/:id/reschedule/options', guard, customerRole, async (req, res) => {
+  if (Object.keys(req.query).length !== 0) return void code(res, 400, 'INVALID_INPUT');
+  const id = req.params.id;
+  if (typeof id !== 'string' || !isValidUuid(id)) return void code(res, 400, 'INVALID_INPUT');
+  const principal = getPrincipal(req);
+  if (!principal) return void code(res, 401, 'UNAUTHENTICATED');
+  try {
+   const clock = config.availabilityClock ? await config.availabilityClock() : undefined;
+   const result = await listRescheduleAvailability(pool, principal.userId, id, clock);
+   res.setHeader('X-NutTiew-Session-Binding', sessionBinding(principal.userId, principal.sessionId));
+   res.json({ data: result.data, meta: { requestId: res.locals.requestId, evaluatedAt: result.evaluatedAt } });
+  } catch (error) {
+   if (error instanceof BookingError) return void code(res, error.status, error.errorCode);
+   code(res, 503, 'SERVICE_UNAVAILABLE');
+  }
+ });
+ app.post('/api/v1/customer/bookings/:id/reschedule', guard, customerRole, async (req, res) => {
+  const ctx = verifyCustomerBookingMutation(req, res);
+  if (!ctx) return;
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'slotId') || !isValidUuid(body.slotId)) {
+   return void code(res, 400, 'INVALID_INPUT');
+  }
+  try {
+   const data = await rescheduleCustomerBooking(pool, ctx.principal, ctx.id, body.slotId, config.rescheduleHooks);
+   res.setHeader('X-NutTiew-Session-Binding', ctx.binding);
+   res.json({data, meta:{requestId:res.locals.requestId}});
+  } catch (error) {
+   if (error instanceof BookingError) return void code(res, error.status, error.errorCode);
+   code(res, 503, 'SERVICE_UNAVAILABLE');
+  }
+ });
+ app.use((err:unknown,_req:Request,res:Response,_next:NextFunction)=>{if(res.headersSent)return;const e=err as {type?:string;status?:number};code(res,e.type==='entity.too.large'?(_req.method==='POST' && /^\/api\/v1\/customer\/bookings\/[^/]+\/(cancel|reschedule)\/?$/i.test(_req.path)?400:413):e.status===400?400:500,e.type==='entity.too.large'?'INVALID_INPUT':e.status===400?'INVALID_INPUT':'INTERNAL_ERROR');});
  return app;
 }

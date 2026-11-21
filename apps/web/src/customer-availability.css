@@ -1345,3 +1345,112 @@
     padding: 18px 16px;
   }
 }
+
+/* F-S2-02: Customer Reschedule Dialog */
+.customer-modal.reschedule-dialog {
+  width: min(100%, 620px);
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 32px);
+  margin: auto;
+  overflow: auto;
+}
+.reschedule-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.65);
+}
+.reschedule-rule-note {
+  margin: 0 0 14px;
+  font-size: 0.9rem;
+  color: #475569;
+}
+.reschedule-comparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.reschedule-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--nuttiew-border);
+  background: var(--nuttiew-surface-muted);
+  font-size: 0.88rem;
+}
+.reschedule-box-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #58697f;
+}
+.reschedule-placeholder {
+  color: #64748b;
+  font-style: italic;
+}
+.reschedule-offers-section {
+  margin-bottom: 14px;
+}
+.reschedule-offers-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.reschedule-offer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+.reschedule-offer-btn {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #cad4e1;
+  background: #ffffff;
+  color: #202b44;
+  text-align: left;
+  cursor: pointer;
+}
+.reschedule-offer-btn:hover {
+  background: #f8fafc;
+  border-color: #8492a8;
+}
+.reschedule-offer-btn.is-selected {
+  border-color: #d96123;
+  background: #fff5ef;
+  box-shadow: 0 0 0 2px rgba(244, 119, 54, 0.2);
+}
+.reschedule-offer-btn:focus-visible {
+  outline: 3px solid #aa4519;
+  outline-offset: 2px;
+}
+.reschedule-used-note {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 10px;
+  font-size: 0.84rem;
+  color: #58697f;
+  background: #f1f5f9;
+  border: 1px solid #d4dbe4;
+  border-radius: 8px;
+}
+.card-action-row {
+  gap: 8px;
+  flex-wrap: wrap;
+}
