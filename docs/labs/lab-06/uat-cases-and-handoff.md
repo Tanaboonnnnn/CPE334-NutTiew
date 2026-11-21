@@ -171,8 +171,9 @@ Passwords and private login details are delivered **only via the agreed private 
    });
    console.log(res.status, await res.json());
    ```
-5. Click **ออกจากระบบ**.
-6. Sign in as `Tutor B (Secondary)`, inspect `ตารางเวลาติวของฉัน`, and run a guessed foreign-tutor schedule probe in DevTools Console:
+5. Click **ออกจากระบบ** (`Sign Out`).
+6. Sign in as `Customer A (Primary)`, click **การจองของฉัน** (`My bookings`), and verify `Booking_1` still exists with the exact same `Booking_1` UUID, `Tutor A` (`#1cb1d623`), `Test Date 14:00–15:00` (Bangkok time), and `Booked` status (record actual post-rejection evidence). Click **ออกจากระบบ**.
+7. Sign in as `Tutor B (Secondary)`, inspect `ตารางเวลาติวของฉัน`, and run a guessed foreign-tutor schedule probe in DevTools Console:
    ```js
    await fetch('/api/v1/tutor/slots?tutorId=<TutorA_UUID>').then(async r => ({ status: r.status, body: await r.json() }))
    ```
@@ -181,8 +182,9 @@ Passwords and private login details are delivered **only via the agreed private 
 **Specific Expected Results:**
 - **Step 2:** `Slot_1` is **not selectable as bookable** for `Customer B` and **never** reveals `Customer A`'s identity or email.
 - **Step 3:** Backend returns HTTP **`404`** with `error.code === 'BOOKING_NOT_FOUND'` and zero foreign Booking fields (`AC-S1-31`).
-- **Step 4:** Because session, origin, `X-NutTiew-Expected-Session-Binding`, and `X-CSRF-Token` all pass, the request reaches the booking domain check and returns HTTP **`409`** with `error.code === 'SLOT_UNAVAILABLE'` (`AC-S1-22`). `Customer A`'s `Booking_1` ID and `Booked` status remain unchanged.
-- **Step 6:** `Tutor B` sees only `Tutor B`'s own schedule (`Slot_1` and `Booking_1` are absent), and the guessed `?tutorId=...` probe is rejected with HTTP **`400`** (`INVALID_INPUT`) disclosing zero foreign Tutor records (`AC-S1-07`, `AC-S1-33`).
+- **Step 4:** Because session, origin, `X-NutTiew-Expected-Session-Binding`, and `X-CSRF-Token` all pass, the request reaches the booking domain check and returns HTTP **`409`** with `error.code === 'SLOT_UNAVAILABLE'` (`AC-S1-22`).
+- **Step 6:** `Customer A` observes `Booking_1` intact with identical `Booking_1` UUID and `Booked` status, proving the rejected `409` attempt did not mutate or disclose protected state (Lab 6 §3.2).
+- **Step 7:** `Tutor B` sees only `Tutor B`'s own schedule (`Slot_1` and `Booking_1` are absent), and the guessed `?tutorId=...` probe is rejected with HTTP **`400`** (`INVALID_INPUT`) disclosing zero foreign Tutor records (`AC-S1-07`, `AC-S1-33`).
 
 ---
 
@@ -238,10 +240,10 @@ Passwords and private login details are delivered **only via the agreed private 
 | Sprint 1 Feature | Manual UAT Cases (`UAT-NT-01..06`) | Automated-Only or Conditional Coverage (With Contract Test IDs) |
 | --- | --- | --- |
 | `F-S1-01` Auth & Role/Owner | `AC-S1-01..07` -> `UAT-NT-01`, `UAT-NT-03`, `UAT-NT-04` | Also covered by `e2e/auth*.spec.ts`, `AUTH-09`, `SLOT-08`, `SLOT-20` |
-| `F-S1-02` Tutor Slots | `AC-S1-08..12`, `AC-S1-14` -> `UAT-NT-01`, `UAT-NT-02`, `UAT-NT-06` | `AC-S1-13` (concurrent overlapping Slot race `RACE-S1-A`) -> automated PostgreSQL 18 CI test |
-| `F-S1-03` Availability | `AC-S1-15`, `AC-S1-16`, `AC-S1-18` -> `UAT-NT-01`, `UAT-NT-04`, `UAT-NT-06` | `AC-S1-17` (stale offer becomes unavailable before submit) -> automated `AVA-11` (`docs/features/F-S1-03/tests.md`), `UX-CAL-04`/`UX-CAL-05` |
+| `F-S1-02` Tutor Slots | `AC-S1-08`, `AC-S1-09`, `AC-S1-10`, `AC-S1-12`, `AC-S1-14` -> `UAT-NT-01`, `UAT-NT-02`, `UAT-NT-06` | `AC-S1-11` (different Tutor same `13:00–14:00` window -> `SLOT-05` in `docs/features/F-S1-02/tests.md`); `AC-S1-13` (concurrent overlapping Slot race `RACE-S1-A`) -> automated PostgreSQL 18 CI test |
+| `F-S1-03` Availability | `AC-S1-15`, `AC-S1-16`, `AC-S1-18` -> `UAT-NT-01`, `UAT-NT-04`, `UAT-NT-06` | `AC-S1-17`: `UX-CAL-04`/`UX-CAL-05` (PASS for stale-selection UI/calendar refresh & booking path) + `BOOK-07` (`docs/features/F-S1-04/tests.md` backend `SLOT_UNAVAILABLE` rejection); `AVA-11` in `docs/features/F-S1-03/verification-ledger.md` remains `BLOCKED` (live two-session stale-before-submit UI race is not executed in this manual UAT script) |
 | `F-S1-04` Booking | `AC-S1-19`, `AC-S1-22` -> `UAT-NT-01`, `UAT-NT-04` | `AC-S1-20` (exact `14:00:00` cutoff), `AC-S1-21` (`BOOK-03` exact `14:00:01` cutoff in `docs/features/F-S1-04/tests.md`), `AC-S1-23..27`, `AC-S1-28` (`BOOK-09` forged request body), `AC-S1-29` (`BOOK-33`), `AC-S1-35` -> automated API/PostgreSQL suite |
-| `F-S1-05` Protected Retrieval | `AC-S1-30..33` -> `UAT-NT-01`, `UAT-NT-04`, `UAT-NT-05` | `AC-S1-34` (past-ended `Booked` state) -> conditional manual check in `UAT-NT-05` if fixture exists + automated `RET-03`/`RET-*` (`docs/features/F-S1-05/tests.md`) |
+| `F-S1-05` Protected Retrieval | `AC-S1-30..33` -> `UAT-NT-01`, `UAT-NT-04`, `UAT-NT-05` | `AC-S1-34` (past-ended `Booked` state) -> conditional manual check in `UAT-NT-05` if a real past-ended fixture exists + automated `RET-07`, `RET-15`, `RET-17` (`docs/features/F-S1-05/tests.md`) |
 
 ---
 
