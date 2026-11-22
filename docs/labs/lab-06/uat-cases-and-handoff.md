@@ -1,7 +1,7 @@
 # Lab 6 / #105 — NutTiew Sprint 1 Executable UAT Cases & Safe Handoff
 
-**Status:** UPDATED AFTER PR #113 REVIEW — awaiting `@Tanaboonnnnn` re-review, `Tutor B`/`Customer B` UI login check, and private handoff to `TH-056_P2`.
-**Issue:** [#105 (`[Lab 6][L6-02]`)](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/105) | **Baseline:** [uat-baseline.md](uat-baseline.md) (`#104`)
+**Status:** PR `#113` merged; all four UI sign-ins verified and six partner case observations recorded (22 Nov 2026 ICT). Triage disposition recorded in [defect-triage-register.md](defect-triage-register.md) (`#107`). See §4.2 and §4.3 for open handoff/serving-revision/decision gates.
+**Issue:** [#105 (`[Lab 6][L6-02]`)](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/105) | **Baseline:** [uat-baseline.md](uat-baseline.md) (`#104`) | **Triage Register:** [defect-triage-register.md](defect-triage-register.md) (`#107`)
 **Scope:** Delivered Sprint 1 (`F-S1-01`..`F-S1-05`, `AC-S1-01`..`AC-S1-35`) only. **Out of scope:** Sprint 2/3 cancellation, rescheduling, Tutor cancellation, Slot withdrawal, notifications, and summary/reporting.
 
 ---
@@ -27,12 +27,12 @@
 
 Passwords and private login details are delivered **only via the agreed private team channel**, never in GitHub Issues/PRs, commits, screenshots, or the Lab 6 PDF.
 
-| Account Label | Role | Purpose in UAT | Provisioning / Verification Status (21 Nov 2026) |
+| Account Label | Role | Purpose in UAT | Provisioning / Verification Status (21–22 Nov 2026) |
 | --- | --- | --- | --- |
-| `Tutor A (Primary)` | `Tutor` | Create offered Slots, view own schedule & pseudonymous bookings | Existing synthetic account (`tutor.demo@example.test`, UI suffix `#1cb1d623`); re-verify login before handoff |
-| `Tutor B (Secondary)` | `Tutor` | Cross-tutor isolation & foreign schedule probe (`UAT-NT-04`) | Inserted & active in Cloud SQL `nuttiew-pg` (operator SQL output, 21 Nov); **UI sign-in still unverified** |
-| `Customer A (Primary)` | `Customer` | Browse availability, book Slots, view own private Bookings | Existing synthetic account (`customer.demo@example.test`, UI suffix `#2a4a7fc5`); re-verify login before handoff |
-| `Customer B (Secondary)` | `Customer` | Cross-customer ownership & occupied-Slot `409` test (`UAT-NT-04`) | Inserted & active in Cloud SQL `nuttiew-pg` (operator SQL output, 21 Nov); **UI sign-in still unverified** |
+| `Tutor A (Primary)` | `Tutor` | Create offered Slots, view own schedule & pseudonymous bookings | Existing synthetic account (`tutor.demo@example.test`; Tutor workspace suffix `#1cb1d623`, Availability full opaque `tutorRef` ending in `1cb1d623`, My Bookings `TUTOR-0a340de8`). **UI sign-in verified** on 22 Nov. |
+| `Tutor B (Secondary)` | `Tutor` | Cross-tutor isolation & foreign schedule probe (`UAT-NT-04`) | Active in Cloud SQL `nuttiew-pg` per operator output on 21 Nov. **UI sign-in verified** on 22 Nov. |
+| `Customer A (Primary)` | `Customer` | Browse availability, book Slots, view own private Bookings | Existing synthetic account (`customer.demo@example.test`, UI suffix `#2a4a7fc5`). **UI sign-in verified** on 22 Nov. |
+| `Customer B (Secondary)` | `Customer` | Cross-customer ownership & occupied-Slot `409` test (`UAT-NT-04`) | Active in Cloud SQL `nuttiew-pg` per operator output on 21 Nov. **UI sign-in verified** on 22 Nov. |
 
 ### 1.3 Data Setup, Non-Destructive Policy & Cleanup
 
@@ -70,15 +70,15 @@ Passwords and private login details are delivered **only via the agreed private 
 3. On the Tutor workspace (`ตารางเวลาติวของฉัน`), enter `Test Date` in **วันที่** and `14:00` in **เวลาเริ่ม**. Verify the end-time preview shows `15:00`.
 4. Click **เพิ่มเวลาติว** (`Create Slot`). Capture `Slot_1` UUID from `data-slot-id` or the `POST /api/v1/tutor/slots` response (`data.id`) and record it in the private fixture ledger. Click **ออกจากระบบ** (`Sign Out`).
 5. Sign in as `Customer A (Primary)` on `/`.
-6. On the Customer availability tab, select `Test Date`, locate the `14:00–15:00` offer matching `Tutor A` (`#1cb1d623`), select it, and confirm the booking. Record the returned `Booking_1` UUID.
+6. On the Customer availability tab, select `Test Date`, locate the `14:00–15:00` offer matching `Tutor A` (full opaque `tutorRef` ending in `1cb1d623`), select it, and confirm the booking. Record the returned `Booking_1` UUID.
 7. Open **การจองของฉัน** (`My bookings`) and open the detail view for `Booking_1`. Click **ออกจากระบบ**.
 8. Sign back in as `Tutor A (Primary)` and inspect `ตารางเวลาติวของฉัน` for `Slot_1`, then click **ออกจากระบบ**.
 
 **Specific Expected Results:**
-- **Step 2:** `เข้าสู่ระบบแล้ว` is shown; Tutor workspace loads with `Tutor A` identity/role.
+- **Step 2:** `เข้าสู่ระบบแล้ว` is shown; Tutor workspace loads with `Tutor A` identity/role (`#1cb1d623`).
 - **Step 4:** Success confirmation (`บันทึกเวลาติวสำเร็จ`) appears; `Slot_1` (`14:00–15:00`) appears in `Slot ทั้งหมดของฉัน` as available/unoccupied.
 - **Step 6:** `Slot_1` is selectable and books successfully; status becomes `Booked` with a persisted `Booking_1` UUID.
-- **Step 7:** `Booking_1` appears in Customer A's private booking list and detail view with `Tutor A` (`#1cb1d623`), `Test Date 14:00–15:00` (Bangkok time), and `Booked` status.
+- **Step 7:** `Booking_1` appears in Customer A's private booking list and detail view with `Tutor A`'s `F-S1-05` opaque reference (`TUTOR-0a340de8`, derived as `"TUTOR-" + tutorId.slice(0, 8)`), `Test Date 14:00–15:00` (Bangkok time), and `Booked` status.
 - **Step 8:** `Tutor A` sees `Slot_1` marked `Booked / Occupied` with `Booking_1` UUID and a **pseudonymous** customer reference (e.g., `CUST-...`), **never** `Customer A`'s email or raw private details.
 
 ---
@@ -172,7 +172,7 @@ Passwords and private login details are delivered **only via the agreed private 
    console.log(res.status, await res.json());
    ```
 5. Click **ออกจากระบบ** (`Sign Out`).
-6. Sign in as `Customer A (Primary)`, click **การจองของฉัน** (`My bookings`), and verify `Booking_1` still exists with the exact same `Booking_1` UUID, `Tutor A` (`#1cb1d623`), `Test Date 14:00–15:00` (Bangkok time), and `Booked` status (record actual post-rejection evidence). Click **ออกจากระบบ**.
+6. Sign in as `Customer A (Primary)`, click **การจองของฉัน** (`My bookings`), and verify `Booking_1` still exists with the exact same `Booking_1` UUID, `Tutor A` (`TUTOR-0a340de8`), `Test Date 14:00–15:00` (Bangkok time), and `Booked` status (record actual post-rejection evidence). Click **ออกจากระบบ**.
 7. Sign in as `Tutor B (Secondary)`, inspect `ตารางเวลาติวของฉัน`, and run a guessed foreign-tutor schedule probe in DevTools Console:
    ```js
    await fetch('/api/v1/tutor/slots?tutorId=<TutorA_UUID>').then(async r => ({ status: r.status, body: await r.json() }))
@@ -207,7 +207,7 @@ Passwords and private login details are delivered **only via the agreed private 
 5. *(Conditional redeploy check — only if coordinated with Product Team)*: After Product Team confirms a Cloud Run revision restart/redeploy, repeat Step 3 for `Customer A` and `Tutor A`.
 
 **Specific Expected Results:**
-- **Steps 2 & 3:** After navigating back to **การจองของฉัน**, `Booking_1` remains visible with identical `Booking ID`, `Tutor A` (`#1cb1d623`), `Test Date 14:00–15:00` (Bangkok time), and `Booked` status.
+- **Steps 2 & 3:** After navigating back to **การจองของฉัน**, `Booking_1` remains visible with identical `Booking ID`, `Tutor A` (`TUTOR-0a340de8`), `Test Date 14:00–15:00` (Bangkok time), and `Booked` status.
 - **Step 4 (if executed):** Past appointment remains `Booked` (may show `Past` time state) and does **not** fabricate an attendance/completed status (`AC-S1-34`).
 - **Step 5 (if executed):** Record survives Cloud Run revision restart/redeploy in Cloud SQL `nuttiew-pg` with no data loss.
 
@@ -247,24 +247,62 @@ Passwords and private login details are delivered **only via the agreed private 
 
 ---
 
-## 4. Partner Execution Template & Review Sign-Off (To Be Completed During UAT)
+## 4. Partner Execution Record and Review Sign-Off
 
 ### 4.1 UAT Execution Record Table (For Partner UAT Team `TH-056_P2`)
 
-| Case ID | Tester Name & Team | Date / Time (ICT) | Tested Release Commit / Revision | Inputs Used (Non-Secret) | Actual Result (Observed) | Outcome (`PASS`/`FAIL`/`BLOCKED`) | Evidence ID |
+**Partner team roster `TH-056_P2` (`PEW-DIY`):** Peepipat Suesoongnuen and Phalat Amachayapha (per partner Lab 5 team roster). The evidence source appears in each row; case-by-case student tester attribution still awaits partner confirmation.
+
+**Release recorded for comparison:** Commit `42bb76247b257a4d9eff402f2e6b60a2ba44eda4` and revision `nuttiew-00010-gug` are the last CD-confirmed baseline. The partner runs reached the public URL on **22 Nov 2026 (ICT)**; live serving revision and traffic split during those runs await Cloud Run confirmation.
+
+| Case ID | UAT Team and Evidence Source | Date / Time (ICT) | Release Commit / Revision | Inputs Used (Non-Secret) | Actual Result (Observed) | Observed Outcome (`PASS`/`FAIL`/`BLOCKED`) | Evidence ID |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `UAT-NT-01` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` |
-| `UAT-NT-02` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` |
-| `UAT-NT-03` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` |
-| `UAT-NT-04` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` |
-| `UAT-NT-05` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` |
-| `UAT-NT-06` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` | `PENDING` |
+| `UAT-NT-01` | `TH-056_P2` · Codex | 22 Nov 2026, 19:51:09–19:51:15 | `42bb762` / `nuttiew-00010-gug` (CD baseline) | Tutor A and Customer A, 22 Dec 2026 at 14:00 ICT | Tutor A published a 60-minute Slot and Customer A booked it and opened the booking detail. Tutor A saw the Slot marked `Occupied` and the booking with a `CUST-…` reference. The Tutor screen showed no Customer email. | **PASS** | `NT-E01` (§5.1) |
+| `UAT-NT-02` | `TH-056_P2` · Codex | 22 Nov 2026, 19:49:55–19:49:58 | `42bb762` / `nuttiew-00010-gug` (CD baseline) | 23 Dec 2026 at 13:00, 13:30 and 14:00 ICT, plus 21 Nov 2026 at 10:00 ICT | The 13:00–14:00 and 14:00–15:00 Slots persisted. The overlap attempt returned `409 SLOT_OVERLAP` and the past-date attempt returned `422 SLOT_INVALID_TIME`. The Slot count stayed the same after each rejection. | **PASS** | `NT-E02` (§5.1) |
+| `UAT-NT-03` | `TH-056_P2` · Codex, Copilot, Gemini | 22 Nov 2026, 19:47–20:00:27 (Codex), 20:30 (Gemini), Copilot time unrecorded | `42bb762` / `nuttiew-00010-gug` (CD baseline) | No active session, an invalid password and the Tutor A and Customer A roles | Signed-out and post-logout access returned `401`. The invalid password was rejected and granted no workspace. Both Customer-to-Tutor requests and the Tutor-to-Customer request returned `403 FORBIDDEN`. | **PASS** | `NT-E03` (§5.1) |
+| `UAT-NT-04` | `TH-056_P2` · Codex, Gemini | 22 Nov 2026, 20:00:40–20:00:45 (Codex), 20:30 (Gemini) | `42bb762` / `nuttiew-00010-gug` (CD baseline) | Customer B and Tutor B, using each run's booked Slot | Customer B could not select the occupied Slot, and Tutor B saw only their own schedule. Gemini recorded `404 BOOKING_NOT_FOUND`, `409 SLOT_UNAVAILABLE` and `400 INVALID_INPUT` for the three API checks. Customer A reopened the same `Booked` record after the rejected attempt. | **PASS** | `NT-E04` (§5.1) |
+| `UAT-NT-05` | `TH-056_P2` · Codex | 22 Nov 2026, 20:00:19–20:00:23 | `42bb762` / `nuttiew-00010-gug` (CD baseline) | Customer A, the new booking and an existing past appointment | The booking ID, Tutor, interval and `Booked` status persisted after a cache-bypassing reload and a fresh browser session. The past appointment retained `Booked` with `displayStatus: Past`. The conditional redeploy check was **NOT RUN**. | **PASS** | `NT-E05` (§5.1) |
+| `UAT-NT-06` | `TH-056_P2` · Codex | 22 Nov 2026, 20:00:23–20:00:26 | `42bb762` / `nuttiew-00010-gug` (CD baseline) | Chrome timezone set to `UTC`, Tutor A and Customer A | Both workspaces showed the 22 Dec appointment at 14:00–15:00 in `Asia/Bangkok`. | **PASS** | `NT-E06` (§5.1) |
 
 ### 4.2 Internal Team Review & Partner Handoff Checklist
 
 | Gate | Owner | Status |
 | --- | --- | --- |
-| Case traceability & standalone readability reviewed by teammate | `@Tanaboonnnnn` (PR `#113` re-review) | **PENDING** |
-| `Tutor B` & `Customer B` accounts active in Cloud SQL `nuttiew-pg` | Operator SQL output (21 Nov 2026) | **VERIFIED (DB)** — UI sign-in still unverified |
-| `Tutor A/B` & `Customer A/B` UI sign-in verified & credentials sent privately | Product Team (`@Tanaboonnnnn`, `@Chxtamos`) | **PENDING** |
-| Partner team `TH-056_P2` confirms receipt (session **Mon 23 Nov 2026, 13:30 ICT**) | Partner UAT Team (`TH-056_P2`) | **PENDING** |
+| Case traceability & standalone readability reviewed by teammate | `@Tanaboonnnnn` | **VERIFIED** — [PR #113 approved and merged](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/113) |
+| `Tutor B` & `Customer B` accounts active in Cloud SQL `nuttiew-pg` | Operator SQL output (21 Nov 2026) | **VERIFIED (DB)** |
+| `Tutor A/B` & `Customer A/B` UI sign-ins | Partner UAT observations (22 Nov 2026 ICT) | **VERIFIED (UI)** — four successful sign-ins |
+| Credentials delivered privately | Product Team (`@Tanaboonnnnn`, `@Chxtamos`) | **TEST ACCESS VERIFIED** — the supplied synthetic accounts worked; formal delivery acknowledgment remains unrecorded |
+| Live Cloud Run revision and traffic split checked | Product Team (`@Tanaboonnnnn`, `@Chxtamos`) | **CD BASELINE VERIFIED** — `nuttiew-00010-gug` at 100% traffic on 21 Nov 2026 at 00:39 ICT ([CD run `44784128286`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/44784128286)); serving revision and split during the 22 Nov test window await live Cloud Run confirmation |
+| Partner team `TH-056_P2` confirms receipt (session **Mon 23 Nov 2026, 13:30 ICT**) | Partner UAT Team (`TH-056_P2`) | **MATERIALS AVAILABLE FOR REVIEW** — the case file and test access were available for the 22 Nov runs; formal receipt & per-case student attribution by the named testers await confirmation |
+
+### 4.3 Independent Acceptance Record
+
+| Field | Recorded Value |
+| --- | --- |
+| **Product and acceptance scope** | NutTiew, delivered Sprint 1 (`F-S1-01`–`F-S1-05`) |
+| **UAT team roster** | `TH-056_P2` (`PEW-DIY`) — Peepipat Suesoongnuen and Phalat Amachayapha |
+| **Execution evidence** | 22 Nov 2026 ICT, `NT-E01`–`NT-E06` — passing observations for all six cases (see §5.1) |
+| **Release record** | `42bb76247b257a4d9eff402f2e6b60a2ba44eda4` / `nuttiew-00010-gug` per CD; serving revision and traffic at test time await confirmation |
+| **Decision, decision date and approving testers** | **UNRECORDED** — the independent student UAT team must confirm the tested release, identify the participating testers, and record its decision and date (`#110`) |
+| **Conditional checks and observations** | Coordinated redeploy check for `UAT-NT-05` was **NOT RUN**. Tutor A's three contract-conforming non-PII identifier formats (`NT-OBS-01`) are triaged in [defect-triage-register.md](defect-triage-register.md) (`#107`). |
+
+---
+
+## 5. Partner UAT Execution Evidence Summary (`TH-056_P2` Return, 22 Nov 2026)
+
+### 5.1 Observed Results & Partner-Held Evidence Index
+
+The partner runs reached `https://nuttiew-nxe2keefba-as.a.run.app/` on **22 Nov 2026 (ICT)** (Codex **19:47:05–20:00:45**, Gemini follow-up **20:30**, Copilot read-only observations). All screenshot and JSON artifacts listed below are held in `TH-056_P2`'s external UAT evidence archive (`nuttiew-uat-2026-11-22/`); raw session logs and fixture UUIDs remain in private evidence storage.
+
+| Case ID | Evidence ID & Source | Partner-Held Evidence Artifacts (`TH-056_P2` Archive) | Observed Outcome |
+| --- | --- | --- | --- |
+| `UAT-NT-01` | `NT-E01` · Codex | `nt01-customer-booking-detail.png`, `nt01-tutor-booked-row.png` | **PASS** |
+| `UAT-NT-02` | `NT-E02` · Codex | `nt02-overlap-rejected.png`, `nt02-past-slot-rejected.png` | **PASS** |
+| `UAT-NT-03` | `NT-E03` · Codex, Copilot, Gemini | `nt03-invalid-login.png`, Copilot signed-out observations, Gemini API log | **PASS** |
+| `UAT-NT-04` | `NT-E04` · Codex, Gemini | Gemini API log (`404`/`409`/`400`), `nt04-customer-b-bookings.png`, `nt04-tutor-b-bookings.png` | **PASS** |
+| `UAT-NT-05` | `NT-E05` · Codex | `nt05-after-hard-reload.png`, `nt05-after-new-session.png`, `nt05-past-booking.png` | **PASS** *(redeploy `NOT RUN`)* |
+| `UAT-NT-06` | `NT-E06` · Codex | `nt06-utc-tutor-slot.png`, `nt06-utc-customer-booking.png` | **PASS** |
+
+*Partner synthetic data footprint:* Six synthetic Slots and two Bookings across 22–24 and 27 Dec 2026 (original Codex `uat-execution-result.json` combined with Gemini API follow-up for `UAT-NT-03` and `UAT-NT-04`).
+
+**Handoff documentation observation (`NT-OBS-01` — triaged as `Not-defect` in [defect-triage-register.md](defect-triage-register.md)):** `Tutor A` appears as `#1cb1d623` in the Tutor workspace, as the full opaque `tutorRef` ending in `1cb1d623` in Availability (`OD-AV-02`), and as `TUTOR-0a340de8` (`"TUTOR-" + tutorId.slice(0, 8)` per `docs/features/F-S1-05/data-spec.md:50`) in My Bookings and its detail view. All three refer to the same `Tutor A` account; `§1.2`, `UAT-NT-01`, `UAT-NT-04`, and `UAT-NT-05` above have been updated to state the exact expected reference in each view.
