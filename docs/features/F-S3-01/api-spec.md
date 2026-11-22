@@ -42,13 +42,46 @@ For the Deliverable 2 increment, the endpoint evaluates and returns the **Past B
 }
 ```
 
-### 2.2 Full Final response extension (mandatory by 30 Nov / Final 13 Dec)
+### 2.2 Full Final response extension (mandatory by 30 Nov / Final 13 Dec; `inProgressBooked` gated on stakeholder `OD-006`)
 
-When Upcoming Booked and Cancelled are implemented for Final, `data` extends additively under the **same** `meta.evaluatedAt` snapshot without breaking D2 consumers:
+When Upcoming Booked and Cancelled are implemented for Final, `data` extends additively under the **same** single-statement `meta.evaluatedAt` snapshot without breaking D2 consumers:
 
-- `upcomingBookedCount: number`, `upcomingBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Booked'`, `startsAt > evaluatedAt`)
-- `inProgressBookedCount: number`, `inProgressBooked: TutorSummaryBookingDto[]` (proposed `OD-006` explicit disclosure for `startsAt <= evaluatedAt < endsAt`)
-- `cancelledCount: number`, `cancelled: TutorSummaryCancelledDto[]` (`status: 'Cancelled'`, `displayStatus: 'Cancelled'`, `cancellationActor: 'Customer' | 'Tutor'`, `cancelledAt: string`; **omits** `tutorCancellationReason` to preserve `BR-022`/`NFR-007`)
+- `upcomingBookedCount: number`, `upcomingBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Booked'`, `startsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`)
+- `inProgressBookedCount: number`, `inProgressBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Booked'`, `startsAt <= evaluatedAt < endsAt`, ordered `startsAt ASC, id ASC`; **proposed `OD-006` contract pending stakeholder confirmation**)
+- `pastBookedCount: number`, `pastBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Past'`, `endsAt <= evaluatedAt`, ordered `endsAt DESC, id DESC`)
+- `cancelledCount: number`, `cancelled: TutorSummaryCancelledDto[]` (`status: 'Cancelled'`, `displayStatus: 'Cancelled'`, ordered `cancelledAt DESC, id DESC`)
+
+#### Exact DTO allowlists
+
+**`TutorSummaryBookingDto`** (exact 8 keys — no `customerId`, no email, no cancellation reason):
+```ts
+type TutorSummaryBookingDto = {
+  id: string;
+  slotId: string;
+  customerRef: string; // 'CUST-' + customerId.slice(0, 8)
+  startsAt: string;    // UTC ISO-8601
+  endsAt: string;      // UTC ISO-8601
+  status: 'Booked';
+  displayStatus: 'Booked' | 'Past';
+  createdAt: string;   // UTC ISO-8601
+};
+```
+
+**`TutorSummaryCancelledDto`** (exact 10 keys — explicitly omits `tutorCancellationReason` to preserve `BR-022`/`NFR-007`):
+```ts
+type TutorSummaryCancelledDto = {
+  id: string;
+  slotId: string;
+  customerRef: string;               // 'CUST-' + customerId.slice(0, 8)
+  startsAt: string;                  // UTC ISO-8601
+  endsAt: string;                    // UTC ISO-8601
+  status: 'Cancelled';
+  displayStatus: 'Cancelled';
+  cancellationActor: 'Customer' | 'Tutor';
+  cancelledAt: string;               // UTC ISO-8601
+  createdAt: string;                 // UTC ISO-8601
+};
+```
 
 ## 3. Safe error contract
 

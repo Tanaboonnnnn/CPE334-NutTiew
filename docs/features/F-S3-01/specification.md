@@ -20,12 +20,13 @@ Per [Three-Sprint Plan](../../sprints/plan.md) §2–4 and [Issue #121](https://
 
 **Out of scope:** Customer summary view (forbidden by `BR-031`/`FR-036`), `Completed`/attendance status (forbidden by `Q30`/`BR-030`), tutor earnings/billing, cross-Tutor admin analytics, CSV/PDF export, and custom date-range pagination beyond `OD-009`.
 
-## 3. Proposed decisions for OD-006 and OD-009 (for teammate review)
+## 3. Decision gates for OD-006 and OD-009
 
-1. **OD-006 (In-progress appointment classification, `startsAt <= evaluatedAt < endsAt` while `status = 'Booked'`):**
-   - **Proposed rule:** Derive `Past Booked` strictly as `status = 'Booked' AND endsAt <= evaluatedAt` (matching `Q30` and Sprint 1 `F-S1-05`). An in-progress appointment (`startsAt <= evaluatedAt < endsAt`) is **never** counted in `Past Booked` and never labeled `Completed`. For the full three-category Final summary, propose reporting `inProgressCount` / `inProgress` explicitly (or classifying `startsAt > evaluatedAt` as Upcoming and disclosing in-progress separately) so no active lesson is silently dropped or miscounted. For the D2 Past Booked increment, verify that an in-progress `Booked` row is **excluded** from `pastBooked`.
-2. **OD-009 (Snapshot, ordering, and pagination):**
-   - **Proposed rule:** Evaluate all category counts and row lists in **one single SQL statement** using one PostgreSQL `statement_timestamp()` (`evaluatedAt`) so `count === items.length` is guaranteed atomically per response. Order `pastBooked` newest-ended first (`endsAt DESC, id DESC`), `upcomingBooked` soonest-start first (`startsAt ASC, id ASC`), and `cancelled` newest-cancelled first (`cancelledAt DESC, id DESC`). No pagination in S3 v1 (return full authorized owner set, consistent with `F-S1-05` and `F-S2-04`).
+1. **OD-006 (In-progress appointment classification, `startsAt <= evaluatedAt < endsAt` while `status = 'Booked'` — OPEN stakeholder gate):**
+   - **D2 Past Booked rule (already governed by `Q30` / `BR-030`):** Derive `Past Booked` strictly as `status = 'Booked' AND endsAt <= evaluatedAt` (matching Sprint 1 `F-S1-05`). An in-progress appointment (`startsAt <= evaluatedAt < endsAt`) is **excluded** from `pastBooked` and never labeled `Completed`. This D2 exclusion does not require resolving how Final buckets in-progress sessions.
+   - **Final classification gate (`OPEN` in [SRS §13](../../srs.md)):** Peer review alone cannot settle `OD-006` for the Final Upcoming/In-Progress split; explicit stakeholder disposition is required before implementing the Final Upcoming/Cancelled code. As the single internally consistent **proposed** Final contract pending stakeholder confirmation, this specification proposes keeping `upcomingBooked` as `startsAt > evaluatedAt` and exposing `inProgressBookedCount` + `inProgressBooked` (`startsAt <= evaluatedAt < endsAt`, `displayStatus: 'Booked'`) separately so no active lesson is silently dropped or miscounted.
+2. **OD-009 (Snapshot, ordering, and pagination — proposed for teammate review):**
+   - **Proposed rule:** Evaluate `evaluatedAt`, all category counts, and all row lists in **one row-preserving SQL statement** anchored on PostgreSQL `statement_timestamp()` (`eval_snapshot LEFT JOIN`) so `meta.evaluatedAt`, counts, and lists come from one atomic snapshot even when a Tutor has 0 matching rows (`count === items.length`). Order `pastBooked` newest-ended first (`endsAt DESC, id DESC`), `upcomingBooked` / `inProgressBooked` soonest-start first (`startsAt ASC, id ASC`), and `cancelled` newest-cancelled first (`cancelledAt DESC, id DESC`). No pagination in S3 v1 (return full authorized owner set, consistent with `F-S1-05` and `F-S2-04`).
 
 ## 4. Invariants
 
