@@ -395,8 +395,8 @@ it('NTF-08/09: direct SQL guards reject immutable changes, deletes, duplicates, 
   }
   await expect(
     admin.query(
-      'INSERT INTO "Notification" ("bookingId","recipientCustomerId",kind,"createdAt") VALUES ($1,$2,$3,$4)',
-      [before.bookingId, before.recipientCustomerId, 'TutorCancelled', before.createdAt],
+      'INSERT INTO "Notification" ("bookingId","recipientCustomerId",kind,"createdAt") SELECT id,"customerId",$$TutorCancelled$$,"cancelledAt" FROM "Booking" WHERE id=$1',
+      [before.bookingId],
     ),
   ).rejects.toMatchObject({ code: '23505' });
 
