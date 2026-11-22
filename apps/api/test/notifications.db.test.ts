@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Pool, type PoolClient } from 'pg';
 import request from 'supertest';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import { createPool } from '../src/config.js';
 import { getCustomerNotificationDetail, listCustomerNotifications } from '../src/notifications.js';
@@ -196,7 +196,14 @@ it('NTF-01/02/05/10: owner lists, reads, marks read idempotently, rereads, and r
 });
 
 it('NTF-03/10: rejects foreign/unknown with identical 404, 401/403/400 and CSRF/Origin/Session-binding failures', async () => {
-  const { customer, tutor, notifRow, reason } = await createTutorCancelledFixture('เหตุผลลับเฉพาะลูกค้า');
+  const secretReason = 'เหตุผลลับเฉพาะลูกค้า-' + randomUUID();
+  const logSpies = [
+    vi.spyOn(console, 'log'),
+    vi.spyOn(console, 'warn'),
+    vi.spyOn(console, 'error'),
+  ];
+  try {
+  const { customer, tutor, notifRow, reason } = await createTutorCancelledFixture(secretReason);
   const other = await user('Customer');
   const unknownId = randomUUID();
 
@@ -244,6 +251,13 @@ it('NTF-03/10: rejects foreign/unknown with identical 404, 401/403/400 and CSRF/
   // Unread state still intact
   const row = (await admin.query('SELECT "readAt" FROM "Notification" WHERE id=$1', [notifRow.id])).rows[0];
   expect(row.readAt).toBeNull();
+
+  // NTF-10: verify secret cancellation reason was never logged to console sinks.
+  const logged = logSpies.flatMap(spy => spy.mock.calls.flat().map(String)).join('\n');
+  expect(logged).not.toContain(secretReason);
+  } finally {
+    logSpies.forEach(spy => spy.mockRestore());
+  }
 });
 
 it('NTF-04: notice remains retrievable after a long simulated elapsed interval (no expiry predicate)', async () => {

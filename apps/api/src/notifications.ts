@@ -39,7 +39,7 @@ type NotificationRow = {
   cancelledAt: string | null;
 };
 
-type PgError = { code?: string };
+type PgError = { code?: string; message?: string };
 
 const NOTIFICATION_SELECT_BASE = `
   SELECT
@@ -134,6 +134,7 @@ export async function markCustomerNotificationRead(
       throw new BookingError(503, 'SERVICE_UNAVAILABLE');
     });
     let phase: 'begin' | 'mutation' | 'projection' | 'commit' | 'acknowledged' = 'begin';
+    let discard = false;
     try {
       await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
       phase = 'mutation';
@@ -156,14 +157,18 @@ export async function markCustomerNotificationRead(
       await hooks?.afterCommit?.();
       return data;
     } catch (error) {
-      if (phase === 'commit' || phase === 'acknowledged') {
+      const pg = error as PgError | null;
+      const retryable = pg?.code === '40001' || pg?.code === '40P01' || pg?.code === 'P2034';
+      if (phase === 'acknowledged' || (phase === 'commit' && !retryable && !pg?.code?.startsWith('23'))) {
+        discard = true;
         throw new BookingError(503, 'SERVICE_UNAVAILABLE');
       }
-      if (phase !== 'begin') {
-        await client.query('ROLLBACK').catch(() => undefined);
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        discard = true;
       }
-      const pg = error as PgError | null;
-      if (pg?.code === '40001' || pg?.code === '40P01' || pg?.code === 'P2034') {
+      if (retryable) {
         if (attempt < 2) {
           await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1)));
           continue;
@@ -172,13 +177,14 @@ export async function markCustomerNotificationRead(
       }
       if (phase === 'mutation') {
         if (pg?.code === '28000') throw new BookingError(401, 'UNAUTHENTICATED');
-        if (pg?.code === '42501') throw new BookingError(403, 'FORBIDDEN');
+        // An internal privilege denial (e.g. missing EXECUTE grant) is not a role decision.
+        if (pg?.code === '42501' && pg.message === 'Wrong role') throw new BookingError(403, 'FORBIDDEN');
         if (pg?.code === 'P0002') throw new BookingError(404, 'NOTIFICATION_NOT_FOUND');
       }
       if (error instanceof BookingError) throw error;
       throw new BookingError(503, 'SERVICE_UNAVAILABLE');
     } finally {
-      client.release();
+      client.release(discard);
     }
   }
   throw new BookingError(503, 'SERVICE_UNAVAILABLE');
