@@ -1,6 +1,6 @@
-# Feature Inventory — Deliverable 1 Part B
+# Feature Inventory — Whole-Product Baseline (D1 Part B, updated for Sprint 2 integration)
 
-Draft for teammate review. [SRS](srs.md) is authoritative. Sprint 2/3 allocations are proposed, not approved.
+[SRS](srs.md) is authoritative. Sprint 1 (`F-S1-01..05`) is the released Sprint 1 baseline on `main` (`42bb762`); Sprint 2 (`F-S2-01..05`) is integrated on `sprint2` (`f0cf44a`, pending separate `sprint2 -> main` release and Lab 6 UAT clearance); Sprint 3 (`F-S3-01`) remains proposed and not started.
 
 | Stable ID | Feature and required outcome | Actor | Sprint | Dependency | Linked FR/BR/NFR | Planned verification |
 |---|---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Draft for teammate review. [SRS](srs.md) is authoritative. Sprint 2/3 allocation
 
 ## Baseline and invariants
 
-F-S1-01..05 retain the five accepted Sprint 1 identities (Auth, Tutor Slots, Availability, Booking, Protected Read) from [requirements.md](requirements.md). SYS-01 owns cross-cutting engineering obligations, while all features still enforce role and record authorization. NFR-004 is shared by F-S1-02 (Race A) and F-S1-04 (Races B/C), while NFR-007 privacy applies to F-S1-03/F-S1-05 in S1, F-S2-04 in proposed S2, and F-S3-01 in proposed S3. These shared applications do not create duplicate primary owners; see [traceability.md](traceability.md).
+F-S1-01..05 retain the five accepted Sprint 1 identities (Auth, Tutor Slots, Availability, Booking, Protected Read) from [requirements.md](requirements.md). SYS-01 owns cross-cutting engineering obligations, while all features still enforce role and record authorization. NFR-004 is shared by F-S1-02 (Race A) and F-S1-04 (Races B/C), while NFR-007 privacy applies to F-S1-03/F-S1-05 in S1, F-S2-04 in integrated S2, and F-S3-01 in proposed S3. These shared applications do not create duplicate primary owners; see [traceability.md](traceability.md).
 
 Race A: F-S1-02 / Q06 / FR-006 / BR-006/034 / VAL-005 — same-Tutor overlapping offered Slots.
 
@@ -31,4 +31,4 @@ All three require actual committed database checks. Sprint 2 features `F-S2-01..
 
 ## Acceptance and review
 
-Each feature must preserve its listed requirement outcomes and planned VAL evidence; Feature SDS/STS must be peer reviewed before implementation. Owner @Chxtamos; independent reviewer @Tanaboonnnnn. Issue #10 requires a PR into sprint1.
+Each feature must preserve its listed requirement outcomes and planned VAL evidence; Feature SDS/STS must be peer reviewed before implementation. *Historical D1 provenance:* originally authored under Issue #10 into `sprint1` (owner @Chxtamos; independent reviewer @Tanaboonnnnn). *Current Sprint 2 status:* `F-S2-01..05` are integrated on `sprint2` (`f0cf44a`) under Issue [#120](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/120); release to `main`, Lab 6 UAT clearance (#107/#110), and Lab 5 GCP deployment remain pending separate review.

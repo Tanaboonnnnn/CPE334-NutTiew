@@ -6,9 +6,9 @@
 
 | Release / branch | Verified commit SHA | Scope and status |
 |---|---|---|
-| Accepted Sprint 1 / Lab 6 UAT baseline (`main`) | `42bb76247b257a4d9eff402f2e6b60a2ba44eda4` | Accepted Sprint 1 (`F-S1-01..05`) and Lab 5/6 UAT baseline. Unchanged by this PR. |
+| Accepted Sprint 1 engineering release baseline (`main`) | `42bb76247b257a4d9eff402f2e6b60a2ba44eda4` | Released Sprint 1 (`F-S1-01..05`) and Lab 5 baseline on `main`. Unchanged by this PR. **Note:** This is the engineering release baseline, **not** an independently UAT-accepted Lab 6 release — Lab 6 partner finding triage ([Issue #107](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/107)) and independent retests/final acceptance ([Issue #110](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/110)) remain **OPEN**; green automated CI proves regression tests, not partner UAT approval. |
 | Sprint 2 integration branch (`sprint2`) | `f0cf44aa1e8f679ae515df2a6ec888535d600c68` | All five Sprint 2 features (`F-S2-01..05`), reviewed Part E contracts (`#126`), shared S2 migration (`#128`), and accepted `OD-014` policy (`#131`) integrated with green CI ([Run 45012307653](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45012307653)). |
-| Sprint 2 release on `main` + GCP Cloud Run | **PENDING** | Requires a separate human-reviewed `sprint2 -> main` release PR, release tag, Lab 5 GCP Cloud Run deploy, and post-deploy persistence verification. |
+| Sprint 2 release on `main` + GCP Cloud Run | **PENDING** | Requires Lab 6 UAT Critical/Major clearance (`#107`/`#110`), a separate human-reviewed `sprint2 -> main` release PR, release tag, Lab 5 GCP Cloud Run deploy, and post-deploy persistence verification. |
 | Future D2 candidate containing Sprint 3 (`F-S3-*`) | **NOT STARTED** | Sprint 3 (`F-S3-01` Tutor Appointment Summary) is distinct from the accepted Sprint 2 release and is not included here. |
 
 ## 2. Integrated Sprint 2 PR and commit register (`sprint2`)
@@ -53,12 +53,14 @@ Hosted GitHub Actions CI ([Run 45012307653](https://github.com/Tanaboonnnnn/CPE3
 | **CHG-S2-02 (ACCEPTED)** | Extended `GET /api/v1/tutor/slots` `SlotDto` with `lifecycle: 'Offered' \| 'Withdrawn'`, `withdrawnAt: string \| null`, and `meta.evaluatedAt` while keeping Sprint 1 `POST /api/v1/tutor/slots` response unchanged and keeping the Tutor calendar/KPI counts `Offered`-only. | Approved by @Chxtamos in [PR #134](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/134) (`f0cf44a`). | `docs/features/F-S2-05/api-spec.md`, `apps/api/src/slots.ts`, `apps/web/src/tutor-calendar.tsx`, `apps/web/src/tutor-slots.tsx` |
 | **OD-008 (OPEN)** | Notice/reason/withdrawn-Slot retention and deletion governance remains undecided. No delete/archive endpoint or automatic expiry exists. | Remains **OPEN**. | `docs/srs.md`, `docs/features/F-S2-04/*`, `docs/features/F-S2-05/*` |
 | **OD-013 (OPEN)** | General idempotency-key / replay protocol remains undecided. Uncertain outcomes return `503 MUTATION_OUTCOME_UNKNOWN` and require authenticated re-read reconciliation before retry. | Remains **OPEN**. | `docs/srs.md`, `docs/features/F-S2-01..03/05/*` |
-| **OD-011 / OD-012** | Final instructor Master & Theme 1 formal sign-off remain non-blocking verification items per `AGENTS.md` §5. | Remains **UNVERIFIED**. | `docs/srs.md` |
+| **OD-015 (OPEN)** | Previous-Tutor reschedule-history visibility/privacy remains undecided. Current Sprint 2 implementation hides reschedule history from previous Tutors to avoid widening unauthorized Tutor access. | Remains **OPEN**. | `docs/srs.md`, `docs/traceability.md`, `docs/features/F-S2-02/*` |
+| **OD-011 / OD-012** | Final instructor Master & Theme 1 formal sign-off remain non-blocking for **engineering integration only** per `AGENTS.md` §5; formal instructor sign-off remains unverified in `docs/srs.md`. | Remains **UNVERIFIED**. | `docs/srs.md` |
 
 ## 6. Release & GCP Deployment Gate Checklist (Next Authorized Steps)
 
 The items below are **NOT** completed by this documentation/traceability PR and must be executed and verified separately before closing Issue #120:
 
+- [ ] **Lab 6 independent-UAT clearance gate (Issue #120 blocker):** Document resolution of partner finding triage ([Issue #107](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/107)) confirming zero unresolved Critical/Major defects, and record independent retests and partner final acceptance ([Issue #110](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/110)). Green automated CI alone does **not** clear this partner UAT gate.
 - [ ] Merge this Issue #120 traceability/evidence PR into `sprint2` after teammate review and green CI.
 - [ ] Open a separate human-reviewed `sprint2 -> main` release PR, obtain teammate approval, verify required CI gates, and merge to `main`.
 - [ ] Tag the accepted Sprint 2 release on `main` (distinct from any later Sprint 3 / D2 candidate).

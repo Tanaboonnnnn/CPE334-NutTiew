@@ -1,6 +1,6 @@
-# Requirement Traceability — Deliverable 1 Part B
+# Requirement Traceability — Whole-Product Baseline (D1 Part B, updated for Sprint 2 integration)
 
-DRAFT. Source: [SRS](srs.md), [features](features.md), [Sprint 1 requirements](requirements.md). All validation is PLANNED, NOT EXECUTED.
+Source: [SRS](srs.md), [features](features.md), [Sprint 1 requirements](requirements.md). The FR/BR/NFR and Sprint 1 AC/VC tables below preserve the original Deliverable 1 **planned crosswalk** (not an execution log); see the **Sprint 2 integration traceability** section at the bottom of this file and [Sprint 2 integration & release evidence](sprints/sprint2-integration-release-evidence.md) for executed Sprint 2 verification results on `sprint2` (`f0cf44a`).
 
 | Product requirement | Complete SRS intent (linked source) | Accountable feature / responsibility | Target sprint | Planned validation |
 |---|---|---|---|---|
