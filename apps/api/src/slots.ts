@@ -1,29 +1,32 @@
 import type { Pool } from 'pg';
 
 /** Own-schedule DTO: deliberately excludes any Tutor/Customer or Booking identity. */
-export type SlotDto = {
+type SlotFields = {
   id: string;
   startsAt: string;
   endsAt: string;
-  lifecycle: 'Offered';
   occupancy: 'Occupied' | 'Unoccupied';
 };
 
+export type SlotDto = SlotFields & {
+  lifecycle: 'Offered' | 'Withdrawn';
+  withdrawnAt: string | null;
+};
+
+type PublishedSlotDto = SlotFields & { lifecycle: 'Offered' };
 type SlotRow = {
   id: string;
   startsAt: Date;
   endsAt: Date;
-  lifecycle: 'Offered';
-  occupancy?: 'Occupied' | 'Unoccupied';
+  lifecycle: SlotDto['lifecycle'];
+  withdrawnAt?: Date | null;
+  occupancy?: SlotDto['occupancy'];
 };
 
-function project(row: SlotRow): SlotDto {
+function projectFields(row:SlotRow):SlotFields {
   return {
-    id: row.id,
-    startsAt: row.startsAt.toISOString(),
-    endsAt: row.endsAt.toISOString(),
-    lifecycle: row.lifecycle,
-    occupancy: row.occupancy ?? 'Unoccupied',
+    id:row.id, startsAt:row.startsAt.toISOString(), endsAt:row.endsAt.toISOString(),
+    occupancy:row.occupancy ?? 'Unoccupied',
   };
 }
 
@@ -33,12 +36,22 @@ export class SlotError extends Error {
   }
 }
 
-export async function listOwnSlots(pool: Pool, userId: string): Promise<SlotDto[]> {
-  const result = await pool.query<SlotRow>(
-    'SELECT s."id",s."startsAt",s."endsAt",s."lifecycle",CASE WHEN b."id" IS NOT NULL THEN \'Occupied\' ELSE \'Unoccupied\' END AS "occupancy" FROM "Slot" AS s LEFT JOIN "Booking" AS b ON b."currentSlotId" = s."id" AND b."status" = \'Booked\' WHERE s."tutorId"=$1 AND s."lifecycle"=\'Offered\' ORDER BY s."startsAt" ASC,s."id" ASC',
+export async function listOwnSlots(pool:Pool, userId:string):Promise<{data:SlotDto[];evaluatedAt:string}> {
+  const result = await pool.query<SlotRow & {evaluatedAt:Date}>(
+    'SELECT s.id,s."startsAt",s."endsAt",s.lifecycle,s."withdrawnAt",statement_timestamp() AS "evaluatedAt",' +
+    " CASE WHEN b.id IS NOT NULL THEN 'Occupied' ELSE 'Unoccupied' END AS occupancy" +
+    ' FROM "Slot" s LEFT JOIN "Booking" b ON b."currentSlotId"=s.id AND b.status=\'Booked\'' +
+    ' WHERE s."tutorId"=$1 ORDER BY s."startsAt",s.id',
     [userId],
   );
-  return result.rows.map(project);
+  const clock = result.rows[0]?.evaluatedAt ??
+    (await pool.query<{now:Date}>('SELECT statement_timestamp() AS now')).rows[0].now;
+  return {
+    evaluatedAt:clock.toISOString(),
+    data:result.rows.map(row=>({
+      ...projectFields(row),lifecycle:row.lifecycle,withdrawnAt:row.withdrawnAt?.toISOString() ?? null,
+    })),
+  };
 }
 
 /**
@@ -50,7 +63,7 @@ export async function publishOwnSlot(
   pool: Pool,
   principal: { userId: string; sessionId: string },
   start: Date,
-): Promise<SlotDto> {
+): Promise<PublishedSlotDto> {
   const end = new Date(start.getTime() + 3_600_000);
   for (let attempt = 0; attempt < 3; attempt++) {
     const connection = await pool.connect();
@@ -85,7 +98,7 @@ export async function publishOwnSlot(
       );
       await connection.query('COMMIT');
       begun = false;
-      return project(inserted.rows[0]);
+      return {...projectFields(inserted.rows[0]),lifecycle:'Offered'};
     } catch (error) {
       if (begun) {
         try { await connection.query('ROLLBACK'); } catch { /* connection failure maps to 503 */ }

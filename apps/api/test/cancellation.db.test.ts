@@ -15,7 +15,7 @@ import { digest } from '../src/security.js';
 // isn't the dedicated loopback review database or the hosted CI service.
 const ownerUrl = new URL(process.env.DATABASE_URL ?? 'invalid:');
 const runtimeUrl = new URL(process.env.DATABASE_URL_APP ?? 'invalid:');
-const local = ownerUrl.port === '15449' && ['/nuttiew_115_review', '/nuttiew_117_review'].includes(ownerUrl.pathname);
+const local = ownerUrl.port === '15449' && ['/nuttiew_115_review', '/nuttiew_117_review', '/nuttiew_119_review'].includes(ownerUrl.pathname);
 const ci = process.env.GITHUB_ACTIONS === 'true' && ownerUrl.port === '5432' && ownerUrl.pathname === '/nuttiew_ci';
 if ((!local && !ci) || ownerUrl.protocol !== 'postgresql:' || ownerUrl.hostname !== '127.0.0.1' ||
     ownerUrl.username !== 'postgres' || ownerUrl.search || runtimeUrl.origin !== ownerUrl.origin ||
@@ -388,7 +388,10 @@ it('TCAN-01/05/09/11: commits cancellation, withdrawal and exactly one private n
   expect(await tutorSnapshot(f)).toEqual(row);
   for (const endpoint of ['/api/v1/tutor/bookings','/api/v1/tutor/slots']) {
     const own = await request(app).get(endpoint).set('Cookie', f.tutor.cookie).expect(200);
-    expect(own.body.data).toEqual([]);
+    expect(own.body.data).toEqual(endpoint.endsWith('/slots')?[{
+      id:f.slot.id,startsAt:f.slot.startsAt.toISOString(),endsAt:f.slot.endsAt.toISOString(),
+      lifecycle:'Withdrawn',withdrawnAt:row.slot.withdrawnAt.toISOString(),occupancy:'Unoccupied',
+    }]:[]);
     expect(own.text).not.toContain(tutorReason);
   }
   const owner = await request(app).get('/api/v1/customer/bookings/'+f.id).set('Cookie',f.customer.cookie).expect(200);
