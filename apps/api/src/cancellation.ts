@@ -10,12 +10,56 @@ export type CancellationHooks = {
   afterCommit?: () => Promise<void>;
 };
 
-export async function cancelCustomerBooking(
-  pool: Pool,
-  principal: { userId: string; sessionId: string },
-  bookingId: string,
-  hooks?: CancellationHooks,
+type MutationPrincipal = { userId: string; sessionId: string };
+type Cancellation = { actor: 'Customer' } | { actor: 'Tutor'; reason: string };
+
+export type TutorCancellationDto = {
+  id: string;
+  slotId: string;
+  startsAt: string;
+  endsAt: string;
+  status: 'Cancelled';
+  cancelledAt: string;
+};
+
+export function cancelCustomerBooking(
+  pool: Pool, principal: MutationPrincipal, bookingId: string, hooks?: CancellationHooks,
 ): Promise<CustomerBookingDetailDto> {
+  return cancelBooking(pool, principal, bookingId, { actor: 'Customer' }, async client => {
+    const { data } = await getCustomerBookingDetail(client, principal.userId, bookingId);
+    if (data.status !== 'Cancelled' || data.cancellationActor !== 'Customer') {
+      throw new Error('Unexpected cancellation projection');
+    }
+    return data;
+  }, hooks);
+}
+
+export function cancelTutorBooking(
+  pool: Pool, principal: MutationPrincipal, bookingId: string, reason: string, hooks?: CancellationHooks,
+): Promise<TutorCancellationDto> {
+  return cancelBooking(pool, principal, bookingId, { actor: 'Tutor', reason }, async client => {
+    // Do not select any Customer identity, notice identifier or cancellation reason.
+    const { rows: [row] } = await client.query<{
+      id: string; slotId: string; startsAt: Date; endsAt: Date; cancelledAt: Date;
+    }>(
+      'SELECT b.id, b."currentSlotId" AS "slotId", b."startsAt", b."endsAt", b."cancelledAt"' +
+      ' FROM "Booking" b JOIN "Slot" s ON s.id=b."currentSlotId"' +
+      " WHERE b.id=$1 AND s.\"tutorId\"=$2 AND b.status='Cancelled'" +
+      " AND b.\"cancellationActor\"='Tutor' AND s.lifecycle='Withdrawn'",
+      [bookingId, principal.userId],
+    );
+    if (!row || !row.cancelledAt) throw new BookingError(500, 'INTERNAL_ERROR');
+    return {
+      id: row.id, slotId: row.slotId, startsAt: row.startsAt.toISOString(), endsAt: row.endsAt.toISOString(),
+      status: 'Cancelled', cancelledAt: row.cancelledAt.toISOString(),
+    };
+  }, hooks);
+}
+
+async function cancelBooking<T>(
+  pool: Pool, principal: MutationPrincipal, bookingId: string, cancellation: Cancellation,
+  project: (client: PoolClient) => Promise<T>, hooks?: CancellationHooks,
+): Promise<T> {
   for (let attempt = 0; attempt < 3; attempt++) {
     const client = await pool.connect().catch(() => { throw new BookingError(503, 'SERVICE_UNAVAILABLE'); });
     let phase: 'begin' | 'mutation' | 'projection' | 'commit' | 'acknowledged' = 'begin';
@@ -26,13 +70,12 @@ export async function cancelCustomerBooking(
       await hooks?.beforeMutation?.(client);
       // PR #128 owns lock discovery/order, authorization revalidation and the
       // post-lock PostgreSQL clock. Do not pre-lock or submit a timestamp here.
-      await client.query("SELECT public.s2_mutate('CustomerCancel', $1::uuid, $2::uuid, $3::uuid)",
-        [principal.userId, principal.sessionId, bookingId]);
+      await client.query('SELECT public.s2_mutate($1::text, $2::uuid, $3::uuid, $4::uuid, NULL, $5::text)',
+        [cancellation.actor === 'Tutor' ? 'TutorCancel' : 'CustomerCancel',
+          principal.userId, principal.sessionId, bookingId,
+          cancellation.actor === 'Tutor' ? cancellation.reason : null]);
       phase = 'projection';
-      const { data } = await getCustomerBookingDetail(client, principal.userId, bookingId);
-      if (data.status !== 'Cancelled' || data.cancellationActor !== 'Customer') {
-        throw new Error('Unexpected cancellation projection');
-      }
+      const data = await project(client);
       await hooks?.beforeCommit?.(client);
       phase = 'commit';
       const commit = await client.query('COMMIT');
@@ -60,7 +103,9 @@ export async function cancelCustomerBooking(
             throw new BookingError(409, 'BOOKING_NOT_CANCELLABLE');
           }
           if (pg?.code === 'P0B05') throw new BookingError(422, 'CANCELLATION_WINDOW_CLOSED');
+          if (cancellation.actor === 'Tutor' && pg?.code === 'P0B01') throw new BookingError(500, 'INTERNAL_ERROR');
         }
+        if (cancellation.actor === 'Tutor' && phase === 'projection' && error instanceof BookingError) throw error;
         throw new BookingError(503, 'SERVICE_UNAVAILABLE');
       }
     } finally {

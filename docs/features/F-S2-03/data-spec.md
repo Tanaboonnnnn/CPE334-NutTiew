@@ -126,7 +126,7 @@ Required order inside one transaction: lock Users → Slot → Session → Booki
 
 ## 9. Open decisions and migration risks
 
-- **OD-014:** "meaningful" and length policy are open; only trim-and-nonblank is fixed.
+- **OD-014:** The [accepted HTTP validation policy](od-014-reason-policy.md) is stricter than the existing database nonblank backstop. This feature does not change the reviewed S2 migration.
 - **OD-008:** notice/reason retention and deletion are open.
 - **OD-013:** duplicate/uncertain cancel protocol is open.
 - **Migration risk:** the S1 Slot guard forbids all updates. Enabling withdrawal without the reviewed S2 guard would either fail or, if the guard were naively removed, permit occupied-Slot withdrawal and same-ID reactivation. Both are release blockers.

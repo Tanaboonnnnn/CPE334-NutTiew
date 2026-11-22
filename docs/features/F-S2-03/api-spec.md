@@ -18,7 +18,7 @@
 - Path `bookingId`: valid UUID.
 - Body exactly one key: `{ "reason": "<string>" }`; missing/extra keys or wrong type → 400 `INVALID_INPUT`.
 - The server trims the reason; empty/whitespace-only → 400 `INVALID_INPUT`.
-- **OD-014 remains OPEN.** A **PROPOSED** maximum of 500 Unicode code points is recorded for implementation review only; it is not an approved stakeholder rule.
+- Apply the [accepted OD-014 policy](od-014-reason-policy.md): at least one Unicode letter, at most 500 Unicode scalar values after trim, and no NUL or unpaired surrogate. The UTF-8 JSON request is bounded at 8 KiB, including escaped supplementary characters.
 - Query string must be empty.
 
 ```http
@@ -56,7 +56,7 @@ X-NutTiew-Expected-Session-Binding: <binding from /auth/me>
 
 | Status | Code | Condition |
 |---|---|---|
-| 400 | `INVALID_INPUT` | Malformed UUID, missing/extra body key, non-string reason, blank/whitespace reason, over-length reason, bad JSON, non-empty query |
+| 400 | `INVALID_INPUT` | Malformed UUID, missing/extra body key, non-string reason, blank/filler-only or malformed Unicode reason, over-length reason, bad JSON, non-empty query |
 | 401 | `UNAUTHENTICATED` | Missing/invalid/revoked/expired Session, inactive/missing User, Session changed during the wait |
 | 403 | `FORBIDDEN` | Live Session whose User is not `Tutor` |
 | 403 | `ORIGIN_DENIED` / `CSRF_DENIED` / `SESSION_BINDING_MISMATCH` | As in F-S2-01 |

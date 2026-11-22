@@ -26,7 +26,7 @@ An authenticated Tutor cancels an Active Booking currently assigned to them when
 
 **In scope:** Tutor-only cancellation of a currently assigned `Booked` Booking; 60-minute cutoff; required meaningful reason; atomic Booking cancel + Slot withdrawal + private notice; response/error contract; lock order, Session revalidation, rollback/retry; the shared Booking guard and new Slot-withdrawal guard; UI and planned STS.
 
-**Out of scope:** Customer cancellation (F-S2-01), reschedule (F-S2-02), notice read UI (F-S2-04), Tutor withdrawal of an unoccupied Slot (F-S2-05), refunds/payments, `Completed`/attendance, retention/deletion (OD-008), exact reason length/vocabulary policy (OD-014), idempotency protocol (OD-013), deployment.
+**Out of scope:** Customer cancellation (F-S2-01), reschedule (F-S2-02), notice read UI (F-S2-04), Tutor withdrawal of an unoccupied Slot (F-S2-05), refunds/payments, `Completed`/attendance, retention/deletion (OD-008), additional semantic classification beyond OD-014, idempotency protocol (OD-013), deployment.
 
 **No-change layers:** Slot creation/availability/booking INSERT paths; `slot_exactly_one_hour`; `offered_slot_no_overlap_per_tutor`; `booking_one_active_per_slot`; `booked_customer_no_overlap`; auth/CSRF.
 
@@ -53,7 +53,7 @@ An authenticated Tutor cancels an Active Booking currently assigned to them when
 - **BR-020:** meaningful nonblank reason; empty/whitespace-only rejected.
 - **FR-030:** no partial outcome; trace/history preserved.
 - **FR-031 (notice creation):** one private notice with the reason for the owning Customer.
-- **OD-014 (OPEN):** the exact definition of "meaningful" beyond nonblank and any length limit is not approved. This contract fixes only: trim, reject empty, store a nonblank string. A **PROPOSED** maximum of 500 Unicode code points may be used for implementation review, but it is not an approved stakeholder rule.
+- **OD-014 (accepted):** [the reviewed reason policy](od-014-reason-policy.md) requires a trimmed string with at least one Unicode letter and at most 500 Unicode scalars; reject NUL and malformed UTF-16. Preserve the valid trimmed text without normalization.
 
 ## 6. State model
 
@@ -111,7 +111,7 @@ No `Withdrawn → Offered`; no notice for a Customer cancellation.
 | AC-S2-03-01 | Assigned Tutor cancels a `Booked` Booking at `>= 60:00` with a valid reason; 200; Booking `Cancelled` actor Tutor with reason; Slot `Withdrawn` with `withdrawnAt`; exactly one notice; all committed together. |
 | AC-S2-03-02 | At exactly `60:00` the cancel succeeds; at `59:59.999` it fails 422 with no change. |
 | AC-S2-03-03 | Wrong Tutor, unknown Booking, wrong role and anonymous callers are rejected 404/404/403/401 with no mutation and no identity leak. |
-| AC-S2-03-04 | Absent, empty or whitespace-only reason → 400 `INVALID_INPUT`; no Booking/Slot/notice change. |
+| AC-S2-03-04 | Reason outside [OD-014](od-014-reason-policy.md) → 400 `INVALID_INPUT`; no Booking/Slot/notice change. |
 | AC-S2-03-05 | Already `Cancelled` → 409 `BOOKING_NOT_CANCELLABLE`; no second notice. |
 | AC-S2-03-06 | Injected failure at any point leaves Booking, Slot and notices unchanged. |
 | AC-S2-03-07 | Tutor cancel versus Customer cancel and versus reschedule commit at most one consistent outcome; never `Withdrawn + Booked`; notice only on a committed Tutor cancel. |
@@ -122,10 +122,10 @@ No `Withdrawn → Offered`; no notice for a Customer cancellation.
 ## 11. Dependencies, open decisions and blockers
 
 - **Depends on:** accepted Slot/Booking schema; reviewed shared `booking_guard_s2()`; reviewed `slot_guard_s2()`; new `Notification` table; F-S2-04 for notice read; F-S2-04 Part E coordination.
-- **OD-014 (OPEN):** "meaningful" beyond nonblank and the length bound are not approved.
+- **OD-014 (accepted):** see the [recorded policy and GitHub review](od-014-reason-policy.md).
 - **OD-008 (OPEN):** notice/reason retention and deletion are not decided.
 - **OD-013 (OPEN):** duplicate/uncertain cancel protocol is open.
-- **Blocking migration:** `slot_guard_s1()` must be replaced in a separately reviewed migration before any Tutor cancellation code; the existing S1 guard forbids all Slot updates.
+- **Shared migration:** the S2 Slot and Booking guards plus Notification were reviewed and merged to the sprint2 integration base in [PR #128](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/128).
 
 ## 12. Definition of Done (for the later implementation Issue)
 
@@ -139,7 +139,7 @@ No `Withdrawn → Offered`; no notice for a Customer cancellation.
 
 - [ ] Confirm assignment derives from `Slot.tutorId`, not a client Tutor ID.
 - [ ] Confirm the 60-minute boundary uses post-lock `T_elig`, equality allowed.
-- [ ] Confirm reason trim/empty rule and that OD-014 remains open.
+- [ ] Verify the accepted OD-014 rule and TCAN-04 fixtures.
 - [ ] Confirm Booking-cancel → Slot-withdraw → notice order and atomic rollback.
 - [ ] Confirm the Slot guard rejects occupied withdrawal and same-ID reactivation.
 - [ ] Confirm exactly one notice and its privacy.

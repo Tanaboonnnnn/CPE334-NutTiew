@@ -35,7 +35,7 @@ export class SlotError extends Error {
 
 export async function listOwnSlots(pool: Pool, userId: string): Promise<SlotDto[]> {
   const result = await pool.query<SlotRow>(
-    'SELECT s."id",s."startsAt",s."endsAt",s."lifecycle",CASE WHEN b."id" IS NOT NULL THEN \'Occupied\' ELSE \'Unoccupied\' END AS "occupancy" FROM "Slot" AS s LEFT JOIN "Booking" AS b ON b."currentSlotId" = s."id" AND b."status" = \'Booked\' WHERE s."tutorId"=$1 ORDER BY s."startsAt" ASC,s."id" ASC',
+    'SELECT s."id",s."startsAt",s."endsAt",s."lifecycle",CASE WHEN b."id" IS NOT NULL THEN \'Occupied\' ELSE \'Unoccupied\' END AS "occupancy" FROM "Slot" AS s LEFT JOIN "Booking" AS b ON b."currentSlotId" = s."id" AND b."status" = \'Booked\' WHERE s."tutorId"=$1 AND s."lifecycle"=\'Offered\' ORDER BY s."startsAt" ASC,s."id" ASC',
     [userId],
   );
   return result.rows.map(project);
