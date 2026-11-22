@@ -1454,3 +1454,5 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+.tutor-cancel-reason-detail { white-space: pre-wrap; overflow-wrap: anywhere; }

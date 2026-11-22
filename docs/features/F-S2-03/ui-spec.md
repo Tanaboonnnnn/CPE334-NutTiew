@@ -36,7 +36,7 @@ Reuse the NutTiew Tutor Dashboard/schedule design system: same schedule rows, fo
 
 - The reason is required; the UI must not submit an empty string and must not trim to a nonempty string on the server's behalf.
 - The reason is **not** displayed back in the Tutor schedule; it belongs to the Customer's private notice/detail.
-- The UI must not compute the 60-minute cutoff from the browser clock.
+- Use the authenticated schedule response evaluatedAt for the UI eligibility hint, not the browser clock. The mutation uses the post-lock DB clock. Show the reviewed OD-014 reason guidance while the server remains authoritative.
 - The confirmation must not claim the Slot will be reopened.
 - No automatic retry after an unknown outcome.
 

@@ -8,7 +8,7 @@ Sources: [Feature SDS](specification.md), [UI](ui-spec.md), [API](api-spec.md), 
 
 Required Part F setup: disposable PostgreSQL 18 at the reviewed S2 schema SHA; active/inactive Tutors, Tutor A/B, Customer A/B; live Sessions; real future `Offered` Slots and `Booked` Bookings created through the API; at least two independent DB sessions; synchronized barriers; `pg_backend_pid()`/`pg_blocking_pids()`; a controlled `T_elig` seam for boundary cases; fault injection after each of the three writes and before COMMIT; a fresh connection for final-row inspection.
 
-All cases below are **PLANNED / NOT RUN**.
+The table defines expected outcomes, not a run report. See the implementation PR for observed results and remaining gaps.
 
 ## 2. Planned STS cases
 
@@ -17,7 +17,7 @@ All cases below are **PLANNED / NOT RUN**.
 | TCAN-01 | FR-028/030/031; AC-S2-03-01; VAL-021/022/023 | Assigned Tutor cancels a `Booked` Booking at `>= 60:00` with a valid reason. | 200 after COMMIT; Booking `Cancelled` actor `Tutor` with reason; Slot `Withdrawn` with `withdrawnAt`; exactly one `TutorCancelled` notice for the owning Customer; all committed together. |
 | TCAN-02 | BR-018; AC-S2-03-02; VAL-021; NFR-006 | Controlled `T_elig`: Booking start exactly `T+60:00`, then `T+59:59.999`. | Exact boundary succeeds; just-below returns 422 `CANCELLATION_WINDOW_CLOSED`; no Booking/Slot/notice change. |
 | TCAN-03 | BR-017; AC-S2-03-03; NFR-001 | Tutor B cancels Tutor A's Booking; unknown Booking; anonymous; Customer role. | 404 for foreign/unknown with identical body; 401; 403; no mutation, no Customer identity leak. |
-| TCAN-04 | FR-029; BR-020; AC-S2-03-04; OD-014 | Reason absent, `""`, `"   "`, and a non-string. | 400 `INVALID_INPUT`; no Booking/Slot/notice change; no invented length rule claimed. |
+| TCAN-04 | FR-029; BR-020; AC-S2-03-04; OD-014 | Missing, malformed, blank or filler-only reason; reason with NUL or an unpaired surrogate; 501 scalars. Separately test valid trimmed Thai and 500 scalars with escaped supplementary characters. | Invalid input returns 400 `INVALID_INPUT` with no Booking/Slot/notice change. Eligible valid input commits the trimmed reason; see the [accepted policy fixtures](od-014-reason-policy.md). |
 | TCAN-05 | AC-S2-03-05 | Retry Tutor cancellation after a successful Tutor cancellation; separately retry it against an already Customer-cancelled Booking. | Both return 409 `BOOKING_NOT_CANCELLABLE` without Slot change. Tutor-cancelled Booking keeps exactly its one existing notice; Customer-cancelled Booking keeps **zero** Tutor-cancellation notices. No new notice is created on either retry. |
 | TCAN-06 | AC-S2-03-06; NFR-005; VAL-022 | Inject failure after Booking update, after Slot withdrawal, and after notice insert, in separate runs. | Whole transaction rolls back; Booking `Booked`, Slot `Offered`, zero notices; safe non-success. |
 | TCAN-07 | AC-S2-03-07; System SDS §7.5 | Tutor cancel versus Customer cancel of the same Booking, both orders. | One `Cancelled` transition; notice only if Tutor path committed; Slot `Offered` if Customer won, `Withdrawn` if Tutor won; never `Withdrawn + Booked`. |
@@ -50,7 +50,7 @@ Feature AC IDs `AC-S2-03-01..10` are new and do not renumber Sprint 1 IDs.
 
 ## 4. Part E boundary and Part F evidence
 
-**Part E:** planned cases only; no test has run and no PASS is claimed.
+**Part E:** expected cases only; no PASS is claimed by this specification.
 
 **Part F evidence per run:** case ID; command; source commit; reviewed S2 schema SHA; PostgreSQL version; fixture IDs; backend PIDs/barrier; `T_elig`; expected/actual HTTP; Booking, Slot and Notification rows before/after; PASS/FAIL/SKIP with reason. Redact secrets, reasons from logs and real user data.
 
@@ -58,11 +58,11 @@ Feature AC IDs `AC-S2-03-01..10` are new and do not renumber Sprint 1 IDs.
 
 - [ ] Confirm assignment derives from `Slot.tutorId`.
 - [ ] Confirm the 60-minute boundary uses post-lock DB `T_elig`, equality allowed.
-- [ ] Confirm reason trim/nonblank only and OD-014 remains open.
+- [ ] Verify the [accepted OD-014 policy](od-014-reason-policy.md) and all TCAN-04 boundaries.
 - [ ] Confirm Booking-cancel → Slot-withdraw → notice order and atomic rollback.
 - [ ] Confirm `slot_guard_s2()` rejects occupied withdrawal and reactivation.
 - [ ] Confirm exactly one notice and its privacy.
 - [ ] Confirm races with Customer cancel and reschedule.
 - [ ] Confirm no executable test or code is claimed by this Part E document.
 
-**Status:** PLANNED / NOT RUN.
+**Status:** Part E test specification; verify observed run results separately.

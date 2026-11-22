@@ -2610,6 +2610,10 @@ export function CustomerAvailability({
                       </dd>
                       <dt>วันที่ทำรายการ (Booked At)</dt>
                       <dd>{bangkokLongDate(new Date(selectedBookingDetail.createdAt))} {bangkokClock(new Date(selectedBookingDetail.createdAt))} น.</dd>
+                      {selectedBookingDetail.cancellationActor === 'Tutor' && selectedBookingDetail.cancellationReason && <>
+                        <dt>เหตุผลที่ผู้สอนยกเลิก</dt>
+                        <dd className="tutor-cancel-reason-detail" data-testid="detail-tutor-cancellation-reason">{selectedBookingDetail.cancellationReason}</dd>
+                      </>}
                     </dl>
                     <div className="modal-actions cancellation-actions">
                       {renderReschedule(selectedBookingDetail)}
