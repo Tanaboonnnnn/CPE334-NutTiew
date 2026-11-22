@@ -69,7 +69,7 @@ Every finding or observation received from the independent UAT Team is recorded 
     - `F-S1-05` (`docs/features/F-S1-05/data-spec.md:50`, `api-spec.md:42,53,88`, `ui-spec.md:53,76`): Explicitly specifies `` `tutorRef`: Generated as `"TUTOR-" + row.tutorId.slice(0, 8)` `` for My Bookings list and detail views (`TUTOR-0a340de8` is the first 8 hex characters of `Tutor A`'s UUID, while `#1cb1d623` is the last 8 hex characters).
   - **Actual Behavior:** Live deployed UI matches every reviewed Sprint 1 contract verbatim and leaks zero PII.
 - **Evidence:**
-  - Partner UAT evidence: `NT-E01` (`nt01-customer-booking-detail.png`, `nt01-tutor-booked-row.png`), `NT-E04`, `NT-E05` (held in `TH-056_P2` archive) and `TH-056_P2` §5.1 handoff observation note.
+  - Partner UAT screenshots (redacted, archived in `docs/labs/lab-06/evidence/nuttiew-uat-2026-11-22/`): `NT-E01` ([nt01-customer-booking-detail.png](evidence/nuttiew-uat-2026-11-22/nt01-customer-booking-detail.png), [nt01-tutor-booked-row.png](evidence/nuttiew-uat-2026-11-22/nt01-tutor-booked-row.png)), `NT-E04`, `NT-E05`, and `TH-056_P2` §5.1 handoff observation note.
   - Product Team contract verification on `origin/main` (`42bb762`): `docs/features/F-S1-05/data-spec.md:50`, `docs/features/F-S1-05/ui-spec.md:53,76`, `docs/features/F-S1-03/verification-ledger.md` (`OD-AV-02`).
 - **Triage Decision & Action Taken:**
   - Classified as **`Not-defect`** against the delivered Sprint 1 application (`42bb762` / `nuttiew-00010-gug`); **no code change** and **no GitHub Defect Issue** required.

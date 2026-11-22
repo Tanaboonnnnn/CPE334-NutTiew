@@ -290,18 +290,18 @@ Passwords and private login details are delivered **only via the agreed private 
 
 ## 5. Partner UAT Execution Evidence Summary (`TH-056_P2` Return, 22 Nov 2026)
 
-### 5.1 Observed Results & Partner-Held Evidence Index
+### 5.1 Observed Results & Redacted UAT Evidence Index
 
-The partner runs reached `https://nuttiew-nxe2keefba-as.a.run.app/` on **22 Nov 2026 (ICT)** (Codex **19:47:05–20:00:45**, Gemini follow-up **20:30**, Copilot read-only observations). All screenshot and JSON artifacts listed below are held in `TH-056_P2`'s external UAT evidence archive (`nuttiew-uat-2026-11-22/`); raw session logs and fixture UUIDs remain in private evidence storage.
+The partner runs reached `https://nuttiew-nxe2keefba-as.a.run.app/` on **22 Nov 2026 (ICT)** (Codex **19:47:05–20:00:45**, Gemini follow-up **20:30**, Copilot read-only observations). All 18 redacted UI screenshots supplied by `TH-056_P2` are archived in `docs/labs/lab-06/evidence/nuttiew-uat-2026-11-22/` (zero passwords, cookies, or tokens); raw session logs and fixture UUIDs remain in private evidence storage.
 
-| Case ID | Evidence ID & Source | Partner-Held Evidence Artifacts (`TH-056_P2` Archive) | Observed Outcome |
+| Case ID | Evidence ID & Source | Archived Redacted Screenshots (`evidence/nuttiew-uat-2026-11-22/`) & Logs | Observed Outcome |
 | --- | --- | --- | --- |
-| `UAT-NT-01` | `NT-E01` · Codex | `nt01-customer-booking-detail.png`, `nt01-tutor-booked-row.png` | **PASS** |
-| `UAT-NT-02` | `NT-E02` · Codex | `nt02-overlap-rejected.png`, `nt02-past-slot-rejected.png` | **PASS** |
-| `UAT-NT-03` | `NT-E03` · Codex, Copilot, Gemini | `nt03-invalid-login.png`, Copilot signed-out observations, Gemini API log | **PASS** |
-| `UAT-NT-04` | `NT-E04` · Codex, Gemini | Gemini API log (`404`/`409`/`400`), `nt04-customer-b-bookings.png`, `nt04-tutor-b-bookings.png` | **PASS** |
-| `UAT-NT-05` | `NT-E05` · Codex | `nt05-after-hard-reload.png`, `nt05-after-new-session.png`, `nt05-past-booking.png` | **PASS** *(redeploy `NOT RUN`)* |
-| `UAT-NT-06` | `NT-E06` · Codex | `nt06-utc-tutor-slot.png`, `nt06-utc-customer-booking.png` | **PASS** |
+| `UAT-NT-01` | `NT-E01` · Codex | [login.png](evidence/nuttiew-uat-2026-11-22/login.png), [nt01-tutor-available-slot.png](evidence/nuttiew-uat-2026-11-22/nt01-tutor-available-slot.png), [nt01-customer-available-offer.png](evidence/nuttiew-uat-2026-11-22/nt01-customer-available-offer.png), [nt01-booking-confirmation.png](evidence/nuttiew-uat-2026-11-22/nt01-booking-confirmation.png), [nt01-customer-booking-detail.png](evidence/nuttiew-uat-2026-11-22/nt01-customer-booking-detail.png), [nt01-tutor-booked-row.png](evidence/nuttiew-uat-2026-11-22/nt01-tutor-booked-row.png) | **PASS** |
+| `UAT-NT-02` | `NT-E02` · Codex | [nt02-adjacent-slot.png](evidence/nuttiew-uat-2026-11-22/nt02-adjacent-slot.png), [nt02-overlap-rejected.png](evidence/nuttiew-uat-2026-11-22/nt02-overlap-rejected.png), [nt02-past-slot-rejected.png](evidence/nuttiew-uat-2026-11-22/nt02-past-slot-rejected.png) | **PASS** |
+| `UAT-NT-03` | `NT-E03` · Codex, Copilot, Gemini | [nt03-invalid-login.png](evidence/nuttiew-uat-2026-11-22/nt03-invalid-login.png), Copilot signed-out observations, Gemini API log (partner-held) | **PASS** |
+| `UAT-NT-04` | `NT-E04` · Codex, Gemini | [nt04-customer-b-availability.png](evidence/nuttiew-uat-2026-11-22/nt04-customer-b-availability.png), [nt04-customer-b-bookings.png](evidence/nuttiew-uat-2026-11-22/nt04-customer-b-bookings.png), [nt04-tutor-b-bookings.png](evidence/nuttiew-uat-2026-11-22/nt04-tutor-b-bookings.png), Gemini API log (`404`/`409`/`400`, partner-held) | **PASS** |
+| `UAT-NT-05` | `NT-E05` · Codex | [nt05-after-hard-reload.png](evidence/nuttiew-uat-2026-11-22/nt05-after-hard-reload.png), [nt05-after-new-session.png](evidence/nuttiew-uat-2026-11-22/nt05-after-new-session.png), [nt05-past-booking.png](evidence/nuttiew-uat-2026-11-22/nt05-past-booking.png) | **PASS** *(redeploy `NOT RUN`)* |
+| `UAT-NT-06` | `NT-E06` · Codex | [nt06-utc-tutor-slot.png](evidence/nuttiew-uat-2026-11-22/nt06-utc-tutor-slot.png), [nt06-utc-customer-booking.png](evidence/nuttiew-uat-2026-11-22/nt06-utc-customer-booking.png) | **PASS** |
 
 *Partner synthetic data footprint:* Six synthetic Slots and two Bookings across 22–24 and 27 Dec 2026 (original Codex `uat-execution-result.json` combined with Gemini API follow-up for `UAT-NT-03` and `UAT-NT-04`).
 
