@@ -1456,3 +1456,77 @@
 }
 
 .tutor-cancel-reason-detail { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.notification-nav-count {
+  margin-left: auto;
+  min-width: 1.35rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #255ac9;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+.notification-live-status { margin: 0 0 0.75rem; min-height: 1.2rem; color: #1d4ed8; font-weight: 500; }
+.notification-live-status:empty { margin: 0; min-height: 0; }
+.notifications-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.2fr);
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .notifications-layout { grid-template-columns: 1fr; }
+}
+.notifications-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.notification-row-btn {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px solid #d5dee9;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.notification-row-btn.is-unread {
+  border-left: 4px solid #255ac9;
+  background: #f8fbff;
+}
+.notification-row-btn.is-selected {
+  border-color: #255ac9;
+  box-shadow: 0 0 0 2px rgb(37 90 201 / 18%);
+}
+.notification-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.notification-badge-unread,
+.notification-badge-read {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.notification-badge-unread { background: #dbeafe; color: #1e40af; }
+.notification-badge-read { background: #e2e8f0; color: #334155; }
+.notification-row-interval { margin: 0; font-size: 0.9rem; font-weight: 600; }
+.notification-row-preview { margin: 0; font-size: 0.88rem; color: #334155; overflow-wrap: anywhere; }
+.notification-row-time { margin: 0; font-size: 0.78rem; color: #64748b; }
+.notification-detail-panel { padding: 1.25rem; }
+.notification-detail-panel h2 { margin-top: 0; }
+.notification-detail-actions { margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }

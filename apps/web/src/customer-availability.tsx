@@ -78,6 +78,23 @@ export type CustomerBookingDetail = CustomerBookingItem & {
   updatedAt: string;
 };
 
+export type CustomerNotificationItem = {
+  id: string;
+  kind: 'TutorCancelled';
+  createdAt: string;
+  readAt: string | null;
+  reason: string;
+  booking: {
+    id: string;
+    slotId: string;
+    tutorRef: string;
+    startsAt: string;
+    endsAt: string;
+    status: 'Cancelled';
+    cancelledAt: string;
+  };
+};
+
 type UnknownBookingOutcome = {
   slotId: string;
   tutorRef: string;
@@ -85,7 +102,7 @@ type UnknownBookingOutcome = {
   endsAt: string;
 };
 
-type IconKind = 'calendar' | 'user' | 'logout' | 'menu' | 'clock';
+type IconKind = 'calendar' | 'user' | 'logout' | 'menu' | 'clock' | 'bell';
 function Icon({ kind }: { kind: IconKind }) {
   const paths: Record<IconKind, ReactNode> = {
     calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M7 14h3M13 14h3M7 18h3"/></>,
@@ -93,6 +110,7 @@ function Icon({ kind }: { kind: IconKind }) {
     logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></>,
     menu: <><path d="M4 7h16M4 12h16M4 17h16"/></>,
     clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></>,
+    bell: <><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>,
   };
   return (
     <svg
@@ -575,10 +593,18 @@ export function CustomerAvailability({
   const [csrfLoading, setCsrfLoading] = useState(true);
   const [csrfError, setCsrfError] = useState('');
   const [submittingBooking, setSubmittingBooking] = useState(false);
-  const [activeTab, setActiveTab] = useState<'availability' | 'bookings' | 'account'>('availability');
+  const [activeTab, setActiveTab] = useState<'availability' | 'bookings' | 'notifications' | 'account'>('availability');
   const [myBookings, setMyBookings] = useState<CustomerBookingItem[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [bookingsError, setBookingsError] = useState('');
+  const [myNotifications, setMyNotifications] = useState<CustomerNotificationItem[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [notificationsError, setNotificationsError] = useState('');
+  const [selectedNotification, setSelectedNotification] = useState<CustomerNotificationItem | null>(null);
+  const [loadingNotificationDetail, setLoadingNotificationDetail] = useState(false);
+  const [notificationDetailError, setNotificationDetailError] = useState('');
+  const [markingReadId, setMarkingReadId] = useState<string | null>(null);
+  const [notificationStatusMessage, setNotificationStatusMessage] = useState('');
   const [selectedBookingDetail, setSelectedBookingDetail] = useState<CustomerBookingDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState('');
@@ -617,11 +643,16 @@ export function CustomerAvailability({
   const sessionEpoch = useRef(0);
   const bookingsVersion = useRef(0);
   const detailVersion = useRef(0);
+  const notificationsVersion = useRef(0);
+  const notificationDetailVersion = useRef(0);
   const pendingGet = useRef<AbortController | null>(null);
   const pendingCsrf = useRef<AbortController | null>(null);
   const pendingPost = useRef<AbortController | null>(null);
   const pendingBookingsGet = useRef<AbortController | null>(null);
   const pendingDetailGet = useRef<AbortController | null>(null);
+  const pendingNotificationsGet = useRef<AbortController | null>(null);
+  const pendingNotificationDetailGet = useRef<AbortController | null>(null);
+  const markReadRequest = useRef<AbortController | null>(null);
   const selectedRef = useRef<string | null>(null);
   const unknownOutcomeRef = useRef<UnknownBookingOutcome | null>(null);
   const selectedDayRef = useRef<string | null>(null);
@@ -633,9 +664,10 @@ export function CustomerAvailability({
   const accountHeadingRef = useRef<HTMLHeadingElement>(null);
   const availabilityHeadingRef = useRef<HTMLHeadingElement>(null);
   const bookingsHeadingRef = useRef<HTMLHeadingElement>(null);
-  const pendingTabFocusRef = useRef<'availability' | 'bookings' | 'account' | null>(null);
+  const notificationsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const pendingTabFocusRef = useRef<'availability' | 'bookings' | 'notifications' | 'account' | null>(null);
 
-  const navigateTab = (tab: 'availability' | 'bookings' | 'account') => {
+  const navigateTab = (tab: 'availability' | 'bookings' | 'notifications' | 'account') => {
     pendingTabFocusRef.current = tab;
     setActiveTab(tab);
     setMenuOpen(false);
@@ -647,6 +679,7 @@ export function CustomerAvailability({
     pendingTabFocusRef.current = null;
     if (target === 'account') accountHeadingRef.current?.focus();
     else if (target === 'bookings') bookingsHeadingRef.current?.focus();
+    else if (target === 'notifications') notificationsHeadingRef.current?.focus();
     else availabilityHeadingRef.current?.focus();
   }, [activeTab]);
 
@@ -699,9 +732,23 @@ export function CustomerAvailability({
     csrfVersion.current++;
     bookingsVersion.current++;
     detailVersion.current++;
+    notificationsVersion.current++;
+    notificationDetailVersion.current++;
     pendingCsrf.current?.abort();
     pendingBookingsGet.current?.abort();
     pendingDetailGet.current?.abort();
+    pendingNotificationsGet.current?.abort();
+    pendingNotificationDetailGet.current?.abort();
+    markReadRequest.current?.abort();
+    markReadRequest.current = null;
+    setMyNotifications([]);
+    setLoadingNotifications(false);
+    setNotificationsError('');
+    setSelectedNotification(null);
+    setLoadingNotificationDetail(false);
+    setNotificationDetailError('');
+    setMarkingReadId(null);
+    setNotificationStatusMessage('');
     setOffers([]);
     setEvaluatedAt(null);
     selectedRef.current = null;
@@ -943,6 +990,11 @@ export function CustomerAvailability({
       rescheduleRequest.current?.abort();
       rescheduleOffersVersion.current++;
       pendingRescheduleOffers.current?.abort();
+      notificationsVersion.current++;
+      notificationDetailVersion.current++;
+      pendingNotificationsGet.current?.abort();
+      pendingNotificationDetailGet.current?.abort();
+      markReadRequest.current?.abort();
       pendingBookingsGet.current?.abort();
       pendingDetailGet.current?.abort();
     };
@@ -1092,9 +1144,221 @@ export function CustomerAvailability({
     }
   };
 
+  const fetchMyNotifications = async () => {
+    if (logoutBusy || logoutError) return;
+    const current = ++notificationsVersion.current;
+    const capturedEpoch = sessionEpoch.current;
+    const capturedBinding = sessionBinding;
+    pendingNotificationsGet.current?.abort();
+    const controller = new AbortController();
+    pendingNotificationsGet.current = controller;
+    setLoadingNotifications(true);
+    setNotificationsError('');
+    try {
+      const res = await fetch('/api/v1/customer/notifications', {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      if (
+        notificationsVersion.current !== current ||
+        sessionEpoch.current !== capturedEpoch ||
+        sessionBinding !== capturedBinding ||
+        controller.signal.aborted
+      ) return;
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          clearProtectedState();
+          onUnauthorized();
+          return;
+        }
+        throw new Error('HTTP_' + res.status);
+      }
+      if (capturedBinding && res.headers.get('X-NutTiew-Session-Binding') !== capturedBinding) {
+        handleSessionBindingChanged();
+        return;
+      }
+      const body = await res.json();
+      if (
+        notificationsVersion.current === current &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding &&
+        !controller.signal.aborted
+      ) {
+        if (Array.isArray(body?.data)) {
+          const items = body.data as CustomerNotificationItem[];
+          setMyNotifications(items);
+          setSelectedNotification(prev => (prev ? items.find(n => n.id === prev.id) ?? prev : null));
+          setNotificationsError('');
+        } else {
+          setNotificationsError('ไม่สามารถโหลดรายการแจ้งเตือนได้ในขณะนี้');
+        }
+      }
+    } catch {
+      if (
+        notificationsVersion.current === current &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding &&
+        !controller.signal.aborted
+      ) {
+        setNotificationsError('ไม่สามารถโหลดรายการแจ้งเตือนได้ในขณะนี้ กรุณาลองใหม่');
+      }
+    } finally {
+      if (notificationsVersion.current === current && sessionEpoch.current === capturedEpoch) {
+        setLoadingNotifications(false);
+        pendingNotificationsGet.current = null;
+      }
+    }
+  };
+
+  const openNotificationDetail = async (notificationId: string) => {
+    if (logoutBusy || logoutError) return;
+    const current = ++notificationDetailVersion.current;
+    const capturedEpoch = sessionEpoch.current;
+    const capturedBinding = sessionBinding;
+    pendingNotificationDetailGet.current?.abort();
+    const controller = new AbortController();
+    pendingNotificationDetailGet.current = controller;
+    setLoadingNotificationDetail(true);
+    setNotificationDetailError('');
+    setNotificationStatusMessage('');
+    try {
+      const res = await fetch('/api/v1/customer/notifications/' + encodeURIComponent(notificationId), {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      if (
+        notificationDetailVersion.current !== current ||
+        sessionEpoch.current !== capturedEpoch ||
+        sessionBinding !== capturedBinding ||
+        controller.signal.aborted
+      ) return;
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          clearProtectedState();
+          onUnauthorized();
+          return;
+        }
+        if (res.status === 404) {
+          setSelectedNotification(null);
+          setNotificationDetailError('ไม่พบการแจ้งเตือนนี้');
+          return;
+        }
+        throw new Error('HTTP_' + res.status);
+      }
+      if (capturedBinding && res.headers.get('X-NutTiew-Session-Binding') !== capturedBinding) {
+        handleSessionBindingChanged();
+        return;
+      }
+      const body = await res.json();
+      if (
+        notificationDetailVersion.current === current &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding &&
+        !controller.signal.aborted
+      ) {
+        if (body?.data?.id === notificationId && body.data.kind === 'TutorCancelled') {
+          const latest = body.data as CustomerNotificationItem;
+          setSelectedNotification(latest);
+          setMyNotifications(rows => rows.map(r => (r.id === notificationId ? latest : r)));
+          setNotificationDetailError('');
+          if (!csrfToken && !csrfLoading) void loadCsrfBootstrap();
+        } else {
+          setNotificationDetailError('ไม่สามารถโหลดรายละเอียดการแจ้งเตือนได้ กรุณาลองใหม่');
+        }
+      }
+    } catch {
+      if (
+        notificationDetailVersion.current === current &&
+        sessionEpoch.current === capturedEpoch &&
+        sessionBinding === capturedBinding &&
+        !controller.signal.aborted
+      ) {
+        setNotificationDetailError('ไม่สามารถโหลดรายละเอียดการแจ้งเตือนได้ กรุณาลองใหม่');
+      }
+    } finally {
+      if (notificationDetailVersion.current === current && sessionEpoch.current === capturedEpoch) {
+        setLoadingNotificationDetail(false);
+        pendingNotificationDetailGet.current = null;
+      }
+    }
+  };
+
+  const markNotificationRead = async (notificationId: string) => {
+    if (logoutBusy || logoutError || markingReadId || markReadRequest.current) return;
+    if (!csrfToken) {
+      if (!csrfLoading) void loadCsrfBootstrap();
+      setNotificationStatusMessage('กำลังเตรียมเซสชัน กรุณาลองอีกครั้ง');
+      return;
+    }
+    const epoch = sessionEpoch.current;
+    const capturedBinding = sessionBinding;
+    const controller = new AbortController();
+    markReadRequest.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
+    setMarkingReadId(notificationId);
+    setNotificationStatusMessage('');
+    try {
+      const res = await fetch('/api/v1/customer/notifications/' + encodeURIComponent(notificationId) + '/read', {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+          'X-NutTiew-Expected-Session-Binding': capturedBinding,
+        },
+        body: '{}',
+      });
+      const body = await res.json().catch(() => null);
+      if (sessionEpoch.current !== epoch || sessionBinding !== capturedBinding) return;
+      const errCode = body?.error?.code;
+      if (
+        errCode === 'SESSION_BINDING_MISMATCH' ||
+        errCode === 'CSRF_DENIED' ||
+        (res.ok && res.headers.get('X-NutTiew-Session-Binding') !== capturedBinding)
+      ) {
+        handleSessionBindingChanged();
+        return;
+      }
+      if (res.status === 401 || res.status === 403) {
+        clearProtectedState();
+        onUnauthorized();
+        return;
+      }
+      if (res.status === 404) {
+        setSelectedNotification(null);
+        setNotificationDetailError('ไม่พบการแจ้งเตือนนี้');
+        return;
+      }
+      if (res.status === 200 && body?.data?.id === notificationId && body.data.readAt) {
+        const updated = body.data as CustomerNotificationItem;
+        setMyNotifications(rows => rows.map(r => (r.id === notificationId ? updated : r)));
+        setSelectedNotification(prev => (prev?.id === notificationId ? updated : prev));
+        setNotificationStatusMessage('ทำเครื่องหมายว่าอ่านแล้ว คุณยังสามารถกลับมาอ่านการแจ้งเตือนนี้ได้เสมอ');
+      } else {
+        setNotificationStatusMessage('ไม่สามารถทำเครื่องหมายว่าอ่านแล้วได้ในขณะนี้ กรุณาลองใหม่');
+      }
+    } catch {
+      if (sessionEpoch.current === epoch) {
+        setNotificationStatusMessage('ไม่สามารถทำเครื่องหมายว่าอ่านแล้วได้ในขณะนี้ กรุณาลองใหม่');
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (markReadRequest.current === controller) {
+        markReadRequest.current = null;
+        setMarkingReadId(null);
+      }
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'bookings') {
       void fetchMyBookings();
+    } else if (activeTab === 'notifications') {
+      void fetchMyNotifications();
     }
   }, [activeTab]);
 
@@ -1808,6 +2072,22 @@ export function CustomerAvailability({
             {activeTab === 'bookings' && <span className="nav-active-marker" aria-hidden="true" />}
           </a>
           <a
+            href="#customer-notifications-section"
+            className={'sidebar-nav-link' + (activeTab === 'notifications' ? ' sidebar-nav-active' : '')}
+            aria-current={activeTab === 'notifications' ? 'page' : undefined}
+            data-testid="nav-customer-notifications"
+            onClick={(e) => { e.preventDefault(); navigateTab('notifications'); }}
+          >
+            <Icon kind="bell" />
+            <span>การแจ้งเตือน</span>
+            {myNotifications.filter(n => n.readAt === null).length > 0 && (
+              <span className="notification-nav-count" aria-label={`ยังไม่ได้อ่าน ${myNotifications.filter(n => n.readAt === null).length} รายการ`}>
+                {myNotifications.filter(n => n.readAt === null).length}
+              </span>
+            )}
+            {activeTab === 'notifications' && <span className="nav-active-marker" aria-hidden="true" />}
+          </a>
+          <a
             className={'sidebar-nav-link' + (activeTab === 'account' ? ' sidebar-nav-active' : '')}
             aria-current={activeTab === 'account' ? 'page' : undefined}
             href="#customer-account-panel"
@@ -1851,7 +2131,9 @@ export function CustomerAvailability({
                 ? 'เลือกช่วงเวลาติว'
                 : activeTab === 'bookings'
                   ? 'การจองของฉัน'
-                  : 'บัญชีของฉัน'}
+                  : activeTab === 'notifications'
+                    ? 'การแจ้งเตือน'
+                    : 'บัญชีของฉัน'}
             </strong>
           </div>
           <div className="account-status">
@@ -1929,6 +2211,154 @@ export function CustomerAvailability({
                 </button>
               </div>
             </section>
+          ) : activeTab === 'notifications' ? (
+            logoutBusy || logoutError ? (
+              <div className="availability-surface" role="status">
+                <p>เซสชันกำลังออกจากระบบหรือรอการยืนยัน ข้อมูลการแจ้งเตือนถูกซ่อนเพื่อความปลอดภัย</p>
+              </div>
+            ) : (
+            <section id="customer-notifications-section" className="customer-notifications-section" aria-labelledby="customer-notifications-heading">
+              <header className="availability-hero">
+                <div className="availability-hero-copy">
+                  <h2 className="dashboard-kicker">PRIVATE NOTICES</h2>
+                  <h1 id="customer-notifications-heading" tabIndex={-1} ref={notificationsHeadingRef}>การแจ้งเตือน</h1>
+                  <p className="availability-helper">
+                    การแจ้งเตือนเมื่อผู้สอนยกเลิกนัดหมาย • เวลาประเทศไทย <strong>Asia/Bangkok (UTC+07:00)</strong>
+                  </p>
+                </div>
+                <div className="availability-hero-actions">
+                  <button
+                    type="button"
+                    className="refresh-availability-button"
+                    data-testid="refresh-notifications-btn"
+                    disabled={loadingNotifications}
+                    onClick={() => void fetchMyNotifications()}
+                  >
+                    {loadingNotifications ? 'กำลังโหลด…' : 'รีเฟรช'}
+                  </button>
+                </div>
+              </header>
+
+              <p className="notification-live-status" role="status" aria-live="polite" data-testid="notification-live-status">
+                {notificationStatusMessage}
+              </p>
+
+              {loadingNotifications && (
+                <div className="availability-surface" role="status">
+                  <p>กำลังโหลดรายการแจ้งเตือน...</p>
+                </div>
+              )}
+
+              {notificationsError && (
+                <div className="customer-bookings-error availability-surface" role="alert">
+                  <p>{notificationsError}</p>
+                  <button type="button" onClick={() => void fetchMyNotifications()}>ลองใหม่อีกครั้ง</button>
+                </div>
+              )}
+
+              {!loadingNotifications && !notificationsError && myNotifications.length === 0 && (
+                <div className="customer-bookings-empty availability-surface" data-testid="notifications-empty-state">
+                  <p>ยังไม่มีการแจ้งเตือน เมื่อผู้สอนยกเลิกนัดหมายของคุณ ข้อความแจ้งเตือนและเหตุผลจะแสดงที่นี่</p>
+                </div>
+              )}
+
+              {!loadingNotifications && !notificationsError && myNotifications.length > 0 && (
+                <div className="notifications-layout">
+                  <ul className="notifications-list" data-testid="customer-notifications-list" aria-label="รายการแจ้งเตือนการยกเลิกนัดหมาย">
+                    {myNotifications.map(n => {
+                      const unread = n.readAt === null;
+                      const isSelected = selectedNotification?.id === n.id;
+                      const intervalLabel = `${bangkokLongDate(new Date(n.booking.startsAt))} ${bangkokClock(new Date(n.booking.startsAt))} – ${bangkokClock(new Date(n.booking.endsAt))} น. (Asia/Bangkok)`;
+                      const preview = n.reason.length > 90 ? n.reason.slice(0, 90) + '…' : n.reason;
+                      return (
+                        <li key={n.id} data-notification-id={n.id}>
+                          <button
+                            type="button"
+                            className={'notification-row-btn availability-surface' + (unread ? ' is-unread' : '') + (isSelected ? ' is-selected' : '')}
+                            data-testid="notification-item"
+                            aria-current={isSelected ? 'true' : undefined}
+                            aria-label={`${unread ? 'ยังไม่ได้อ่าน' : 'อ่านแล้ว'} ผู้สอน ${n.booking.tutorRef} ${intervalLabel}`}
+                            onClick={() => void openNotificationDetail(n.id)}
+                          >
+                            <div className="notification-row-top">
+                              <span className="booking-tutor-ref">ผู้สอนยกเลิกนัด: <strong>{n.booking.tutorRef}</strong></span>
+                              <span
+                                className={unread ? 'notification-badge-unread' : 'notification-badge-read'}
+                                data-testid="notification-read-badge"
+                              >
+                                {unread ? 'ยังไม่ได้อ่าน' : 'อ่านแล้ว'}
+                              </span>
+                            </div>
+                            <p className="notification-row-interval">{intervalLabel}</p>
+                            <p className="notification-row-preview">{preview}</p>
+                            <p className="notification-row-time">
+                              แจ้งเตือนเมื่อ {bangkokLongDate(new Date(n.createdAt))} {bangkokClock(new Date(n.createdAt))} น. (Asia/Bangkok)
+                            </p>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  <section
+                    className="notification-detail-panel availability-surface"
+                    data-testid="notification-detail-panel"
+                    aria-labelledby="notification-detail-heading"
+                  >
+                    <h2 id="notification-detail-heading">รายละเอียดการแจ้งเตือน</h2>
+                    {loadingNotificationDetail ? (
+                      <p role="status">กำลังโหลดรายละเอียดการแจ้งเตือน...</p>
+                    ) : notificationDetailError ? (
+                      <p role="alert">{notificationDetailError}</p>
+                    ) : selectedNotification ? (
+                      <div className="notification-detail-content">
+                        <dl className="detail-dl">
+                          <dt>สถานะการอ่าน</dt>
+                          <dd data-testid="notification-detail-read-status">
+                            {selectedNotification.readAt
+                              ? `อ่านแล้วเมื่อ ${bangkokLongDate(new Date(selectedNotification.readAt))} ${bangkokClock(new Date(selectedNotification.readAt))} น. (Asia/Bangkok)`
+                              : 'ยังไม่ได้อ่าน'}
+                          </dd>
+                          <dt>รหัสการจอง (Booking ID)</dt>
+                          <dd><code data-testid="notification-detail-booking-id">{selectedNotification.booking.id}</code></dd>
+                          <dt>ผู้สอน (Tutor)</dt>
+                          <dd><strong>{selectedNotification.booking.tutorRef}</strong></dd>
+                          <dt>วันและเวลานัดหมายเดิม</dt>
+                          <dd>
+                            {bangkokLongDate(new Date(selectedNotification.booking.startsAt))}, {bangkokClock(new Date(selectedNotification.booking.startsAt))} – {bangkokClock(new Date(selectedNotification.booking.endsAt))} น. (Asia/Bangkok)
+                          </dd>
+                          <dt>เวลาที่ผู้สอนยกเลิก</dt>
+                          <dd>
+                            {bangkokLongDate(new Date(selectedNotification.booking.cancelledAt))} {bangkokClock(new Date(selectedNotification.booking.cancelledAt))} น. (Asia/Bangkok)
+                          </dd>
+                          <dt>เหตุผลที่ผู้สอนยกเลิก</dt>
+                          <dd className="tutor-cancel-reason-detail" data-testid="notification-detail-reason">
+                            {selectedNotification.reason}
+                          </dd>
+                        </dl>
+                        <div className="notification-detail-actions">
+                          {selectedNotification.readAt === null && (
+                            <button
+                              type="button"
+                              className="modal-close-btn"
+                              data-testid="mark-notification-read-btn"
+                              disabled={markingReadId === selectedNotification.id}
+                              aria-busy={markingReadId === selectedNotification.id}
+                              onClick={() => void markNotificationRead(selectedNotification.id)}
+                            >
+                              {markingReadId === selectedNotification.id ? 'กำลังบันทึก…' : 'ทำเครื่องหมายว่าอ่านแล้ว'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p>เลือกรายการแจ้งเตือนทางซ้ายเพื่อดูเหตุผลและรายละเอียดการยกเลิก</p>
+                    )}
+                  </section>
+                </div>
+              )}
+            </section>
+            )
           ) : activeTab === 'bookings' ? (
             logoutBusy || logoutError ? (
               <div className="availability-surface" role="status">
