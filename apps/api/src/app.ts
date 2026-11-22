@@ -2,6 +2,7 @@ import { requireSession,requireRole,getPrincipal } from './guards.js';
 import { clientIp } from './client-ip.js';
 import { parseSlotStart } from './slot-time.js';
 import { listOwnSlots, publishOwnSlot, SlotError } from './slots.js';
+import { withdrawOwnSlot, type WithdrawalHooks } from './withdrawal.js';
 import { listCustomerAvailability, listRescheduleAvailability } from './availability.js';
 import { BookingError, createCustomerBooking, isValidUuid, type BookingAdapterHooks } from './bookings.js';
 import { cancelCustomerBooking, cancelTutorBooking, type CancellationHooks } from './cancellation.js';
@@ -21,8 +22,8 @@ import argon2 from 'argon2';
 import type { Pool } from 'pg';
 import { admit, csrf, digest, hmac, QuotaError, randomToken, safeTokenMatch, settle, verifyPassword } from './security.js';
 
-type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword; availabilityClock?:()=>Date|Promise<Date>; bookingHooks?:BookingAdapterHooks; cancellationHooks?:CancellationHooks; tutorCancellationHooks?:CancellationHooks; rescheduleHooks?:RescheduleHooks; notificationHooks?:NotificationHooks };
-const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',SLOT_NOT_FOUND:'Slot not found',BOOKING_NOT_FOUND:'Booking not found',NOTIFICATION_NOT_FOUND:'Notification not found',BOOKING_NOT_CANCELLABLE:'Booking is no longer cancellable',CANCELLATION_WINDOW_CLOSED:'Cancellation window has closed',RESCHEDULE_ALREADY_USED:'Booking has already been rescheduled',RESCHEDULE_NOT_APPLICABLE:'Booking cannot be rescheduled to the selected slot',RESCHEDULE_WINDOW_CLOSED:'Reschedule window has closed',MUTATION_OUTCOME_UNKNOWN:'Cancellation outcome could not be confirmed',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',SESSION_BINDING_MISMATCH:'Session binding mismatch',RATE_LIMITED:'Too many login attempts',SLOT_INVALID_TIME:'Slot must start in the future',SLOT_OVERLAP:'Slot overlaps an existing offer',SLOT_UNAVAILABLE:'Selected slot is unavailable',CUSTOMER_OVERLAP:'Customer has an overlapping booking',BOOKING_NOT_ELIGIBLE:'Slot is no longer eligible for booking',TRANSACTION_RETRY_EXHAUSTED:'Transaction retry budget exhausted',BOOKING_OUTCOME_UNKNOWN:'Booking outcome could not be confirmed',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
+type Config = { origin:string; csrfKey:Buffer; csrfKeyVersion?:string; previousCsrfKeys?:Record<string,Buffer>; rateKey:Buffer; production:boolean; trustedProxies?:string[]; credentialVerifier?:typeof verifyPassword; availabilityClock?:()=>Date|Promise<Date>; bookingHooks?:BookingAdapterHooks; cancellationHooks?:CancellationHooks; tutorCancellationHooks?:CancellationHooks; withdrawalHooks?:WithdrawalHooks; rescheduleHooks?:RescheduleHooks; notificationHooks?:NotificationHooks };
+const messages:Record<string,string>={INVALID_INPUT:'Invalid request',LOGIN_FAILED:'Invalid credentials',UNAUTHENTICATED:'Authentication required',FORBIDDEN:'Access denied',NOT_FOUND:'Not found',SLOT_NOT_FOUND:'Slot not found',SLOT_OCCUPIED:'Slot has an active Booking',SLOT_ALREADY_WITHDRAWN:'Slot has already been withdrawn',SLOT_NOT_WITHDRAWABLE:'Slot can no longer be withdrawn',BOOKING_NOT_FOUND:'Booking not found',NOTIFICATION_NOT_FOUND:'Notification not found',BOOKING_NOT_CANCELLABLE:'Booking is no longer cancellable',CANCELLATION_WINDOW_CLOSED:'Cancellation window has closed',RESCHEDULE_ALREADY_USED:'Booking has already been rescheduled',RESCHEDULE_NOT_APPLICABLE:'Booking cannot be rescheduled to the selected slot',RESCHEDULE_WINDOW_CLOSED:'Reschedule window has closed',MUTATION_OUTCOME_UNKNOWN:'Cancellation outcome could not be confirmed',ORIGIN_DENIED:'Request origin denied',CSRF_DENIED:'CSRF verification failed',SESSION_BINDING_MISMATCH:'Session binding mismatch',RATE_LIMITED:'Too many login attempts',SLOT_INVALID_TIME:'Slot must start in the future',SLOT_OVERLAP:'Slot overlaps an existing offer',SLOT_UNAVAILABLE:'Selected slot is unavailable',CUSTOMER_OVERLAP:'Customer has an overlapping booking',BOOKING_NOT_ELIGIBLE:'Slot is no longer eligible for booking',TRANSACTION_RETRY_EXHAUSTED:'Transaction retry budget exhausted',BOOKING_OUTCOME_UNKNOWN:'Booking outcome could not be confirmed',SERVICE_UNAVAILABLE:'Service temporarily unavailable',INTERNAL_ERROR:'Request failed'};
 const code=(res:Response,status:number,error:string)=>res.status(status).json({error:{code:error,message:messages[error]??'Request failed'},requestId:res.locals.requestId??randomUUID()});
 const cookieName=(c:Config)=>c.production?'nuttiew_session':'nuttiew_session_dev';
 const cookieOptions=(c:Config)=>({httpOnly:true,secure:c.production,sameSite:'lax' as const,path:'/' as const});
@@ -78,7 +79,7 @@ export async function createApp(pool:Pool, config:Config) {
   if(Object.keys(req.query).length!==0)return void code(res,400,'INVALID_INPUT');
   const principal=getPrincipal(req);
   if(!principal)return void code(res,401,'UNAUTHENTICATED');
-  try{const data=await listOwnSlots(pool,principal.userId);res.setHeader('X-NutTiew-Session-Binding',sessionBinding(principal.userId,principal.sessionId));res.json({data,meta:{requestId:res.locals.requestId}});}
+  try{const { data,evaluatedAt }=await listOwnSlots(pool,principal.userId);res.setHeader('X-NutTiew-Session-Binding',sessionBinding(principal.userId,principal.sessionId));res.json({data,meta:{requestId:res.locals.requestId,evaluatedAt}});}
   catch(error){slotFailure(res,error);}
  });
  app.post('/api/v1/tutor/slots',guard,tutorRole,async(req,res)=>{
@@ -179,7 +180,7 @@ export async function createApp(pool:Pool, config:Config) {
    code(res,503,'SERVICE_UNAVAILABLE');
   }
  });
- const verifyBookingMutation = (req: Request, res: Response): { principal: { userId: string; sessionId: string }; binding: string; id: string } | null => {
+ const verifyBoundJsonMutation = (req: Request, res: Response): { principal: { userId: string; sessionId: string }; binding: string; id: string } | null => {
   if (!allowedOrigin(req, config)) { code(res, 403, 'ORIGIN_DENIED'); return null; }
   const principal = getPrincipal(req);
   if (!principal) { code(res, 401, 'UNAUTHENTICATED'); return null; }
@@ -194,8 +195,21 @@ export async function createApp(pool:Pool, config:Config) {
   }
   return { principal, binding, id };
  };
+ app.post('/api/v1/tutor/slots/:id/withdraw', guard, tutorRole, async (req,res) => {
+  const ctx = verifyBoundJsonMutation(req,res);
+  if (!ctx) return;
+  const body=req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) {
+   return void code(res,400,'INVALID_INPUT');
+  }
+  try {
+   const data=await withdrawOwnSlot(pool,ctx.principal,ctx.id,config.withdrawalHooks);
+   res.setHeader('X-NutTiew-Session-Binding',ctx.binding);
+   res.json({data,meta:{requestId:res.locals.requestId}});
+  } catch (error) { slotFailure(res,error); }
+ });
  app.post('/api/v1/customer/bookings/:id/cancel', guard, customerRole, async (req, res) => {
-  const ctx = verifyBookingMutation(req, res);
+  const ctx = verifyBoundJsonMutation(req, res);
   if (!ctx) return;
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length) {
@@ -211,7 +225,7 @@ export async function createApp(pool:Pool, config:Config) {
   }
  });
  app.post('/api/v1/tutor/bookings/:id/cancel', guard, tutorRole, async (req, res) => {
-  const ctx = verifyBookingMutation(req, res);
+  const ctx = verifyBoundJsonMutation(req, res);
   if (!ctx) return;
   const body = req.body;
   const reason = body && typeof body === 'object' && !Array.isArray(body) &&
@@ -244,7 +258,7 @@ export async function createApp(pool:Pool, config:Config) {
   }
  });
  app.post('/api/v1/customer/bookings/:id/reschedule', guard, customerRole, async (req, res) => {
-  const ctx = verifyBookingMutation(req, res);
+  const ctx = verifyBoundJsonMutation(req, res);
   if (!ctx) return;
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 1 || !Object.hasOwn(body, 'slotId') || !isValidUuid(body.slotId)) {
@@ -288,7 +302,7 @@ export async function createApp(pool:Pool, config:Config) {
   }
  });
  app.post('/api/v1/customer/notifications/:id/read', guard, customerRole, async (req, res) => {
-  const ctx = verifyBookingMutation(req, res);
+  const ctx = verifyBoundJsonMutation(req, res);
   if (!ctx) return;
   const body = req.body;
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length !== 0) {
@@ -303,6 +317,6 @@ export async function createApp(pool:Pool, config:Config) {
    code(res, 503, 'SERVICE_UNAVAILABLE');
   }
  });
- app.use((err:unknown,_req:Request,res:Response,_next:NextFunction)=>{if(res.headersSent)return;const e=err as {type?:string;status?:number};code(res,e.type==='entity.too.large'?(isTutorCancellation(_req) || _req.method==='POST' && (/^\/api\/v1\/customer\/bookings\/[^/]+\/(cancel|reschedule)\/?$/i.test(_req.path) || /^\/api\/v1\/customer\/notifications\/[^/]+\/read\/?$/i.test(_req.path))?400:413):e.status===400?400:500,e.type==='entity.too.large'?'INVALID_INPUT':e.status===400?'INVALID_INPUT':'INTERNAL_ERROR');});
+ app.use((err:unknown,_req:Request,res:Response,_next:NextFunction)=>{if(res.headersSent)return;const e=err as {type?:string;status?:number};code(res,e.type==='entity.too.large'?(isTutorCancellation(_req) || _req.method==='POST' && (/^\/api\/v1\/customer\/bookings\/[^/]+\/(cancel|reschedule)\/?$/i.test(_req.path) || /^\/api\/v1\/customer\/notifications\/[^/]+\/read\/?$/i.test(_req.path) || /^\/api\/v1\/tutor\/slots\/[^/]+\/withdraw\/?$/i.test(_req.path))?400:413):e.status===400?400:500,e.type==='entity.too.large'?'INVALID_INPUT':e.status===400?'INVALID_INPUT':'INTERNAL_ERROR');});
  return app;
 }

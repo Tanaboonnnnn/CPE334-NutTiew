@@ -85,8 +85,8 @@ The existing `GET /api/v1/tutor/slots` must extend `SlotDto` for Sprint 2:
 | `withdrawnAt` | absent | ISO string or `null` |
 | `occupancy` | `'Occupied' \| 'Unoccupied'` | unchanged |
 
-This is a Sprint 2 change to accepted Sprint 1 output and must be regression-tested. Historical withdrawn rows remain in the Tutor's own list.
+This is a Sprint 2 change to accepted Sprint 1 output and must be regression-tested. Historical withdrawn rows remain in the Tutor's own list, including withdrawals from F-S2-03 cancellation. The weekly calendar and availability counts remain Offered-only. The own-list metadata includes PostgreSQL evaluatedAt for the UI hint; the POST still checks the live clock after locks. The Sprint 1 create response retains its existing shape.
 
 ## 7. Boundary and review gate
 
-Part E only. No route, handler, guard, migration or test is implemented by Issue #114. Implementation is blocked until the shared `slot_guard_s2()` migration and the STS are reviewed.
+Part E defines the contract. The contract and STS were reviewed in PR #126 and the shared migration was reviewed in PR #128.

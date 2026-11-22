@@ -111,7 +111,7 @@ The `slot_guard_s2()` trigger independently rejects occupied withdrawal (`P0B03`
 
 - **Depends on:** accepted Slot schema; reviewed `slot_guard_s2()` (shared with F-S2-03); Sprint 2 Slot DTO extension; F-S2-05 Part E review.
 - **OD-008:** retention of withdrawn Slot history is not separately decided; no delete is authorized.
-- **OD-013:** duplicate/uncertain withdrawal protocol is open; a retry after success returns 409.
+- **OD-013:** duplicate/uncertain withdrawal protocol is open; a retry after success returns 409. The scoped behavior does not decide general idempotency: reconcile through the authenticated own-list GET before offering a retry; never auto-retry an unknown outcome. Likewise, OD-008 adds no deletion or retention change. See the reviewed #126 contract, #128 database transition, #132 reconciliation precedent, and #133 no-retention-change scope.
 - **Blocker:** `slot_guard_s1()` forbids all Slot updates, so implementation cannot start before the reviewed S2 guard migration.
 
 ## 12. Definition of Done (for the later implementation Issue)

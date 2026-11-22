@@ -1,5 +1,5 @@
 /** Read-only Bangkok calendar projection. Never changes the server's full own-list. */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 export type OfferedSlot = {
   id: string;
   startsAt: string;
@@ -7,6 +7,13 @@ export type OfferedSlot = {
   lifecycle: 'Offered';
   occupancy: 'Unoccupied' | 'Occupied';
 };
+
+export type TutorSlot = (OfferedSlot & { withdrawnAt?: null }) |
+  (Omit<OfferedSlot, 'lifecycle'> & { lifecycle:'Withdrawn'; withdrawnAt:string });
+
+export function isFutureOffer(slot:TutorSlot, evaluatedAt:string) {
+  return slot.lifecycle==='Offered' && Date.parse(slot.startsAt)>Date.parse(evaluatedAt);
+}
 
 const DAY_MS = 86_400_000;
 const MINUTE_MS = 60_000;
@@ -189,15 +196,18 @@ export function SlotCalendar({
   );
 }
 
-export function AllSlotsAgenda({ slots }: { slots: OfferedSlot[] }) {
+export function AllSlotsAgenda({slots, notice, renderAction}: {
+  slots:TutorSlot[]; notice?:string; renderAction?:(slot:TutorSlot)=>ReactNode;
+}) {
   const ordered = [...slots].sort((a, b) =>
     a.startsAt.localeCompare(b.startsAt) || a.id.localeCompare(b.id));
   return <section className="dashboard-card agenda-card" id="all-slots" aria-labelledby="agenda-title">
     <div className="agenda-header">
-      <div><p className="dashboard-kicker">ALL YOUR AVAILABILITY</p><h2 id="agenda-title">รายการ Slot ทั้งหมด</h2>
+      <div><p className="dashboard-kicker">ALL YOUR AVAILABILITY</p><h2 id="agenda-title" tabIndex={-1}>รายการ Slot ทั้งหมด</h2>
         <p className="agenda-subtitle">เรียงจากวันและเวลาเริ่มจริง • ไม่ตัดรายการนอกช่วงปฏิทิน</p></div>
       <span className="agenda-count">{ordered.length} ช่วงเวลา</span>
     </div>
+    <p role="status" className="tutor-cancel-notice">{notice}</p>
     {ordered.length === 0
       ? <div className="empty-slots-box">
           <p className="empty-slots">ยังไม่มีช่วงเวลาติวที่เปิดไว้</p>
@@ -218,8 +228,14 @@ export function AllSlotsAgenda({ slots }: { slots: OfferedSlot[] }) {
             {bangkokDayKey(start) !== bangkokDayKey(end) && <span className="agenda-next-day">สิ้นสุดในวันถัดไป</span>}
           </div>
           <div className="slot-tags">
-            <span>เปิดช่วงเวลาแล้ว</span>
-            <span className={slot.occupancy === 'Occupied' ? 'badge-occupied' : 'badge-unoccupied'} data-testid="slot-occupancy-badge">{slot.occupancy === 'Occupied' ? 'มีผู้จองแล้ว (Occupied)' : 'ว่าง (เปิดรับจอง)'}</span>
+            {slot.lifecycle==='Withdrawn' ? <>
+              <span className="badge-past" data-testid="slot-withdrawn-badge">ถอนช่วงเวลาแล้ว</span>
+              <span>ถอนเมื่อ <time dateTime={slot.withdrawnAt}>{bangkokLongDate(new Date(slot.withdrawnAt))} {bangkokClock(new Date(slot.withdrawnAt))}</time> น. (Asia/Bangkok)</span>
+            </> : <>
+              <span>เปิดช่วงเวลาแล้ว</span>
+              <span className={slot.occupancy === 'Occupied' ? 'badge-occupied' : 'badge-unoccupied'} data-testid="slot-occupancy-badge">{slot.occupancy === 'Occupied' ? 'มีผู้จองแล้ว (Occupied)' : 'ว่าง (เปิดรับจอง)'}</span>
+              {renderAction?.(slot)}
+            </>}
           </div>
         </li>;
       })}</ul>}

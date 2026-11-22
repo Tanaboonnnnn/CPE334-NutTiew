@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
-import { AllSlotsAgenda, SlotCalendar, bangkokClock, bangkokLongDate, type OfferedSlot } from './tutor-calendar.js';
+import { AllSlotsAgenda, SlotCalendar, bangkokClock, bangkokLongDate, isFutureOffer, type OfferedSlot, type TutorSlot } from './tutor-calendar.js';
 import { TutorDashboardShell } from './tutor-dashboard-shell.js';
 import { computeTutorKpis, selectNextTutorLesson, type TutorBookingSummary } from './tutor-metrics.js';
 
-type SlotList = { data: OfferedSlot[]; meta: { requestId: string } };
+type SlotList = { data: TutorSlot[]; meta: { requestId:string; evaluatedAt:string } };
 export type TutorScheduleBooking = TutorBookingSummary;
 
 
@@ -114,6 +114,39 @@ function tutorCancellationEligible(booking: TutorScheduleBooking, evaluatedAt: s
   return booking.displayStatus === 'Booked' && Date.parse(booking.startsAt) - Date.parse(evaluatedAt) >= 60 * 60_000;
 }
 
+type WithdrawDialogState = 'editing'|'unknown'|'stale';
+
+function WithdrawConfirmation({slot, state, busy, message, close, confirm, reconcile}: {
+  slot:TutorSlot; state:WithdrawDialogState; busy:boolean; message:string;
+  close:()=>void; confirm:()=>void; reconcile:()=>void;
+}) {
+  const dialog=useRef<HTMLDialogElement>(null);
+  const heading=useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(()=>{
+    const node=dialog.current;
+    if(!node)return;
+    node.showModal();
+    heading.current?.focus();
+    return ()=>{if(node.open)node.close();};
+  },[]);
+  return <dialog ref={dialog} className="tutor-cancel-dialog" aria-modal="true" aria-busy={busy}
+    aria-labelledby="withdraw-title" aria-describedby="withdraw-description"
+    onCancel={e=>{e.preventDefault();if(!busy&&state!=='unknown')close();}}>
+    <form onSubmit={e=>{e.preventDefault();if(state==='editing'&&!busy)confirm();}}>
+      <h2 id="withdraw-title" tabIndex={-1} ref={heading}>ถอนช่วงเวลาติว</h2>
+      <p>{bangkokLongDate(new Date(slot.startsAt))} · {bangkokClock(new Date(slot.startsAt))}–{bangkokClock(new Date(slot.endsAt))} น. (Asia/Bangkok)</p>
+      <p id="withdraw-description">ผู้เรียนจะจองช่วงเวลานี้ไม่ได้ ระบบจะเก็บรายการไว้เป็นประวัติ และเปิดช่วงเวลาเดิมด้วยรหัสนี้อีกไม่ได้</p>
+      <p role="status" className="tutor-cancel-message">{message}</p>
+      <div className="tutor-cancel-actions">
+        {state!=='unknown' && <button type="button" className="retry-button" onClick={close} disabled={busy}>ปิด</button>}
+        {state==='unknown' ?
+          <button type="button" className="retry-button" onClick={reconcile} disabled={busy}>ตรวจสอบรายการช่วงเวลา</button>
+          :<button type="submit" className="tutor-cancel-confirm" disabled={busy||state!=='editing'}>ยืนยันถอนช่วงเวลา</button>}
+      </div>
+    </form>
+  </dialog>;
+}
+
 export function TutorAvailability({
   onUnauthorized, accountId, sessionBinding, onLogout, logoutBusy, logoutError, canMutate,
 }: {
@@ -128,7 +161,25 @@ export function TutorAvailability({
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [calendarStart, setCalendarStart] = useState(() => bangkokDayKey(new Date()));
-  const [slots, setSlots] = useState<OfferedSlot[]>([]);
+  const [slots, setSlots] = useState<TutorSlot[]>([]);
+  const [slotsEvaluatedAt, setSlotsEvaluatedAt]=useState('');
+  const [withdrawTarget, setWithdrawTarget]=useState<TutorSlot|null>(null);
+  const [withdrawState,setWithdrawState]=useState<WithdrawDialogState>('editing');
+  const [withdrawMessage,setWithdrawMessage]=useState('');
+  const [withdrawNotice,setWithdrawNotice]=useState('');
+  const [withdrawBusy,setWithdrawBusy]=useState(false);
+  const pendingWithdrawal=useRef<AbortController|null>(null);
+  const withdrawOpener=useRef<HTMLButtonElement|null>(null);
+  const restoreWithdrawFocus=useRef(false);
+
+  useEffect(()=>{
+    if(withdrawTarget||!restoreWithdrawFocus.current)return;
+    restoreWithdrawFocus.current=false;
+    const button=withdrawOpener.current;
+    withdrawOpener.current=null;
+    if(button?.isConnected&&!button.disabled)button.focus();
+    else document.getElementById('agenda-title')?.focus();
+  },[withdrawTarget]);
   const [bookings, setBookings] = useState<TutorScheduleBooking[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [bookingsError, setBookingsError] = useState('');
@@ -169,7 +220,8 @@ export function TutorAvailability({
 
   // Derive KPI metrics & Next Booked Lesson strictly from authenticated API state.
   const nowMs = Date.now();
-  const { offeredCount, occupiedCount, slotsThisWeek } = computeTutorKpis(slots, nowMs);
+  const activeSlots=slots.filter((slot):slot is OfferedSlot=>slot.lifecycle==='Offered');
+  const { offeredCount, occupiedCount, slotsThisWeek } = computeTutorKpis(activeSlots, nowMs);
   const nextLesson = selectNextTutorLesson(bookings, nowMs);
 
   const refreshSlots = async (showLoading = false) => {
@@ -186,8 +238,10 @@ export function TutorAvailability({
       );
       if (slotsVersion.current === current) {
         setSlots(slotResult.data);
+        setSlotsEvaluatedAt(slotResult.meta.evaluatedAt);
         setListError('');
         setReconciliationPending(false);
+        return slotResult;
       }
     } catch (e) {
       if (slotsVersion.current === current) {
@@ -204,6 +258,7 @@ export function TutorAvailability({
         pendingSlotsGet.current = null;
       }
     }
+    return null;
   };
 
   const refreshBookings = async (showLoading = false) => {
@@ -255,6 +310,7 @@ export function TutorAvailability({
       pendingBookingsGet.current?.abort();
       pendingPost.current?.abort();
       cancelInFlight.current?.abort();
+      pendingWithdrawal.current?.abort();
     };
     // This component is keyed by the authenticated User; remount on identity switch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -369,19 +425,20 @@ export function TutorAvailability({
       const { csrfToken } = await apiJson<{ csrfToken: string }>('/api/v1/auth/csrf', {}, controller.signal);
       if (!canMutate() || controller.signal.aborted) return;
       posted = true;
-      const { data } = await apiJson<{data:{id:string;slotId:string;status:string}}>(
+      const { data } = await apiJson<{data:{id:string;slotId:string;status:string;cancelledAt:string}}>(
         '/api/v1/tutor/bookings/'+encodeURIComponent(cancelTarget.id)+'/cancel', {
           method:'POST', headers:{
             'Content-Type':'application/json', 'X-CSRF-Token':csrfToken,
             'X-NutTiew-Expected-Session-Binding':sessionBinding,
           }, body:JSON.stringify({reason}),
         }, controller.signal, sessionBinding);
-      if (!data || data.id !== cancelTarget.id || data.slotId !== cancelTarget.slotId || data.status !== 'Cancelled') {
+      if (!data || data.id !== cancelTarget.id || data.slotId !== cancelTarget.slotId || data.status !== 'Cancelled' || !Number.isFinite(Date.parse(data.cancelledAt))) {
         throw new Error('MUTATION_OUTCOME_UNKNOWN');
       }
       if (!canMutate() || controller.signal.aborted) return;
       setBookings(previous => previous.filter(b => b.id !== data.id));
-      setSlots(previous => previous.filter(slot => slot.id !== data.slotId));
+      setSlots(previous => previous.map(slot=>slot.id===data.slotId
+        ? {...slot,lifecycle:'Withdrawn',occupancy:'Unoccupied',withdrawnAt:data.cancelledAt}:slot));
       setCancelNotice('ยกเลิกนัดหมายและถอนช่วงเวลาเรียบร้อยแล้ว');
       dismissCancellation(true);
       await refresh();
@@ -410,6 +467,87 @@ export function TutorAvailability({
         cancelInFlight.current = null;
         setCancelBusy(false);
       }
+    }
+  };
+
+  const dismissWithdraw = () => {
+    restoreWithdrawFocus.current=true;
+    setWithdrawTarget(null);
+    setWithdrawState('editing');
+    setWithdrawMessage('');
+  };
+  const withdrawConflictMessage=(code:string)=>{
+    if(code==='SLOT_OCCUPIED')return 'ช่วงนี้มีผู้จองแล้ว ต้องยกเลิกนัดหมายก่อน';
+    if(code==='SLOT_ALREADY_WITHDRAWN')return 'ช่วงเวลานี้ถูกถอนไปแล้ว';
+    if(code==='SLOT_NOT_WITHDRAWABLE')return 'ถอนช่วงที่เริ่มแล้วหรือผ่านไปแล้วไม่ได้';
+    return 'ไม่พบช่วงเวลาที่สามารถถอนได้';
+  };
+  const reconcileWithdraw = async () => {
+    if(!withdrawTarget||withdrawBusy||!canMutate())return;
+    setWithdrawBusy(true);
+    try{
+      const read=await refreshSlots();
+      if(!read||!canMutate()){
+        setWithdrawMessage('ยังตรวจสอบรายการไม่ได้ ลองโหลดอีกครั้ง');
+        return;
+      }
+      const slot=read.data.find(s=>s.id===withdrawTarget.id);
+      if(slot?.lifecycle==='Withdrawn'){
+        setWithdrawNotice('ตรวจสอบแล้ว: ช่วงเวลานี้ถูกถอนและยังอยู่ในประวัติ');
+        dismissWithdraw();
+      }else if(!slot||!isFutureOffer(slot,read.meta.evaluatedAt)||slot.occupancy!=='Unoccupied'){
+        setWithdrawState('stale');
+        setWithdrawMessage(withdrawConflictMessage(slot?.occupancy==='Occupied'?'SLOT_OCCUPIED':'SLOT_NOT_WITHDRAWABLE'));
+      }else{
+        setWithdrawTarget(slot);
+        setWithdrawState('editing');
+        setWithdrawMessage('ช่วงเวลายังเปิดอยู่ ตรวจสอบก่อนกดยืนยันอีกครั้ง');
+      }
+    }finally{setWithdrawBusy(false);}
+  };
+  const confirmWithdraw = async () => {
+    if(!withdrawTarget||withdrawState!=='editing'||withdrawBusy||pendingWithdrawal.current||!canMutate())return;
+    const controller=new AbortController();
+    pendingWithdrawal.current=controller;
+    setWithdrawBusy(true);
+    setWithdrawMessage('');
+    let posted=false;
+    try{
+      const {csrfToken}=await apiJson<{csrfToken:string}>('/api/v1/auth/csrf',{},controller.signal);
+      if(!canMutate()||controller.signal.aborted)return;
+      posted=true;
+      const {data}=await apiJson<{data:TutorSlot}>('/api/v1/tutor/slots/'+encodeURIComponent(withdrawTarget.id)+'/withdraw',{
+        method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken,
+          'X-NutTiew-Expected-Session-Binding':sessionBinding},body:'{}',
+      },controller.signal,sessionBinding);
+      if(!data||data.id!==withdrawTarget.id||data.lifecycle!=='Withdrawn'||data.occupancy!=='Unoccupied'||
+        !Number.isFinite(Date.parse(data.withdrawnAt)))throw new Error('MUTATION_OUTCOME_UNKNOWN');
+      if(!canMutate()||controller.signal.aborted)return;
+      setSlots(previous=>previous.map(s=>s.id===data.id?data:s));
+      setWithdrawNotice('ถอนช่วงเวลาแล้ว เก็บรายการไว้ในประวัติ');
+      dismissWithdraw();
+      await refreshSlots();
+    }catch(e){
+      if(!canMutate()||controller.signal.aborted)return;
+      const code=e instanceof Error?e.message:'';
+      if(accessExpired(e)||code==='SESSION_BINDING_MISMATCH'){
+        setSlots([]);
+        setBookings([]);
+        dismissWithdraw();
+        onUnauthorized();
+      }else if(posted&&(isUncertainWrite(e)||code==='MUTATION_OUTCOME_UNKNOWN')){
+        setWithdrawState('unknown');
+        setWithdrawMessage('ยังยืนยันผลไม่ได้ กรุณาตรวจสอบรายการช่วงเวลาก่อนลองอีกครั้ง');
+      }else if(['SLOT_OCCUPIED','SLOT_ALREADY_WITHDRAWN','SLOT_NOT_WITHDRAWABLE','SLOT_NOT_FOUND'].includes(code)){
+        setWithdrawState('stale');
+        setWithdrawMessage(withdrawConflictMessage(code));
+        await refreshSlots();
+      }else{
+        setWithdrawMessage('ถอนช่วงเวลาไม่สำเร็จ กรุณาลองอีกครั้ง');
+      }
+    }finally{
+      pendingWithdrawal.current=null;
+      if(!controller.signal.aborted)setWithdrawBusy(false);
     }
   };
 
@@ -484,7 +622,7 @@ export function TutorAvailability({
         ? <div className="dashboard-card loading-agenda" role="status">
           {loading ? 'กำลังโหลดปฏิทินเวลาติว…' : 'ยังไม่สามารถแสดงปฏิทินได้ กรุณาโหลดรายการเวลาติวอีกครั้ง'}
         </div>
-        : <SlotCalendar slots={slots} startDay={calendarStart} onChangeDay={setCalendarStart}/>}
+        : <SlotCalendar slots={activeSlots} startDay={calendarStart} onChangeDay={setCalendarStart}/>}
       <section className="dashboard-card create-card" aria-labelledby="create-slot-heading" id="create-slot">
         <div className="create-card-heading">
           <p className="dashboard-kicker">NEW AVAILABILITY</p>
@@ -527,7 +665,22 @@ export function TutorAvailability({
         <p className="error">ไม่สามารถโหลดรายการเวลาติวได้ กรุณาลองใหม่</p>
         <button className="retry-button" type="button" onClick={() => void refreshSlots(true)}>โหลดอีกครั้ง</button>
       </div>
-      : <AllSlotsAgenda slots={slots}/>}
+      : <AllSlotsAgenda slots={slots} notice={withdrawNotice} renderAction={slot=>{
+        if(!isFutureOffer(slot,slotsEvaluatedAt))return null;
+        const occupied=slot.occupancy==='Occupied';
+        return <>
+          <button type="button" className="retry-button" data-testid="withdraw-slot" disabled={occupied||creating||!canMutate()}
+            onClick={e=>{
+              if(!canMutate()||creating)return;
+              withdrawOpener.current=e.currentTarget;
+              setWithdrawNotice('');
+              setWithdrawTarget(slot);
+            }}>ถอนช่วงเวลา</button>
+          {occupied&&<small>มีผู้จองแล้ว ต้องยกเลิกนัดหมายก่อน</small>}
+        </>;
+      }}/>}
+    {withdrawTarget&&<WithdrawConfirmation slot={withdrawTarget} state={withdrawState} busy={withdrawBusy}
+      message={withdrawMessage} close={dismissWithdraw} confirm={()=>void confirmWithdraw()} reconcile={()=>void reconcileWithdraw()}/>}
 
     <section className="dashboard-card agenda-card" id="tutor-schedule-bookings-section" aria-labelledby="schedule-bookings-title">
       <div className="agenda-header">
