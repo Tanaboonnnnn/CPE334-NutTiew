@@ -80,25 +80,55 @@ async function seedBooking(params: {
 }
 
 /**
+ * Fail-closed guard: refuse any fixture INSERT or historical trigger DDL unless
+ * DATABASE_URL points to a loopback disposable test/CI database (*_ci or *_test).
+ */
+async function assertDisposableTestDatabase(db: Pick<Pool, 'query'>): Promise<void> {
+  const rawUrl = process.env.DATABASE_URL;
+  if (!rawUrl) throw new Error('Refusing summary test fixtures: DATABASE_URL is not set');
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error('Refusing summary test fixtures: invalid DATABASE_URL');
+  }
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
+    throw new Error(`Refusing summary test fixtures: unsupported DATABASE_URL protocol "${parsed.protocol}"`);
+  }
+  const host = parsed.hostname.toLowerCase();
+  const isLoopback = host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]';
+  const dbName = parsed.pathname.replace(/^\/+/, '');
+  if (!isLoopback || !/(_ci|_test)$/i.test(dbName)) {
+    throw new Error(`Refusing summary test fixtures against non-disposable database "${dbName}" on "${host}"`);
+  }
+  const res = await db.query<{ db: string }>('SELECT current_database() AS db');
+  const liveDb = res.rows[0]?.db ?? '';
+  if (liveDb !== dbName || !/(_ci|_test)$/i.test(liveDb)) {
+    throw new Error(`Refusing summary test fixtures: live database "${liveDb}" is not an allowed disposable test DB`);
+  }
+}
+
+/**
  * Seed a genuinely past-ended historical Slot + Booking using the disposable
  * test DB owner connection for real-clock OS-process restart verification (SUM-07).
+ * Keeps slot_s2_row_guard enabled; toggles only booking_s2_row_guard inside one
+ * transaction after the fail-closed disposable-DB preflight.
  */
 async function seedHistoricalPastBooking(tutorId: string, customerId: string, startsAtIso: string, endsAtIso: string): Promise<string> {
   const client = await ownerPool.connect();
   try {
+    await assertDisposableTestDatabase(client);
     await client.query('BEGIN');
-    await client.query('ALTER TABLE public."Slot" DISABLE TRIGGER slot_s2_row_guard');
-    await client.query('ALTER TABLE public."Booking" DISABLE TRIGGER booking_s2_row_guard');
     const slotRes = await client.query<{ id: string }>(
       'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2::timestamptz,$3::timestamptz,\'Offered\') RETURNING "id"',
       [tutorId, startsAtIso, endsAtIso],
     );
+    await client.query('ALTER TABLE public."Booking" DISABLE TRIGGER booking_s2_row_guard');
     const bookingRes = await client.query<{ id: string }>(
       'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3::timestamptz,$4::timestamptz,\'Booked\') RETURNING "id"',
       [customerId, slotRes.rows[0].id, startsAtIso, endsAtIso],
     );
     await client.query('ALTER TABLE public."Booking" ENABLE TRIGGER booking_s2_row_guard');
-    await client.query('ALTER TABLE public."Slot" ENABLE TRIGGER slot_s2_row_guard');
     await client.query('COMMIT');
     return bookingRes.rows[0].id;
   } catch (err) {
@@ -179,6 +209,7 @@ async function stopServer() {
 }
 
 beforeAll(async () => {
+  await assertDisposableTestDatabase(ownerPool);
   app = await createApp(runtimePool, {
     origin,
     csrfKey: randomBytes(32),

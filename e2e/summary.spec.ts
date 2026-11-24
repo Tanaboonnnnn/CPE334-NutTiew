@@ -21,7 +21,33 @@ const yesterdayBangkok = new Date(Date.now() - 86_400_000 + 7 * 3_600_000).toISO
 const pastStart = new Date(yesterdayBangkok + 'T14:00:00.000+07:00');
 const pastEnd = new Date(pastStart.getTime() + 3_600_000);
 
+async function assertDisposableTestDatabase(db: Pick<Pool, 'query'>): Promise<void> {
+  const rawUrl = process.env.DATABASE_URL;
+  if (!rawUrl) throw new Error('Refusing E2E summary fixtures: DATABASE_URL is not set');
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error('Refusing E2E summary fixtures: invalid DATABASE_URL');
+  }
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
+    throw new Error(`Refusing E2E summary fixtures: unsupported DATABASE_URL protocol "${parsed.protocol}"`);
+  }
+  const host = parsed.hostname.toLowerCase();
+  const isLoopback = host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]';
+  const dbName = parsed.pathname.replace(/^\/+/, '');
+  if (!isLoopback || !/(_ci|_test)$/i.test(dbName)) {
+    throw new Error(`Refusing E2E summary fixtures against non-disposable database "${dbName}" on "${host}"`);
+  }
+  const res = await db.query<{ db: string }>('SELECT current_database() AS db');
+  const liveDb = res.rows[0]?.db ?? '';
+  if (liveDb !== dbName || !/(_ci|_test)$/i.test(liveDb)) {
+    throw new Error(`Refusing E2E summary fixtures: live database "${liveDb}" is not an allowed disposable test DB`);
+  }
+}
+
 test.beforeAll(async () => {
+  await assertDisposableTestDatabase(pool);
   const hash = await argon2.hash(password);
   const users = await pool.query<{ id: string; role: string; email: string }>(
     'INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3),($4,$5,$6),($7,$8,$9) RETURNING "id","role","email"',
@@ -32,19 +58,18 @@ test.beforeAll(async () => {
 
   const client = await pool.connect();
   try {
+    await assertDisposableTestDatabase(client);
     await client.query('BEGIN');
-    await client.query('ALTER TABLE public."Slot" DISABLE TRIGGER slot_s2_row_guard');
-    await client.query('ALTER TABLE public."Booking" DISABLE TRIGGER booking_s2_row_guard');
     const slot = await client.query<{ id: string }>(
       'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2,$3,\'Offered\') RETURNING "id"',
       [tutorId, pastStart, pastEnd],
     );
+    await client.query('ALTER TABLE public."Booking" DISABLE TRIGGER booking_s2_row_guard');
     const booking = await client.query<{ id: string }>(
       'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\') RETURNING "id"',
       [customerId, slot.rows[0].id, pastStart, pastEnd],
     );
     await client.query('ALTER TABLE public."Booking" ENABLE TRIGGER booking_s2_row_guard');
-    await client.query('ALTER TABLE public."Slot" ENABLE TRIGGER slot_s2_row_guard');
     await client.query('COMMIT');
     pastBookingId = booking.rows[0].id;
   } catch (err) {
