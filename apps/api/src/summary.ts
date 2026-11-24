@@ -1,19 +1,31 @@
 import type { Pool } from 'pg';
 
-export type TutorSummaryPastBookingDto = {
+type TutorSummaryBookingFields = {
   id: string;
   slotId: string;
   customerRef: string;
   startsAt: string;
   endsAt: string;
+  createdAt: string;
+};
+
+export type TutorSummaryPastBookingDto = TutorSummaryBookingFields & {
   status: 'Booked';
   displayStatus: 'Past';
-  createdAt: string;
+};
+
+export type TutorSummaryCancelledDto = TutorSummaryBookingFields & {
+  status: 'Cancelled';
+  displayStatus: 'Cancelled';
+  cancellationActor: 'Customer' | 'Tutor';
+  cancelledAt: string;
 };
 
 export type TutorSummaryDto = {
   pastBookedCount: number;
   pastBooked: TutorSummaryPastBookingDto[];
+  cancelledCount: number;
+  cancelled: TutorSummaryCancelledDto[];
 };
 
 export type GetTutorSummaryResult = {
@@ -30,10 +42,12 @@ type TutorSummaryRow = {
   endsAt: string | null;
   status: string | null;
   createdAt: string | null;
+  cancellationActor: 'Customer' | 'Tutor' | null;
+  cancelledAt: string | null;
 };
 
 /**
- * F-S3-01 (D2 Past Booked increment) — OD-009 single-snapshot, row-preserving
+ * F-S3-01 (Past Booked and Cancelled) — OD-009 single-snapshot, row-preserving
  * read-only PostgreSQL projection anchored on statement_timestamp().
  */
 export async function getTutorPastSummary(
@@ -55,24 +69,27 @@ export async function getTutorPastSummary(
        to_char(b."startsAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt",
        to_char(b."endsAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
        b."status",
-       to_char(b."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt"
+       to_char(b."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
+       b."cancellationActor",
+       to_char(b."cancelledAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "cancelledAt"
      FROM eval_snapshot AS s_clock
      LEFT JOIN (
-       SELECT b.*
-       FROM "Booking" AS b
-       INNER JOIN "Slot" AS s
-         ON s."id" = b."currentSlotId"
-       WHERE s."tutorId" = $1::uuid
-         AND b."status" = 'Booked'
-     ) AS b
-       ON b."endsAt" <= s_clock.evaluated_at
-     ORDER BY b."endsAt" DESC NULLS LAST, b."id" DESC NULLS LAST;`,
+       "Booking" AS b
+       INNER JOIN "Slot" AS s ON s."id" = b."currentSlotId"
+     ) ON s."tutorId" = $1::uuid
+       AND (b."status" = 'Cancelled'
+         OR (b."status" = 'Booked' AND b."endsAt" <= s_clock.evaluated_at))
+     ORDER BY
+       CASE WHEN b."status" = 'Booked' THEN b."endsAt" END DESC NULLS LAST,
+       CASE WHEN b."status" = 'Cancelled' THEN b."cancelledAt" END DESC NULLS LAST,
+       b."id" DESC NULLS LAST;`,
     [tutorId, clockParam],
   );
 
   const evaluatedAt = res.rows[0].evaluatedAt;
 
   const pastBooked: TutorSummaryPastBookingDto[] = [];
+  const cancelled: TutorSummaryCancelledDto[] = [];
   for (const row of res.rows) {
     if (
       row.id === null ||
@@ -84,22 +101,33 @@ export async function getTutorPastSummary(
     ) {
       continue;
     }
-    pastBooked.push({
+    const item: TutorSummaryBookingFields = {
       id: row.id,
       slotId: row.slotId,
       customerRef: 'CUST-' + row.customerId.slice(0, 8),
       startsAt: row.startsAt,
       endsAt: row.endsAt,
-      status: 'Booked',
-      displayStatus: 'Past',
       createdAt: row.createdAt,
-    });
+    };
+    if (row.status === 'Booked') {
+      pastBooked.push({ ...item, status: 'Booked', displayStatus: 'Past' });
+    } else if (row.status === 'Cancelled' && row.cancellationActor !== null && row.cancelledAt !== null) {
+      cancelled.push({
+        ...item,
+        status: 'Cancelled',
+        displayStatus: 'Cancelled',
+        cancellationActor: row.cancellationActor,
+        cancelledAt: row.cancelledAt,
+      });
+    }
   }
 
   return {
     data: {
       pastBookedCount: pastBooked.length,
       pastBooked,
+      cancelledCount: cancelled.length,
+      cancelled,
     },
     evaluatedAt,
   };

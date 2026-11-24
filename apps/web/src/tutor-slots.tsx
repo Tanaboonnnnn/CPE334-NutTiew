@@ -15,8 +15,19 @@ type TutorSummaryPastBooking = {
   displayStatus: 'Past';
   createdAt: string;
 };
+type TutorSummaryCancelled = Omit<TutorSummaryPastBooking, 'status' | 'displayStatus'> & {
+  status: 'Cancelled';
+  displayStatus: 'Cancelled';
+  cancellationActor: 'Customer' | 'Tutor';
+  cancelledAt: string;
+};
 type TutorSummaryPayload = {
-  data: { pastBookedCount: number; pastBooked: TutorSummaryPastBooking[] };
+  data: {
+    pastBookedCount: number;
+    pastBooked: TutorSummaryPastBooking[];
+    cancelledCount: number;
+    cancelled: TutorSummaryCancelled[];
+  };
   meta: { requestId: string; evaluatedAt: string };
 };
 
@@ -198,7 +209,7 @@ export function TutorAvailability({
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [bookingsError, setBookingsError] = useState('');
   const [bookingsEvaluatedAt, setBookingsEvaluatedAt] = useState('');
-  const [summary, setSummary] = useState<{ pastBookedCount: number; pastBooked: TutorSummaryPastBooking[] } | null>(null);
+  const [summary, setSummary] = useState<TutorSummaryPayload['data'] | null>(null);
   const [summaryEvaluatedAt, setSummaryEvaluatedAt] = useState('');
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [summaryError, setSummaryError] = useState('');
@@ -807,7 +818,7 @@ export function TutorAvailability({
         <div>
           <p className="dashboard-kicker">APPOINTMENT SUMMARY</p>
           <h2 id="tutor-summary-title">สรุปนัดหมายผู้สอน</h2>
-          <p className="agenda-subtitle">สรุปจำนวนและรายการนัดหมายที่ผ่านมาแล้วจากฐานข้อมูลจริง (Asia/Bangkok)</p>
+          <p className="agenda-subtitle">สรุปนัดหมายที่ผ่านมาแล้วและนัดหมายที่ยกเลิก (Asia/Bangkok)</p>
         </div>
         <button
           type="button"
@@ -838,7 +849,7 @@ export function TutorAvailability({
               </p>
             )}
             <p style={{ margin: '0 0 10px 0', fontSize: '12.5px', color: '#58697f' }}>
-              หมายเหตุ: หมวดนัดหมายที่กำลังจะมาถึง (Upcoming Booked) และนัดหมายที่ยกเลิกแล้ว (Cancelled) อยู่ในแผนรอบส่ง Final
+              หมายเหตุ: นัดหมายที่กำลังจะมาถึงและนัดหมายที่กำลังเรียนยังไม่รวมในหน้านี้
             </p>
             {summary.pastBooked.length === 0 ? (
               <p className="empty-slots" data-testid="tutor-summary-empty">ยังไม่มีนัดหมายที่ผ่านมาแล้ว</p>
@@ -869,6 +880,46 @@ export function TutorAvailability({
                 })}
               </ul>
             )}
+            <section aria-labelledby="tutor-summary-cancelled-title">
+              <h3 id="tutor-summary-cancelled-title" data-testid="tutor-summary-cancelled-count">
+                นัดหมายที่ยกเลิกแล้ว (Cancelled): {summary.cancelledCount} รายการ
+              </h3>
+              {summary.cancelled.length === 0 ? (
+                <p className="empty-slots" data-testid="tutor-summary-cancelled-empty">
+                  ยังไม่มีนัดหมายที่ถูกยกเลิก
+                </p>
+              ) : (
+                <ul className="slot-list" aria-label="รายการนัดหมายที่ยกเลิกแล้ว">
+                  {summary.cancelled.map(item => {
+                    const start = new Date(item.startsAt);
+                    const end = new Date(item.endsAt);
+                    const cancelledAt = new Date(item.cancelledAt);
+                    return (
+                      <li key={item.id} className="slot-item customer-booking-item">
+                        <div className="agenda-row-main">
+                          <div className="slot-item-date">{bangkokLongDate(start)}</div>
+                          <div className="slot-item-hours">
+                            <time dateTime={item.startsAt}>{bangkokClock(start)}</time>
+                            <span aria-hidden="true">–</span>
+                            <time dateTime={item.endsAt}>{bangkokClock(end)}</time> น. (Asia/Bangkok)
+                          </div>
+                          <div>ผู้จอง: <strong>{item.customerRef}</strong> • รหัสการจอง: <code>{item.id}</code></div>
+                          <div>
+                            {item.cancellationActor === 'Customer' ? 'ผู้เรียนยกเลิก' : 'ผู้สอนยกเลิก'} ณ{' '}
+                            <time dateTime={item.cancelledAt} data-testid="tutor-summary-cancelled-at">
+                              {bangkokLongDate(cancelledAt)} {bangkokClock(cancelledAt)} น. (Asia/Bangkok)
+                            </time>
+                          </div>
+                        </div>
+                        <div className="slot-tags">
+                          <span>ยกเลิกแล้ว (Cancelled)</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
           </>
         ) : null}
       </div>

@@ -188,3 +188,81 @@ test.describe('F-S3-01 SUM-08 — Tutor Past Booked Summary E2E (non-Bangkok bro
     await expect(page.getByTestId('tutor-summary-past-item').first()).toContainText(pastBookingId);
   });
 });
+
+test.describe('F-S3-01 SUM-10 — #147 Cancelled slice', () => {
+  test.use({ timezoneId: 'America/Los_Angeles' });
+
+  test('renders real customer and tutor cancellations, Bangkok time, privacy, and reload persistence', async ({ page }) => {
+    const day = new Date(Date.now() + 14 * 86_400_000 + 7 * 3_600_000).toISOString().slice(0, 10);
+    const book = async (hour: string) => {
+      const start = new Date(day + 'T' + hour + ':00:00.000+07:00');
+      const end = new Date(start.getTime() + 3_600_000);
+      const slot = await pool.query<{ id: string }>(
+        'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2,$3,\'Offered\') RETURNING "id"',
+        [tutorId, start, end],
+      );
+      const booking = await pool.query<{ id: string }>(
+        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\') RETURNING "id"',
+        [customerId, slot.rows[0].id, start, end],
+      );
+      return booking.rows[0].id;
+    };
+    const customerBooking = await book('14');
+    const tutorBooking = await book('16');
+    const privateReason = 'PRIVATE_E2E_CANCELLATION_147';
+    const cancel = async (actor: 'customer' | 'tutor', id: string, data: object) => {
+      const me = await page.request.get('/api/v1/auth/me');
+      const csrf = await page.request.get('/api/v1/auth/csrf');
+      expect(me.status()).toBe(200);
+      expect(csrf.status()).toBe(200);
+      const result = await page.request.post('/api/v1/' + actor + '/bookings/' + id + '/cancel', {
+        headers: {
+          Origin: new URL(page.url()).origin,
+          'X-CSRF-Token': (await csrf.json()).csrfToken,
+          'X-NutTiew-Expected-Session-Binding': me.headers()['x-nuttiew-session-binding'],
+        },
+        data,
+      });
+      expect(result.status()).toBe(200);
+      return (await result.json()).data.cancelledAt as string;
+    };
+
+    await signIn(page, tutorEmptyEmail);
+    const section = page.getByTestId('tutor-appointment-summary');
+    await expect(section.getByTestId('tutor-summary-cancelled-count')).toContainText('0 รายการ');
+    await expect(section.getByTestId('tutor-summary-cancelled-empty')).toHaveText('ยังไม่มีนัดหมายที่ถูกยกเลิก');
+    await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+
+    await signIn(page, customerEmail);
+    const customerTime = await cancel('customer', customerBooking, {});
+    await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+
+    await signIn(page, tutorEmail);
+    const tutorTime = await cancel('tutor', tutorBooking, { reason: privateReason });
+    await page.reload();
+    await expect(section.getByRole('heading', { name: 'นัดหมายที่ยกเลิกแล้ว (Cancelled): 2 รายการ' })).toBeVisible();
+    const rows = section.getByRole('list', { name: 'รายการนัดหมายที่ยกเลิกแล้ว' }).getByRole('listitem');
+    await expect(rows).toHaveCount(2);
+    const bangkokTime = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    });
+    for (const [index, id, actorLabel, start, timestamp] of [
+      [0, tutorBooking, 'ผู้สอนยกเลิก', '16:00', tutorTime],
+      [1, customerBooking, 'ผู้เรียนยกเลิก', '14:00', customerTime],
+    ] as const) {
+      const row = rows.nth(index);
+      await expect(row).toContainText(id);
+      await expect(row).toContainText(actorLabel);
+      await expect(row).toContainText(start);
+      await expect(row).toContainText('Asia/Bangkok');
+      const cancelledAt = row.getByTestId('tutor-summary-cancelled-at');
+      await expect(cancelledAt).toHaveAttribute('datetime', timestamp);
+      await expect(cancelledAt).toContainText(bangkokTime.format(new Date(timestamp)));
+    }
+    await expect(section).not.toContainText(privateReason);
+    await expect(section).not.toContainText(customerEmail);
+    await expect(section).not.toContainText(customerId);
+  });
+});
