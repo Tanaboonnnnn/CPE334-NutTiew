@@ -1,6 +1,6 @@
-# F-S3-01 Part E readiness gate (S3-00 / #144)
+# F-S3-01 Part E readiness gate (S3-00 / #144 & OD-006 / #146)
 
-**Verdict: D2 PART E AND OD-009 CONFIRMED.** The design supports Past Booked without a migration. [#145](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/145) can begin implementation once this decision record is merged into `sprint3` and #144 is closed. OD-006 remains open for the affected Final classification only.
+**Verdict: D2 PAST BOOKED DELIVERED (`#145` / PR `#156`); FINAL `#146` REMAINS GATED ON EXPLICIT `OD-006` DISPOSITION & PART E REVIEW.** The D2 Past Booked increment was merged into `sprint3@175b88d9` with `SUM-01..08` verified (`NutTiew CI` Run `45362315140`). For [#146](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/146), `OD-006` **Option 1** is **PROPOSED** (not approved), and `#146` runtime code remains blocked until all four prerequisites in `## OD-006` below are satisfied.
 
 ## Verified baseline and workflow
 
@@ -26,13 +26,25 @@
 
 ## OD-006 — In-progress booking classification
 
-**PROPOSED OPTION 1 BY `@Chxtamos` (Product Owner role, 24 Nov 2026 ICT) — AWAITING `@Tanaboonnnnn` TEAMMATE APPROVAL ON THIS PR BEFORE `#146` IMPLEMENTATION.** Consistent with Q01–Q32 and Sprint 2 `OD-014` ([PR #131](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/131)), `@Chxtamos` proposes adopting **Option 1** against `sprint3@175b88d985fe2c63028304610e57b1f4ccd47e3d` for [#146](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/146) (explicitly not claiming separate instructor/TA sign-off):
+**STATUS: PROPOSED OPTION 1 BY `@Chxtamos` (24 Nov 2026 ICT) — NOT YET APPROVED; `#146` RUNTIME CODE REMAINS GATED.**
 
-- `upcomingBooked`: `status = 'Booked' AND startsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`, `upcomingBookedCount === upcomingBooked.length`, `displayStatus: 'Booked'`.
-- `inProgressBooked`: `status = 'Booked' AND startsAt <= evaluatedAt AND endsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`, `inProgressBookedCount === inProgressBooked.length`, `displayStatus: 'Booked'` (never labeled `Past` or `Completed`; zero new persisted Booking state or migration; rendered explicitly in the Tutor UI via a dedicated in-progress display/count).
-- `pastBooked`: unchanged (`status = 'Booked' AND endsAt <= evaluatedAt`, ordered `endsAt DESC, id DESC`, `displayStatus: 'Past'`; already implemented and merged in [#145](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/145) / [PR #156](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/156)).
+1. **Decision authority per [SRS §2.1](../../srs.md#21-roles-and-boundaries) and [SRS §13](../../srs.md#13-open-decisions-and-approval-gates):**
+   - `SRS §2.1` assigns unresolved policy decisions to **Instructor / product owner**, and `SRS §13` explicitly states for `OD-006`: *"Stakeholder clarifies; peer review before S3 Summary SDS/STS."*
+   - Sprint 2 `OD-014` ([PR #131](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/131)) is a team engineering/validation-policy precedent (`meaningful` Tutor cancellation reason) and does **not** automatically grant team-only authority to resolve the `OD-006` stakeholder policy gate.
+   - Accordingly, `OD-006` remains **`PROPOSED`** (never marked approved merely by teammate PR review) until either:
+     - **(a)** an explicit Instructor/TA stakeholder disposition is recorded, **or**
+     - **(b)** documented evidence of delegated team product-owner authority for `OD-006` **plus** explicit written agreement from both students (`@Chxtamos` and `@Tanaboonnnnn`) is recorded — without inventing an unrequired formal instructor-signature gate beyond `SRS §2.1`/`§13`.
 
-**Gate preserved:** Final `#146` code and `SUM-09`/`SUM-10` remain gated until `@Tanaboonnnnn` reviews and approves this PR and it merges into `sprint3`.
+2. **Proposed Option 1 boundaries (`sprint3@175b88d985fe2c63028304610e57b1f4ccd47e3d`):**
+   - `upcomingBooked`: `status = 'Booked' AND startsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`, `upcomingBookedCount === upcomingBooked.length`, `displayStatus: 'Booked'`.
+   - `inProgressBooked`: `status = 'Booked' AND startsAt <= evaluatedAt AND endsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`, `inProgressBookedCount === inProgressBooked.length`, `displayStatus: 'Booked'` (never labeled `Past` or `Completed`; zero new persisted Booking state or migration; rendered explicitly in the Tutor UI via dedicated in-progress count and matching list).
+   - `pastBooked`: unchanged (`status = 'Booked' AND endsAt <= evaluatedAt`, ordered `endsAt DESC, id DESC`, `displayStatus: 'Past'`; implemented and merged in [#145](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/145) / [PR #156](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/156)).
+
+3. **Four mandatory gates before starting `#146` runtime code (Issue `#146` AC #1):**
+   1. Explicit stakeholder or verified authorized product-owner `OD-006` disposition recorded (per §1 above).
+   2. Aligned Part E contracts reflecting that decision across [SDS](specification.md), [API](api-spec.md), [Data](data-spec.md), [UI](ui-spec.md), [STS](tests.md) (explicitly specifying `inProgressBooked` count/list & microsecond start/end boundaries in `SUM-09`/`SUM-10`), [readiness-gate](readiness-gate.md), and [SRS §13](../../srs.md#13-open-decisions-and-approval-gates).
+   3. Substantive **actual human teammate peer review** on the Part E contract & STS update (distinct from AI-assisted review).
+   4. Merge of the approved contract/decision PR into `sprint3` (tracking the manual GitHub Development link to `#146`).
 
 ## OD-009 — Summary query policy
 
@@ -45,5 +57,5 @@
 
 ## Human review and handoff
 
-- PR #136 records an AI-assisted approval on `8885747`, not personal sign-off. The later [confirmation on #144](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/144#issuecomment-7125398026) records @Chxtamos’s personal review of the SDS, API, UI, Data, STS and readiness record for D2 Past Booked on `sprint3@fea996d48c7edbbe260a2ce2e9e69ab79537ce0d`.
-- After this record is merged and #144 is closed, #145 can implement the D2 Past Booked increment. #146 and affected Final classification still require the stakeholder’s documented OD-006 decision. No application code, migrations, cloud changes or release are part of #144; SUM-01..10 are **NOT RUN**.
+- **D2 baseline completed:** PR `#136` AI-assisted review was superseded by `@Chxtamos`'s [personal confirmation on #144](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/144#issuecomment-7125398026) (`sprint3@fea996d4`). Issue `#144` was closed, and [#145](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/145) (`D2 Past Booked`) was implemented, verified (`SUM-01..08`, [CI Run 45362315140](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45362315140)), reviewed in [PR #156](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/156), and merged into `sprint3@175b88d9`.
+- **Current `#146` handoff state:** PR `#157` updates the Part E contract docs (`SDS`, `API`, `Data`, `UI`, `STS`, `readiness-gate`, `SRS §13`) with the **Option 1** proposal and its authority/multi-step gate. **No `#146` runtime code, migration, or `SUM-09`/`SUM-10` execution is claimed; `SUM-09` and `SUM-10` remain `PLANNED / NOT RUN`** until all four `OD-006` gates above are satisfied and verified.

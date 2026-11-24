@@ -1,6 +1,6 @@
 # F-S3-01 — Tutor Appointment Summary HTTP/API Contract (Part E)
 
-> **Proposed API contract for independent review; not implemented or runtime-tested.** See [Feature SDS](specification.md), [UI](ui-spec.md), [data](data-spec.md), and [STS](tests.md).
+> **D2 Past Booked implemented (`#145` / PR `#156`); Final extension (`#146` / `#147`) remains planned and gated on `OD-006` disposition and human peer review.** See [Feature SDS](specification.md), [UI](ui-spec.md), [data](data-spec.md), [STS](tests.md), and [readiness-gate](readiness-gate.md#od-006--in-progress-booking-classification).
 
 ## 1. Transport and authorization
 
@@ -42,12 +42,12 @@ For the Deliverable 2 increment, the endpoint evaluates and returns the **Past B
 }
 ```
 
-### 2.2 Full Final response extension (mandatory by 30 Nov / Final 13 Dec; `inProgressBooked` gated on stakeholder `OD-006`)
+### 2.2 Full Final response extension (mandatory by 30 Nov / Final 13 Dec; `inProgressBooked` Option 1 PROPOSED — gated on `OD-006`)
 
-When Upcoming Booked and Cancelled are implemented for Final, `data` extends additively under the **same** single-statement `meta.evaluatedAt` snapshot without breaking D2 consumers:
+When Upcoming Booked and Cancelled are implemented for Final (gated on explicit `OD-006` stakeholder/authorized product-owner disposition, Part E contract sync, actual human peer review, and `sprint3` merge before `#146` code), `data` extends additively under the **same** single-statement `meta.evaluatedAt` snapshot without breaking D2 consumers. Under **proposed `OD-006` Option 1**, the three `Booked` intervals are mutually disjoint and cover every `status = 'Booked'` row with zero new persisted state (`count === list.length` for every category):
 
 - `upcomingBookedCount: number`, `upcomingBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Booked'`, `startsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`)
-- `inProgressBookedCount: number`, `inProgressBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Booked'`, `startsAt <= evaluatedAt < endsAt`, ordered `startsAt ASC, id ASC`; **proposed `OD-006` contract pending stakeholder confirmation**)
+- `inProgressBookedCount: number`, `inProgressBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Booked'`, `startsAt <= evaluatedAt AND endsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`; **PROPOSED `OD-006` Option 1 in PR `#157` — gated on explicit `OD-006` disposition and actual human peer review before `#146` code**)
 - `pastBookedCount: number`, `pastBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Past'`, `endsAt <= evaluatedAt`, ordered `endsAt DESC, id DESC`)
 - `cancelledCount: number`, `cancelled: TutorSummaryCancelledDto[]` (`status: 'Cancelled'`, `displayStatus: 'Cancelled'`, ordered `cancelledAt DESC, id DESC`)
 
