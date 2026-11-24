@@ -200,9 +200,11 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     const tutorAEmail = `sum01-ta-${marker}@example.test`;
     const tutorBEmail = `sum01-tb-${marker}@example.test`;
     const custEmail = `sum01-c-${marker}@example.test`;
+    const custBEmail = `sum01-cb-${marker}@example.test`;
     const tutorAId = await createUser(tutorAEmail, 'Tutor');
     const tutorBId = await createUser(tutorBEmail, 'Tutor');
     const custId = await createUser(custEmail, 'Customer');
+    const custBId = await createUser(custBEmail, 'Customer');
 
     const slotPastOld = await createSlot(tutorAId, offsetIso(1, 0), offsetIso(1, 1));
     const slotPastNew = await createSlot(tutorAId, offsetIso(2, 0), offsetIso(2, 1));
@@ -213,8 +215,23 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     const bPastOld = await seedBooking({ customerId: custId, slotId: slotPastOld, startsAtIso: offsetIso(1, 0), endsAtIso: offsetIso(1, 1), status: 'Booked' });
     const bPastNew = await seedBooking({ customerId: custId, slotId: slotPastNew, startsAtIso: offsetIso(2, 0), endsAtIso: offsetIso(2, 1), status: 'Booked' });
     await seedBooking({ customerId: custId, slotId: slotUpcoming, startsAtIso: offsetIso(6, 0), endsAtIso: offsetIso(6, 1), status: 'Booked' });
-    await seedBooking({ customerId: custId, slotId: slotCancelled, startsAtIso: offsetIso(0, 0), endsAtIso: offsetIso(0, 1), status: 'Cancelled', cancellationActor: 'Customer', cancelledAtIso: new Date().toISOString() });
-    await seedBooking({ customerId: custId, slotId: slotTutorB, startsAtIso: offsetIso(2, 0), endsAtIso: offsetIso(2, 1), status: 'Booked' });
+    const bCancelled = await seedBooking({ customerId: custId, slotId: slotCancelled, startsAtIso: offsetIso(0, 0), endsAtIso: offsetIso(0, 1), status: 'Booked' });
+    await seedBooking({ customerId: custBId, slotId: slotTutorB, startsAtIso: offsetIso(2, 0), endsAtIso: offsetIso(2, 1), status: 'Booked' });
+
+    // Cancel bCancelled via the real Sprint 2 Customer cancellation endpoint
+    const authCust = await loginCookieAndBinding(app, custEmail);
+    const csrfRes = await request(app).get('/api/v1/auth/csrf').set('Cookie', authCust.cookie);
+    expect(csrfRes.status).toBe(200);
+    const cancelRes = await request(app)
+      .post(`/api/v1/customer/bookings/${bCancelled}/cancel`)
+      .set({
+        ...headers,
+        Cookie: authCust.cookie,
+        'X-CSRF-Token': csrfRes.body.csrfToken as string,
+        'X-NutTiew-Expected-Session-Binding': authCust.binding,
+      })
+      .send({});
+    expect(cancelRes.status).toBe(200);
 
     const tEval = offsetIso(4, 0);
     currentSummaryClock = tEval;
@@ -239,25 +256,27 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
   it('SUM-02 includes exact-end boundary (endsAt === T_eval) and excludes in-progress (1 us after T_eval) with microsecond precision', async () => {
     const tutorAEmail = `sum02-ta-${marker}@example.test`;
     const tutorBEmail = `sum02-tb-${marker}@example.test`;
-    const custEmail = `sum02-c-${marker}@example.test`;
+    const custAEmail = `sum02-ca-${marker}@example.test`;
+    const custBEmail = `sum02-cb-${marker}@example.test`;
     const tutorAId = await createUser(tutorAEmail, 'Tutor');
     const tutorBId = await createUser(tutorBEmail, 'Tutor');
-    const custId = await createUser(custEmail, 'Customer');
+    const custAId = await createUser(custAEmail, 'Customer');
+    const custBId = await createUser(custBEmail, 'Customer');
 
     const tEval = offsetIso(3, 1, 123); // exact microsecond .000123Z
     currentSummaryClock = tEval;
 
     // Exact boundary: endsAt === T_eval (included)
     const slotExact = await createSlot(tutorAId, offsetIso(3, 0, 123), offsetIso(3, 1, 123));
-    const bExact = await seedBooking({ customerId: custId, slotId: slotExact, startsAtIso: offsetIso(3, 0, 123), endsAtIso: offsetIso(3, 1, 123), status: 'Booked' });
+    const bExact = await seedBooking({ customerId: custAId, slotId: slotExact, startsAtIso: offsetIso(3, 0, 123), endsAtIso: offsetIso(3, 1, 123), status: 'Booked' });
 
     // Adjacent in-progress on same Tutor: startsAt === T_eval < endsAt (excluded)
     const slotInProgSameTutor = await createSlot(tutorAId, offsetIso(3, 1, 123), offsetIso(3, 2, 123));
-    await seedBooking({ customerId: custId, slotId: slotInProgSameTutor, startsAtIso: offsetIso(3, 1, 123), endsAtIso: offsetIso(3, 2, 123), status: 'Booked' });
+    await seedBooking({ customerId: custAId, slotId: slotInProgSameTutor, startsAtIso: offsetIso(3, 1, 123), endsAtIso: offsetIso(3, 2, 123), status: 'Booked' });
 
-    // Sub-millisecond in-progress on Tutor B: endsAt is 1 microsecond after T_eval (excluded)
+    // Sub-millisecond in-progress on Tutor B with distinct Customer B: endsAt is 1 microsecond after T_eval (excluded)
     const slotOneUsAfter = await createSlot(tutorBId, offsetIso(3, 0, 124), offsetIso(3, 1, 124));
-    await seedBooking({ customerId: custId, slotId: slotOneUsAfter, startsAtIso: offsetIso(3, 0, 124), endsAtIso: offsetIso(3, 1, 124), status: 'Booked' });
+    await seedBooking({ customerId: custBId, slotId: slotOneUsAfter, startsAtIso: offsetIso(3, 0, 124), endsAtIso: offsetIso(3, 1, 124), status: 'Booked' });
 
     const authA = await loginCookieAndBinding(app, tutorAEmail);
     const resA = await request(app).get('/api/v1/tutor/summary').set('Cookie', authA.cookie);
@@ -311,20 +330,30 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     const slotPast = await createSlot(tutorId, offsetIso(1, 3), offsetIso(1, 4));
     const slotCancelled = await createSlot(tutorId, offsetIso(2, 3), offsetIso(2, 4));
     await seedBooking({ customerId: custId, slotId: slotPast, startsAtIso: offsetIso(1, 3), endsAtIso: offsetIso(1, 4), status: 'Booked' });
-    await seedBooking({
+    const bTutorCancelled = await seedBooking({
       customerId: custId,
       slotId: slotCancelled,
       startsAtIso: offsetIso(2, 3),
       endsAtIso: offsetIso(2, 4),
-      status: 'Cancelled',
-      cancellationActor: 'Tutor',
-      cancelledAtIso: new Date().toISOString(),
-      tutorCancellationReason: secretReason,
+      status: 'Booked',
     });
+
+    const auth = await loginCookieAndBinding(app, tutorEmail);
+    const csrfRes = await request(app).get('/api/v1/auth/csrf').set('Cookie', auth.cookie);
+    expect(csrfRes.status).toBe(200);
+    const tutorCancelRes = await request(app)
+      .post(`/api/v1/tutor/bookings/${bTutorCancelled}/cancel`)
+      .set({
+        ...headers,
+        Cookie: auth.cookie,
+        'X-CSRF-Token': csrfRes.body.csrfToken as string,
+        'X-NutTiew-Expected-Session-Binding': auth.binding,
+      })
+      .send({ reason: secretReason });
+    expect(tutorCancelRes.status).toBe(200);
 
     currentSummaryClock = offsetIso(5, 0);
 
-    const auth = await loginCookieAndBinding(app, tutorEmail);
     const res = await request(app).get('/api/v1/tutor/summary').set('Cookie', auth.cookie);
     expect(res.status).toBe(200);
     expect(res.body.data.pastBooked).toHaveLength(1);
