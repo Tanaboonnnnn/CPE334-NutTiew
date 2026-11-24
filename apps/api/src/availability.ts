@@ -41,7 +41,7 @@ eligible_slots AS MATERIALIZED (
    AND tutor."isActive" = TRUE
   CROSS JOIN view_clock
   WHERE s."lifecycle" = 'Offered'
-    AND s."startsAt" >= view_clock.evaluated_at + INTERVAL '60 minutes'
+    AND s."startsAt" >= view_clock.evaluated_at + INTERVAL '90 minutes'
     AND s."startsAt" <= view_clock.evaluated_at + INTERVAL '60 days'
     AND NOT EXISTS (
       SELECT 1
