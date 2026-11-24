@@ -1,5 +1,7 @@
 # F-S1-04 — Customer Booking Software Test Specification (Part E)
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](../../labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+
 > **Planned STS only.** No application code, executable test, migration, PostgreSQL run, browser test or PASS result is included. Execute against actual #33 schema after Part F merge and record exact schema/source SHA.
 
 ## 1. Traceability and test setup
@@ -15,8 +17,8 @@ All cases below are **PLANNED / NOT RUN**.
 | ID | Requirement trace | Setup / action | Expected observable result |
 |---|---|---|---|
 | BOOK-01 | FR-S1-10; AC-S1-19; VC/TEST-S1-16 | Active Customer submits one eligible unoccupied Slot. | 201 only after COMMIT; one `Booked` row with Session Customer, actual Slot and copied interval; response ID equals persisted ID. |
-| BOOK-02 | FR-S1-11; AC-S1-20; VC/TEST-S1-17 | Slot starts 15:00; trigger `T_elig` exactly 14:00:00. | 60:00 passes; one Booking may commit if other checks pass. |
-| BOOK-03 | FR-S1-11; AC-S1-21; VC/TEST-S1-18 | Slot starts 15:00; trigger `T_elig` 14:00:01. | 59:59 fails; no Booking/occupancy; safe 422. |
+| BOOK-02 | FR-S1-11; AC-S1-20; VC/TEST-S1-17 | Slot starts 15:00; trigger `T_elig` exactly 13:30:00. | 90:00 passes; one Booking may commit if other checks pass. |
+| BOOK-03 | FR-S1-11; AC-S1-21; VC/TEST-S1-18 | Slot starts 15:00; trigger `T_elig` 13:30:01. | 89:59 fails; no Booking/occupancy; safe 422. | Confirm a fresh DB read still has zero Booking rows for the target and the Slot remains unoccupied; check one microsecond below 90:00 at DB precision, without relying on client timestamps.
 | BOOK-04 | BR-S1-08; AC-S1-22; VC/TEST-S1-19 | Customer A has committed Booking; Customer B submits same Slot. | 409; A's row preserved; no A identity/Booking detail disclosed. |
 | BOOK-05 | BR-S1-09; AC-S1-23; VC/TEST-S1-20 | Customer has 13:00–14:00 with Tutor A; submits 13:30–14:30 with Tutor B. | 409 `CUSTOMER_OVERLAP`; no second row; first remains. |
 | BOOK-06 | BR-S1-10; AC-S1-24; VC/TEST-S1-21 | Customer has 13:00–14:00; requests 14:00–15:00 with another Tutor. | Overlap rule permits adjacency if other checks pass. |
@@ -30,7 +32,7 @@ All cases below are **PLANNED / NOT RUN**.
 | BOOK-14 | AC-S1-29; VC/TEST-S1-38; Race B/C | Two same-Customer/same-Slot POSTs overlap in flight under barrier. | One row only; winner 201; duplicate reconciles to 200 with same ID (or retryable abort then same result on fresh attempt). |
 | BOOK-15 | AC-S1-29; VC/TEST-S1-38; OD-013 | Let COMMIT succeed but drop HTTP response; Customer resubmits identical POST. | Second request returns 200 with committed original ID; exactly one row. |
 | BOOK-16 | AC-S1-29; VC/TEST-S1-38 | Force first attempt to roll back before COMMIT, then retry identical POST. | Retry creates at most one row and returns 201 only after its own COMMIT; no phantom success. |
-| BOOK-17 | AC-S1-35; VC/TEST-S1-39; Q05 | 15:00 Slot; HTTP arrives 13:59:59; hold required lock until 14:00:01. | Trigger samples `T_elig` after wait and rejects 59:59; no Booking. |
+| BOOK-17 | AC-S1-35; VC/TEST-S1-39; Q05 | 15:00 Slot; HTTP arrives 13:29:59; hold required lock until 13:30:01. | Trigger samples `T_elig` after wait and rejects 89:59; no Booking. |
 | BOOK-18 | System SDS §7.1/7.4; SQLSTATE 40001/40P01 | Force serialization failure and deadlock in separate runs. | Roll back whole attempt, rediscover/relock in order and retry no more than three total attempts; no partial rows. |
 | BOOK-19 | BDF-23; System SDS §7.3; VC/TEST-S1-39 | Force unexpected unique/exclusion index wait after trigger `T_elig`; instrument PIDs/blockers/trigger time. | Prove no stale-time INSERT can commit, or show full abort/retry with fresh `T_elig`. Otherwise BLOCKED/FAIL. |
 | BOOK-20 | NFR-S1-01/08; VC/TEST-S1-23/24 | Inspect full success/error JSON for anonymous, wrong-role, occupied foreign Slot, forged fields and DB errors. | No Customer/Tutor private identity, SQL/stack, credentials, Session/CSRF data or another Booking ID leaks. |
