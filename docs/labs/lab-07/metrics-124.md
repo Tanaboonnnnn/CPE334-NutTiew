@@ -7,7 +7,8 @@
 ## 1. Observation Window & Snapshot Provenance
 
 - **Repository / Product:** `Tanaboonnnnn/CPE334-NutTiew` (CPE334 NutTiew Tutoring Appointment System).
-- **Observation Window:** `2026-11-03 13:54 ICT` (first Issue `#8` opened) through **`2026-11-25 01:56 ICT`** (immediately after `origin/sprint1@02672d4` push CI Run `45464164774` completed `success` at `01:55:56 ICT`).
+- **Observation Window:** `2026-11-03 00:00 ICT` through **`2026-11-25 01:56 ICT`** (spanning the full project lifecycle from earliest PR `#1` opened at `2026-11-03 12:49:17 ICT`, earliest Issue `#8` opened at `2026-11-03 13:54:04 ICT`, and earliest workflow run at `2026-11-05 02:28:59 ICT` through immediately after `origin/sprint1@02672d4` push CI Run `45464164774` completed `success` at `2026-11-25 01:55:56 ICT`).
+- **Cohort Rule:** Every metric counts items **created within the observation window**, evaluated by their **status as of snapshot `2026-11-25 01:56 ICT`**.
 - **Pinned Branch Heads at Snapshot:**
   - `origin/main`: `f94dce99af198b225aafb54bfbf46da420836f35` (accepted Lab 6 Sprint 1 release, Cloud Run `nuttiew-00012-nob`, CD Run `45212589215`).
   - `origin/sprint1`: `02672d4b475dc15018e182467c0468c4f63accf4` (Lab 7 Q05 merge PR `#163`, push CI Run `45464164774` 3/3 PASS).
@@ -17,11 +18,11 @@
 
 | # | Metric | Scope & Window (ICT) | Verified Value at Snapshot (`2026-11-25 01:56 ICT`) | Primary Source & Evidence ID |
 |---|---|---|---|---|
-| **M1** | **Completed Issues** | Repo-wide (`2026-11-03 13:54` – `2026-11-25 01:56`) with S1/L5–L7 vs S2/S3 split | **52 completed** (`52/58 = 89.7%` excl. `5` `NOT_PLANNED`; `52/63 = 82.5%` overall; **S1+L5–L7: `38/42 = 90.5%`** excl. `5` `NOT_PLANNED`; `6` open) | `gh issue list --state all --limit 300`; §3.1 table |
-| **M2** | **Merged Pull Requests** | Repo-wide (`2026-11-03` – `2026-11-25 01:56`) by target branch | **89 merged** (`89/95 = 93.7%` overall; **`70` on `sprint1`+`main`**: `58` `sprint1`, `12` `main`; `12` `sprint2`, `7` `sprint3`; `5` closed-unmerged; `1` open) | `gh pr list --state all --limit 300`; §3.2 tables |
+| **M1** | **Completed Issues** | Repo-wide created `2026-11-03 00:00` – `2026-11-25 01:56`, status as of snapshot (S1/L5–L7 vs S2/S3 split) | **52 completed** (`52/58 = 89.7%` excl. `5` `NOT_PLANNED`; `52/63 = 82.5%` overall; `6` open repo-wide: **`4` open in S1/L5–L7** `#123,#124,#125,#139` + `2` open in S3 `#149,#150`; **S1+L5–L7: `38/42 = 90.5%`** excl. `5` `NOT_PLANNED`) | `gh issue list --state all --limit 300`; §3.1 table |
+| **M2** | **Merged Pull Requests** | Repo-wide created `2026-11-03 00:00` – `2026-11-25 01:56`, status as of snapshot (by target branch) | **89 merged** (`89/95 = 93.7%` overall; **`70` on `sprint1`+`main`**: `58` `sprint1`, `12` `main`; `12` `sprint2`, `7` `sprint3`; `5` closed-unmerged; `1` open) | `gh pr list --state all --limit 300`; §3.2 tables |
 | **M3** | **Automated Test Results** | Maintained Sprint 1 head `origin/sprint1@02672d4` (`2026-11-25 01:52–01:55`) | **221/221 app tests PASS (`100.0%`)**, `0` failed, `0` skipped (`29` API unit, `7` Web unit, `113` PG18 DB, `72` Edge E2E) + **`158/158` GH-05 deploy script checks PASS** | `NutTiew CI` push [Run `45464164774`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45464164774) (`138694476641`, `138694476069`, `138694476763`) |
 | **M4** | **UAT Defect Status** | Lab 6 Sprint 1 Partner UAT (`2026-11-22` – `2026-11-25 01:56`) | **1 accepted `Minor` defect (`DEF-NT-TH038-01` / `#139`)**: **`1/1` (`100.0%`)** fixed, released (`main@f94dce9`) & partner-accepted (`#110`), **`0/1` closed on GitHub tracker (`#139` still `OPEN`)**; `0` Critical/Major; `1` Not-defect (`NT-OBS-01`); `1` Enhancement (`NT-ENH-01`); `0` duplicate | [defect-triage-register.md](../lab-06/defect-triage-register.md), `#110` (`comment-7110865094`), `#139` |
-| **M5** | **CI Run Outcomes** | `NutTiew CI` & `NutTiew CD - Release deploy` (`2026-11-03` – `2026-11-25 01:56`) | **`main+sprint1` `NutTiew CI`: `76/76` (`100.0%`) success** (`66` `sprint1`, `10` `main`, `2` reruns); **Repo-wide `NutTiew CI`: `229/292` (`78.4%`) success**, `22` fail (`7.5%`), `41` cancelled (`14.0%`); **`NutTiew CD` (`main`): `3/18` (`16.7%`) success**, `14` fail (`77.8%`), `1` cancelled (`5.6%`) | GitHub Actions API (`313` total runs incl. `3` non-required PDF runs); §3.5 tables |
+| **M5** | **CI Run Outcomes** | `NutTiew CI` & `NutTiew CD - Release deploy`, created `2026-11-03 00:00` – `2026-11-25 01:56` (latest attempt per unique run ID) | **`main+sprint1` `NutTiew CI`: `76/76` (`100.0%`) success** (`66` `sprint1`, `10` `main`, `2` reruns); **Repo-wide `NutTiew CI`: `229/292` (`78.4%`) success**, `22` fail (`7.5%`), `41` cancelled (`14.0%`); **`NutTiew CD` (`main`): `3/18` (`16.7%`) success**, `14` fail (`77.8%`), `1` cancelled (`5.6%`) | GitHub Actions API (`313` unique runs incl. `3` non-required PDF runs); §3.5 tables |
 
 ---
 
@@ -29,7 +30,7 @@
 
 ### 3.1 Metric 1 — Completed Issues
 
-- **Definition:** GitHub Issues with `state = CLOSED` and `stateReason = COMPLETED`. Issues closed with `stateReason = NOT_PLANNED` (cancelled/superseded placeholders `#63`–`#67`) and `OPEN` Issues are tracked separately and excluded from the `COMPLETED` numerator.
+- **Definition:** GitHub Issues created during `2026-11-03 00:00 ICT` – `2026-11-25 01:56 ICT` with `state = CLOSED` and `stateReason = COMPLETED` as of snapshot `2026-11-25 01:56 ICT`. Issues closed with `stateReason = NOT_PLANNED` (cancelled/superseded placeholders `#63`–`#67`) and `OPEN` Issues (`6` repo-wide: `4` in S1/L5–L7 `#123, #124, #125, #139` + `2` in Sprint 3 `#149, #150`) are tracked separately and excluded from the `COMPLETED` numerator.
 - **Reconciliation by Scope (all `63` repository Issues):**
 
 | Scope Group | Completed (`COMPLETED`) | Cancelled / Superseded (`NOT_PLANNED`) | Open (`OPEN`) | Group Total | Completed IDs (ICT Completion Date) |
@@ -45,7 +46,7 @@
 
 ### 3.2 Metric 2 — Merged Pull Requests
 
-- **Definition:** Pull requests with `state = MERGED` in `Tanaboonnnnn/CPE334-NutTiew`. Closed-unmerged (`5`: `#1`, `#29`, `#46`, `#52`, `#73` intentionally failing GH-04 probe) and open (`1`: `#161` on `sprint3`) PRs are excluded from the merged count.
+- **Definition:** Pull requests created during `2026-11-03 00:00 ICT` – `2026-11-25 01:56 ICT` (starting with PR `#1` opened `2026-11-03 12:49:17 ICT`) with `state = MERGED` as of snapshot `2026-11-25 01:56 ICT` in `Tanaboonnnnn/CPE334-NutTiew`. Closed-unmerged (`5`: `#1`, `#29`, `#46`, `#52`, `#73` intentionally failing GH-04 probe) and open (`1`: `#161` on `sprint3`) PRs are excluded from the merged count.
 - **Reconciliation by Target Branch (all `95` repository PRs):**
   - `sprint1`: **58** merged (`58/89 = 65.2%` of merged PRs)
   - `main`: **12** merged (`12/89 = 13.5%`) — *Subtotal `sprint1 + main` = **70** merged*
@@ -85,7 +86,7 @@
 | **Subtotal Application Automated Tests** | — | **Vitest + Playwright on `sprint1@02672d4`** | **21** | **221** | **0** | **0** | **`221/221` (100.0%)** |
 | Offline Deploy Script Checks (`GH-05`) | `138694476641` | `Unit / types / build` offline deploy & `deploy.yml` gate tests | — | 158 | 0 | 0 | `158/158` (100.0%) |
 
-- **Reconciliation & Limits:** `0` tests were skipped or weakened. Local RED/GREEN progression (`fc493af` 0/3 RED -> `1d02e77` 3/3 GREEN) is recorded separately in [verification-123.md](verification-123.md). **`sprint1 -> main` release CI and live GCP Cloud Run smoke tests are NOT RUN at this snapshot** (`origin/main` remains `f94dce99`).
+- **Reconciliation & Limits:** CI logs for Run `45464164774` confirm `0` failed and `0` skipped across all `221` application tests (preservation of test assertions and invariants is verified separately in the reviewed PR `#163` diff at `a410a30`). Local RED/GREEN progression (`fc493af` 0/3 RED -> `1d02e77` 3/3 GREEN) is recorded separately in [verification-123.md](verification-123.md). **`sprint1 -> main` release CI and live GCP Cloud Run smoke tests are NOT RUN at this snapshot** (`origin/main` remains `f94dce99`).
 
 ### 3.4 Metric 4 — UAT Defect Status
 
@@ -100,7 +101,7 @@
 
 ### 3.5 Metric 5 — CI Run Outcomes
 
-- **Definition:** Completed GitHub Actions workflow runs in `Tanaboonnnnn/CPE334-NutTiew` (`2026-11-03` – `2026-11-25 01:56 ICT`), counted per workflow and branch scope. Non-required workflow `Build Illustrated D1 PDF` (`3` runs: `1` success, `2` failure) is excluded from required CI/CD gates and noted for completeness (`292 + 18 + 3 = 313` total repository runs).
+- **Definition:** Completed GitHub Actions workflow runs created in `Tanaboonnnnn/CPE334-NutTiew` during `2026-11-03 00:00 ICT` – `2026-11-25 01:56 ICT`, counted using the **latest attempt per unique GitHub Actions run ID** (superseded attempts of a rerun are not double-counted; runs with `run_attempt > 1` are disclosed separately). Non-required workflow `Build Illustrated D1 PDF` (`3` unique runs: `1` success, `2` failure) is excluded from required CI/CD gates and noted for completeness (`292 + 18 + 3 = 313` unique repository runs).
 
 | Workflow & Branch Scope | Success | Failure | Cancelled | Total | Success Rate | Reruns (`attempt > 1`) | Notes / Reconciliation |
 |---|---:|---:|---:|---:|---:|---:|---|
