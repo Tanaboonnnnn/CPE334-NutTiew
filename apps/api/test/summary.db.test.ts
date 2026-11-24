@@ -251,6 +251,23 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
       expect(item.customerRef).toBe('CUST-' + custId.slice(0, 8));
     }
     expect(res.body.meta.evaluatedAt).toBe(tEval);
+
+    // Non-violating tie-breaker proof: offered_slot_no_overlap_per_tutor + fixed 60-min slots
+    // forbid two Booked rows for one Tutor sharing identical endsAt, so verify the exact SQL
+    // ORDER BY tie-breaker (endsAt DESC, id DESC) directly on a read-only VALUES projection.
+    const tieRes = await runtimePool.query<{ id: string }>(
+      `WITH sample(id, ends_at) AS (
+         VALUES
+           ('00000000-0000-4000-8000-000000000001'::uuid, $1::timestamptz),
+           ('00000000-0000-4000-8000-000000000009'::uuid, $1::timestamptz)
+       )
+       SELECT id FROM sample ORDER BY ends_at DESC NULLS LAST, id DESC NULLS LAST`,
+      [offsetIso(2, 1)],
+    );
+    expect(tieRes.rows.map(r => r.id)).toEqual([
+      '00000000-0000-4000-8000-000000000009',
+      '00000000-0000-4000-8000-000000000001',
+    ]);
   });
 
   it('SUM-02 includes exact-end boundary (endsAt === T_eval) and excludes in-progress (1 us after T_eval) with microsecond precision', async () => {
@@ -372,6 +389,29 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     expect(rawText).not.toContain(custId);
     expect(rawText).not.toContain(secretReason);
     expect(rawText).not.toContain('passwordHash');
+    expect(rawText).not.toContain('SELECT ');
+    expect(rawText).not.toContain('stack');
+
+    // Verify 400 / 401 / 403 error payloads also contain zero PII, credentials, SQL, or stack traces
+    const err400 = await request(app).get('/api/v1/tutor/summary?tutorId=' + randomUUID()).set('Cookie', auth.cookie);
+    expect(err400.status).toBe(400);
+    const err401 = await request(app).get('/api/v1/tutor/summary');
+    expect(err401.status).toBe(401);
+    const custAuth = await loginCookieAndBinding(app, secretCustEmail);
+    const err403 = await request(app).get('/api/v1/tutor/summary').set('Cookie', custAuth.cookie);
+    expect(err403.status).toBe(403);
+
+    for (const errRes of [err400, err401, err403]) {
+      expect(Object.keys(errRes.body).sort()).toEqual(['error', 'requestId']);
+      expect(Object.keys(errRes.body.error).sort()).toEqual(['code', 'message']);
+      const errRaw = JSON.stringify(errRes.body);
+      expect(errRaw).not.toContain(secretCustEmail);
+      expect(errRaw).not.toContain(custId);
+      expect(errRaw).not.toContain(secretReason);
+      expect(errRaw).not.toContain('passwordHash');
+      expect(errRaw).not.toContain('SELECT');
+      expect(errRaw).not.toContain('stack');
+    }
   });
 
   it('SUM-05 rejects client query parameters with 400 INVALID_INPUT', async () => {

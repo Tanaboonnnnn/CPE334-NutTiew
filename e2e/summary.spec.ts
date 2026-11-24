@@ -8,6 +8,7 @@ loadEnv({ path: '.env', quiet: true });
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const tag = randomBytes(8).toString('hex');
 const tutorEmail = 'summary-t-' + tag + '@example.test';
+const tutorEmptyEmail = 'summary-te-' + tag + '@example.test';
 const customerEmail = 'summary-c-secret-' + tag + '@example.test';
 const password = 'SummaryE2E#2026';
 
@@ -22,12 +23,12 @@ const pastEnd = new Date(pastStart.getTime() + 3_600_000);
 
 test.beforeAll(async () => {
   const hash = await argon2.hash(password);
-  const users = await pool.query<{ id: string; role: string }>(
-    'INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3),($4,$5,$6) RETURNING "id","role"',
-    [tutorEmail, hash, 'Tutor', customerEmail, hash, 'Customer'],
+  const users = await pool.query<{ id: string; role: string; email: string }>(
+    'INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3),($4,$5,$6),($7,$8,$9) RETURNING "id","role","email"',
+    [tutorEmail, hash, 'Tutor', tutorEmptyEmail, hash, 'Tutor', customerEmail, hash, 'Customer'],
   );
-  tutorId = users.rows.find(u => u.role === 'Tutor')!.id;
-  customerId = users.rows.find(u => u.role === 'Customer')!.id;
+  tutorId = users.rows.find(u => u.email === tutorEmail)!.id;
+  customerId = users.rows.find(u => u.email === customerEmail)!.id;
 
   const client = await pool.connect();
   try {
@@ -118,5 +119,41 @@ test.describe('F-S3-01 SUM-08 — Tutor Past Booked Summary E2E (non-Bangkok bro
       return r.status;
     });
     expect(apiStatus).toBe(403);
+  });
+
+  test('SUM-08b renders explicit empty state (0 rows) and error/retry recovery without fabricating 0 counts', async ({ page }) => {
+    // 1. Empty state for Tutor with zero past bookings
+    await signIn(page, tutorEmptyEmail);
+    const section = page.getByTestId('tutor-appointment-summary');
+    await expect(section.getByTestId('tutor-summary-past-count')).toContainText('นัดหมายที่ผ่านมาแล้ว (Past Booked): 0 รายการ');
+    await expect(section.getByTestId('tutor-summary-empty')).toHaveText('ยังไม่มีนัดหมายที่ผ่านมาแล้ว');
+    await expect(section.getByTestId('tutor-summary-evaluated-at')).toContainText('(Asia/Bangkok)');
+    await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+
+    // 2. Error + retry state on transient 503 without fabricating 0 count
+    let failOnce = true;
+    await page.route('**/api/v1/tutor/summary', async (route) => {
+      if (failOnce) {
+        failOnce = false;
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE', message: 'Service temporarily unavailable' }, requestId: 'test-503' }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await signIn(page, tutorEmail);
+    await expect(page.getByTestId('tutor-summary-error')).toBeVisible();
+    await expect(page.getByTestId('tutor-summary-error')).toContainText('ไม่สามารถโหลดสรุปนัดหมายได้');
+    await expect(page.getByTestId('tutor-summary-past-count')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'ลองโหลดสรุปอีกครั้ง' }).click();
+    await expect(page.getByTestId('tutor-summary-past-count')).toContainText('นัดหมายที่ผ่านมาแล้ว (Past Booked): 1 รายการ');
+    await expect(page.getByTestId('tutor-summary-past-item')).toHaveCount(1);
+    await expect(page.getByTestId('tutor-summary-past-item').first()).toContainText(pastBookingId);
   });
 });
