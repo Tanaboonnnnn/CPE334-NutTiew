@@ -253,14 +253,14 @@ describe('F-S1-03 Customer Availability real PostgreSQL integration (AVA-01..10,
     expect(rawC1).not.toContain(customer2Id);
   });
 
-  it('AVA-03 enforces exact Q05 60:00 vs 59:59 lower boundary and confirmed OD-002 60-day advance horizon upper boundary against DB T_view', async () => {
+  it('AVA-03 enforces exact Q05 90:00 vs 89:59 lower boundary and confirmed OD-002 60-day advance horizon upper boundary against DB T_view', async () => {
     // Use a far future synthetic T_view (+120 days) so only slots in that window match
     const controlledTView = new Date(Date.now() + 120 * 86_400_000);
     controlledTView.setUTCHours(10, 0, 0, 0);
 
     const pastSlot = await createSlot(tutorAId, new Date(controlledTView.getTime() - 60_000));
-    const slot59m59s = await createSlot(tutorAId, new Date(controlledTView.getTime() + 3_599_000));
-    const slotExact60m = await createSlot(tutorBId, new Date(controlledTView.getTime() + 3_600_000));
+    const slot89m59s = await createSlot(tutorAId, new Date(controlledTView.getTime() + 5_399_000));
+    const slotExact90m = await createSlot(tutorBId, new Date(controlledTView.getTime() + 5_400_000));
     const slotExact60d = await createSlot(tutorAId, new Date(controlledTView.getTime() + 60 * 86_400_000));
     const slot60dPlus1s = await createSlot(tutorBId, new Date(controlledTView.getTime() + 60 * 86_400_000 + 1_000));
     const slot61d = await createSlot(tutorAId, new Date(controlledTView.getTime() + 61 * 86_400_000));
@@ -281,19 +281,19 @@ describe('F-S1-03 Customer Availability real PostgreSQL integration (AVA-01..10,
     const ids = (res.body.data as Array<{ slotId: string }>).map(x => x.slotId);
     const candidateSet = new Set([
       pastSlot.id,
-      slot59m59s.id,
-      slotExact60m.id,
+      slot89m59s.id,
+      slotExact90m.id,
       slotExact60d.id,
       slot60dPlus1s.id,
       slot61d.id,
     ]);
     expect(ids).not.toContain(pastSlot.id);
-    expect(ids).not.toContain(slot59m59s.id);
-    expect(ids).toContain(slotExact60m.id);
+    expect(ids).not.toContain(slot89m59s.id);
+    expect(ids).toContain(slotExact90m.id);
     expect(ids).toContain(slotExact60d.id);
     expect(ids).not.toContain(slot60dPlus1s.id);
     expect(ids).not.toContain(slot61d.id);
-    expect(ids.filter(id => candidateSet.has(id))).toEqual([slotExact60m.id, slotExact60d.id]);
+    expect(ids.filter(id => candidateSet.has(id))).toEqual([slotExact90m.id, slotExact60d.id]);
   });
 
   it('AVA-04/09 produces byte-for-byte identical UTC ...sssZ timestamps for populated and empty results when PostgreSQL session TimeZone switches between UTC and Asia/Bangkok', async () => {
