@@ -279,8 +279,12 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     const staleTutor = await createUser(`book-l7-stale-${marker}@example.test`, 'Tutor');
     const slot = await createSlot(staleTutor, new Date(clock.rows[0].now.getTime() + 75 * 60_000));
 
+    const staleEmail = `book-l7-stale-c-${marker}@example.test`;
+    const staleCustomer = await createUser(staleEmail, 'Customer');
+    const staleAuth = await loginBundle(staleEmail, staleCustomer);
+
     // A previously seen offer is not proof of eligibility at the guarded write.
-    const res = await postBooking(app, authCustomerHigh, { slotId: slot.id });
+    const res = await postBooking(app, staleAuth, { slotId: slot.id });
     expect(res.status).toBe(422);
     expect(res.body.error?.code).toBe('BOOKING_NOT_ELIGIBLE');
     const persisted = await ownerPool.query<{ n: number }>(
