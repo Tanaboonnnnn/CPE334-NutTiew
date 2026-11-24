@@ -18,7 +18,7 @@ All cases below are **PLANNED / NOT RUN**.
 |---|---|---|---|
 | BOOK-01 | FR-S1-10; AC-S1-19; VC/TEST-S1-16 | Active Customer submits one eligible unoccupied Slot. | 201 only after COMMIT; one `Booked` row with Session Customer, actual Slot and copied interval; response ID equals persisted ID. |
 | BOOK-02 | FR-S1-11; AC-S1-20; VC/TEST-S1-17 | Slot starts 15:00; trigger `T_elig` exactly 13:30:00. | 90:00 passes; one Booking may commit if other checks pass. |
-| BOOK-03 | FR-S1-11; AC-S1-21; VC/TEST-S1-18 | Slot starts 15:00; trigger `T_elig` 13:30:01. | 89:59 fails; no Booking/occupancy; safe 422. | Confirm a fresh DB read still has zero Booking rows for the target and the Slot remains unoccupied; check one microsecond below 90:00 at DB precision, without relying on client timestamps.
+| BOOK-03 | FR-S1-11; AC-S1-21; VC/TEST-S1-18 | Slot starts 15:00; trigger `T_elig` 13:30:01. | 89:59 fails; no Booking/occupancy; safe 422. Confirm a fresh DB read still has zero Booking rows for the target and the Slot remains unoccupied; check one microsecond below 90:00 at DB precision, without relying on client timestamps. |
 | BOOK-04 | BR-S1-08; AC-S1-22; VC/TEST-S1-19 | Customer A has committed Booking; Customer B submits same Slot. | 409; A's row preserved; no A identity/Booking detail disclosed. |
 | BOOK-05 | BR-S1-09; AC-S1-23; VC/TEST-S1-20 | Customer has 13:00–14:00 with Tutor A; submits 13:30–14:30 with Tutor B. | 409 `CUSTOMER_OVERLAP`; no second row; first remains. |
 | BOOK-06 | BR-S1-10; AC-S1-24; VC/TEST-S1-21 | Customer has 13:00–14:00; requests 14:00–15:00 with another Tutor. | Overlap rule permits adjacency if other checks pass. |

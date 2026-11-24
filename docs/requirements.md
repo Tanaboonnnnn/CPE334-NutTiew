@@ -252,7 +252,7 @@ For each hazard, Part E must document the chosen isolation/locking/constraint/se
 | Two Customers simultaneously claim Tutor A's same exclusive Slot | At most one committed Booking | BR-08/19 |
 | Customer X submits simultaneously for two distinct overlapping Tutors' Slots | No two overlapping bookings may both commit | BR-09/19 |
 | Slot 15:00, request at 13:30:00 Bangkok time | Exactly 90 minutes — eligible if otherwise valid | BR-07/12 |
-| Slot 15:00, request at 14:00:01 Bangkok time | 59m59s — reject | BR-07/12 |
+| Slot 15:00, request at 13:30:01 Bangkok time | 89m59s — reject | BR-07/12 |
 | Booked lesson 13:00–14:00; now 15:00 | May display Past; status still Booked, not Completed | BR-14/22 |
 
 ## 7. Non-functional requirements (NFR) and acceptance targets
@@ -501,7 +501,7 @@ The matrices below link requirements to their proposed delivery owner and valida
 - [ ] Reviewer confirms Theme 1 assignment and any changes in the authoritative group Master Specification; the available source is a draft.
 - [ ] Reviewer confirms FR-S1-01..19 and BR-S1-01..22 reflect the agreed Q01–Q06, Q28–Q30 scope, without silently importing Sprint 2 features.
 - [ ] Reviewer verifies both race conditions are represented separately: **one Slot/two Customers** and **one Customer/two overlapping Tutors**.
-- [ ] Reviewer verifies ownership matrices, server-side auth, time-zone and exact 60-minute boundary semantics.
+- [ ] Reviewer verifies ownership matrices, server-side auth, time-zone and the exact 90-minute Q05 boundary.
 - [ ] TBD-S1-01..07 are visible; any required new business assumption is documented and approved rather than guessed.
 - [ ] Proposed NFR numeric thresholds are explicitly accepted, revised or left open before Feature SDS/STS signoff.
 - [ ] The PR changes **only this requirements document**, not app code, CONTEXT, internal logs, Issue bodies or Sprint 1 staging.
