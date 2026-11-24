@@ -651,10 +651,12 @@ describe('F-S3-01 Final Upcoming & In-Progress slice — #146 (OD-006 Option 1)'
     const emailB = 'sum09-146-b-' + marker + '@example.test';
     const emailEmpty = 'sum09-146-empty-' + marker + '@example.test';
     const customerEmail = 'sum09-146-cust-' + marker + '@example.test';
+    const customerBEmail = 'sum09-146-cust-b-' + marker + '@example.test';
     const tutorA = await createUser(emailA, 'Tutor');
     const tutorB = await createUser(emailB, 'Tutor');
     const tutorEmpty = await createUser(emailEmpty, 'Tutor');
     const customer = await createUser(customerEmail, 'Customer');
+    const customerB = await createUser(customerBEmail, 'Customer');
 
     // Anchor T_eval at day+30 05:00:00.500000Z (microsecond precision)
     const tEval = offsetIso(30, 5, 500_000);
@@ -690,13 +692,13 @@ describe('F-S3-01 Final Upcoming & In-Progress slice — #146 (OD-006 Option 1)'
     const slotCancelledB = await createSlot(tutorB, offsetIso(30, 11, 0), offsetIso(30, 12, 0));
 
     const bPreEnd1us = await seedBooking({
-      customerId: customer, slotId: slotPreEnd1us, startsAtIso: offsetIso(30, 4, 500_001), endsAtIso: offsetIso(30, 5, 500_001), status: 'Booked',
+      customerId: customerB, slotId: slotPreEnd1us, startsAtIso: offsetIso(30, 4, 500_001), endsAtIso: offsetIso(30, 5, 500_001), status: 'Booked',
     });
     const bPreStart1us = await seedBooking({
-      customerId: customer, slotId: slotPreStart1us, startsAtIso: offsetIso(30, 5, 500_001), endsAtIso: offsetIso(30, 6, 500_001), status: 'Booked',
+      customerId: customerB, slotId: slotPreStart1us, startsAtIso: offsetIso(30, 5, 500_001), endsAtIso: offsetIso(30, 6, 500_001), status: 'Booked',
     });
     const bCancelledB = await seedBooking({
-      customerId: customer, slotId: slotCancelledB, startsAtIso: offsetIso(30, 11, 0), endsAtIso: offsetIso(30, 12, 0),
+      customerId: customerB, slotId: slotCancelledB, startsAtIso: offsetIso(30, 11, 0), endsAtIso: offsetIso(30, 12, 0),
       status: 'Cancelled', cancellationActor: 'Customer', cancelledAtIso: offsetIso(30, 3, 0),
     });
 

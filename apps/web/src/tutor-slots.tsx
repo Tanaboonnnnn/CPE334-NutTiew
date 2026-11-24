@@ -871,7 +871,7 @@ export function TutorAvailability({
                     const start = new Date(item.startsAt);
                     const end = new Date(item.endsAt);
                     return (
-                      <li key={item.id} className="slot-item customer-booking-item" data-testid="tutor-summary-upcoming-item" data-booking-id={item.id}>
+                      <li key={item.id} className="slot-item customer-booking-item" data-testid="tutor-summary-upcoming-item">
                         <div className="agenda-color-mark" style={{ background: '#0f766e' }} aria-hidden="true" />
                         <div className="agenda-row-main">
                           <div className="slot-item-date">{bangkokLongDate(start)}</div>
@@ -905,7 +905,7 @@ export function TutorAvailability({
                     const start = new Date(item.startsAt);
                     const end = new Date(item.endsAt);
                     return (
-                      <li key={item.id} className="slot-item customer-booking-item" data-testid="tutor-summary-in-progress-item" data-booking-id={item.id}>
+                      <li key={item.id} className="slot-item customer-booking-item" data-testid="tutor-summary-in-progress-item">
                         <div className="agenda-color-mark" style={{ background: '#b45309' }} aria-hidden="true" />
                         <div className="agenda-row-main">
                           <div className="slot-item-date">{bangkokLongDate(start)}</div>
