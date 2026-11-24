@@ -276,7 +276,8 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
 
   it('CR-L7-01 rejects a stale selected Slot inside 90 minutes, without creating a Booking', async () => {
     const clock = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-    const slot = await createSlot(tutorHighId, new Date(clock.rows[0].now.getTime() + 75 * 60_000));
+    const staleTutor = await createUser(`book-l7-stale-${marker}@example.test`, 'Tutor');
+    const slot = await createSlot(staleTutor, new Date(clock.rows[0].now.getTime() + 75 * 60_000));
 
     // A previously seen offer is not proof of eligibility at the guarded write.
     const res = await postBooking(app, authCustomerHigh, { slotId: slot.id });
