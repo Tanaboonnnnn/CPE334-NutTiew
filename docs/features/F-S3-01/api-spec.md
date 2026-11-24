@@ -16,7 +16,7 @@
 
 ### 2.1 D2 increment response (`200 OK`)
 
-For the Deliverable 2 increment, the endpoint evaluates and returns the **Past Booked** count and matching list under one authoritative PostgreSQL `evaluatedAt` snapshot:
+For the Deliverable 2 increment, the endpoint evaluates and returns the **Past Booked** count and matching list under one authoritative PostgreSQL `evaluatedAt` snapshot. For both D2 and Final, serialize `meta.evaluatedAt` as UTC ISO 8601 with exactly six fractional digits (`YYYY-MM-DDTHH:mm:ss.ffffffZ`), following the [data contract](data-spec.md). Preserve the exact SQL snapshot; do not round or truncate to milliseconds. This precision rule is for `meta.evaluatedAt`, not the booking DTO timestamps.
 
 ```json
 {
@@ -37,7 +37,7 @@ For the Deliverable 2 increment, the endpoint evaluates and returns the **Past B
   },
   "meta": {
     "requestId": "<uuid>",
-    "evaluatedAt": "2026-11-22T11:00:00.000Z"
+    "evaluatedAt": "2026-11-22T11:00:00.000123Z"
   }
 }
 ```
