@@ -6,10 +6,9 @@ import { config as loadEnv } from 'dotenv';
 loadEnv({ path: '.env', quiet: true });
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const tag = randomBytes(8).toString('hex');
-const tutorEmail = 'summary-t-' + tag + '@example.test';
-const tutorEmptyEmail = 'summary-te-' + tag + '@example.test';
-const customerEmail = 'summary-c-secret-' + tag + '@example.test';
+let tutorEmail = '';
+let tutorEmptyEmail = '';
+let customerEmail = '';
 const password = 'SummaryE2E#2026';
 
 let tutorId = '';
@@ -46,8 +45,13 @@ async function assertDisposableTestDatabase(db: Pick<Pool, 'query'>): Promise<vo
   }
 }
 
-test.beforeAll(async () => {
+test.beforeEach(async () => {
   await assertDisposableTestDatabase(pool);
+  // Each test gets its own Tutor, Customer and bookings (never count rows from another case).
+  const tag = randomBytes(8).toString('hex');
+  tutorEmail = 'summary-t-' + tag + '@example.test';
+  tutorEmptyEmail = 'summary-te-' + tag + '@example.test';
+  customerEmail = 'summary-c-secret-' + tag + '@example.test';
   const hash = await argon2.hash(password);
   const users = await pool.query<{ id: string; role: string; email: string }>(
     'INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3),($4,$5,$6),($7,$8,$9) RETURNING "id","role","email"',
@@ -94,6 +98,23 @@ async function signIn(page: Page, email: string) {
   await page.getByLabel('รหัสผ่าน').fill(password);
   await page.getByRole('button', { name: 'เข้าสู่ระบบ' }).click();
   await expect(page.getByText('เข้าสู่ระบบแล้ว')).toBeVisible();
+}
+
+async function cancelBooking(page: Page, actor: 'customer' | 'tutor', id: string, data: object) {
+  const me = await page.request.get('/api/v1/auth/me');
+  const csrf = await page.request.get('/api/v1/auth/csrf');
+  expect(me.status()).toBe(200);
+  expect(csrf.status()).toBe(200);
+  const result = await page.request.post('/api/v1/' + actor + '/bookings/' + id + '/cancel', {
+    headers: {
+      Origin: new URL(page.url()).origin,
+      'X-CSRF-Token': (await csrf.json()).csrfToken,
+      'X-NutTiew-Expected-Session-Binding': me.headers()['x-nuttiew-session-binding'],
+    },
+    data,
+  });
+  expect(result.status()).toBe(200);
+  return (await result.json()).data.cancelledAt as string;
 }
 
 test.describe('F-S3-01 SUM-08 — Tutor Past Booked Summary E2E (non-Bangkok browser)', () => {
@@ -210,22 +231,7 @@ test.describe('F-S3-01 SUM-10 — #147 Cancelled slice', () => {
     const customerBooking = await book('14');
     const tutorBooking = await book('16');
     const privateReason = 'PRIVATE_E2E_CANCELLATION_147';
-    const cancel = async (actor: 'customer' | 'tutor', id: string, data: object) => {
-      const me = await page.request.get('/api/v1/auth/me');
-      const csrf = await page.request.get('/api/v1/auth/csrf');
-      expect(me.status()).toBe(200);
-      expect(csrf.status()).toBe(200);
-      const result = await page.request.post('/api/v1/' + actor + '/bookings/' + id + '/cancel', {
-        headers: {
-          Origin: new URL(page.url()).origin,
-          'X-CSRF-Token': (await csrf.json()).csrfToken,
-          'X-NutTiew-Expected-Session-Binding': me.headers()['x-nuttiew-session-binding'],
-        },
-        data,
-      });
-      expect(result.status()).toBe(200);
-      return (await result.json()).data.cancelledAt as string;
-    };
+
 
     await signIn(page, tutorEmptyEmail);
     const section = page.getByTestId('tutor-appointment-summary');
@@ -235,12 +241,12 @@ test.describe('F-S3-01 SUM-10 — #147 Cancelled slice', () => {
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
 
     await signIn(page, customerEmail);
-    const customerTime = await cancel('customer', customerBooking, {});
+    const customerTime = await cancelBooking(page, 'customer', customerBooking, {});
     await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
 
     await signIn(page, tutorEmail);
-    const tutorTime = await cancel('tutor', tutorBooking, { reason: privateReason });
+    const tutorTime = await cancelBooking(page, 'tutor', tutorBooking, { reason: privateReason });
     await page.reload();
     await expect(section.getByRole('heading', { name: 'นัดหมายที่ยกเลิกแล้ว (Cancelled): 2 รายการ' })).toBeVisible();
     const rows = section.getByRole('list', { name: 'รายการนัดหมายที่ยกเลิกแล้ว' }).getByRole('listitem');
@@ -267,10 +273,10 @@ test.describe('F-S3-01 SUM-10 — #147 Cancelled slice', () => {
   });
 });
 
-test.describe('F-S3-01 SUM-10 — #146 Upcoming and In-Progress slice (OD-006 Option 1)', () => {
+test.describe('F-S3-01 SUM-10 — #148 integrated four-category summary (OD-006 Option 1)', () => {
   test.use({ timezoneId: 'America/Los_Angeles' });
 
-  test('renders server-classified Upcoming and In-Progress Booked in Asia/Bangkok, empty states, isolation, and reload persistence', async ({ page }) => {
+  test('renders all four server-classified categories together, in Asia/Bangkok, with isolation and refresh recovery', async ({ page }) => {
     // 1. Seed one Upcoming Booked (10 days ahead, 10:00-11:00 Asia/Bangkok) and one In-Progress Booked (now - 20m .. now + 40m)
     const upcomingDay = new Date(Date.now() + 10 * 86_400_000 + 7 * 3_600_000).toISOString().slice(0, 10);
     const upcomingStart = new Date(upcomingDay + 'T10:00:00.000+07:00');
@@ -321,12 +327,32 @@ test.describe('F-S3-01 SUM-10 — #146 Upcoming and In-Progress slice (OD-006 Op
     await expect(section.getByTestId('tutor-summary-upcoming-empty')).toHaveText('ยังไม่มีนัดหมายที่กำลังจะมาถึง');
     await expect(section.getByTestId('tutor-summary-in-progress-count')).toContainText('กำลังดำเนินการอยู่ (In-Progress Booked): 0 รายการ');
     await expect(section.getByTestId('tutor-summary-in-progress-empty')).toHaveText('ยังไม่มีนัดหมายที่กำลังดำเนินการอยู่');
+    await expect(section.getByTestId('tutor-summary-past-count')).toContainText('0 รายการ');
+    await expect(section.getByTestId('tutor-summary-empty')).toBeVisible();
+    await expect(section.getByTestId('tutor-summary-cancelled-count')).toContainText('0 รายการ');
+    await expect(section.getByTestId('tutor-summary-cancelled-empty')).toBeVisible();
     await expect(section).not.toContainText(upcomingBookingId);
     await expect(section).not.toContainText(inProgressBookingId);
     await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
 
-    // 3. Owning Tutor sees Upcoming Booked & In-Progress Booked in Asia/Bangkok and persists across reload
+    const cancelStart = new Date(upcomingDay + 'T15:00:00.000+07:00');
+    const cancelEnd = new Date(cancelStart.getTime() + 3_600_000);
+    const cancelSlot = await pool.query<{ id: string }>(
+      'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2,$3,\'Offered\') RETURNING "id"',
+      [tutorId, cancelStart, cancelEnd],
+    );
+    const cancelRecord = await pool.query<{ id: string }>(
+      'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\') RETURNING "id"',
+      [customerId, cancelSlot.rows[0].id, cancelStart, cancelEnd],
+    );
+    const cancelledBookingId = cancelRecord.rows[0].id;
+    await signIn(page, customerEmail);
+    await cancelBooking(page, 'customer', cancelledBookingId, {});
+    await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+
+    // 3. The owner sees all four groups in one evaluated snapshot.
     await signIn(page, tutorEmail);
     const bangkokClockFmt = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -354,12 +380,40 @@ test.describe('F-S3-01 SUM-10 — #146 Upcoming and In-Progress slice (OD-006 Op
       await expect(inProgItems.first().getByTestId('tutor-summary-in-progress-status-badge')).toHaveText('มีนัดหมาย (Booked)');
       await expect(inProgItems.first()).not.toContainText('Past');
       await expect(inProgItems.first()).not.toContainText('Completed');
+      for (const [category, bookingId] of [['past', pastBookingId], ['cancelled', cancelledBookingId]]) {
+        await expect(section.getByTestId('tutor-summary-' + category + '-count')).toContainText('1 รายการ');
+        const rows = category === 'past'
+          ? section.getByTestId('tutor-summary-past-item')
+          : section.getByRole('list', { name: 'รายการนัดหมายที่ยกเลิกแล้ว' }).getByRole('listitem');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.first()).toContainText(bookingId);
+        await expect(rows.first()).toContainText('Asia/Bangkok');
+      }
+      await expect(section.getByTestId('tutor-summary-evaluated-at')).toHaveCount(1);
+      await expect(section.getByRole('heading', { level: 3 })).toHaveCount(4);
+      await expect(section.getByRole('list')).toHaveCount(4);
       await expect(section).not.toContainText(customerEmail);
       await expect(section).not.toContainText(customerId);
     };
 
     await assertPopulated();
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
+    await assertPopulated();
+    expect(await section.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+
+    // A failed refresh must not leave any prior count/list or evaluated time on screen.
+    await page.route('**/api/v1/tutor/summary', (route) => route.fulfill({
+      status: 503, json: { error: { code: 'SERVICE_UNAVAILABLE' } },
+    }));
+    await section.getByRole('button', { name: 'รีเฟรชสรุป' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(section.getByRole('alert')).toBeVisible();
+    await expect(section.getByRole('list')).toHaveCount(0);
+    await expect(section.getByRole('heading', { level: 3 })).toHaveCount(0);
+    await expect(section.getByTestId('tutor-summary-evaluated-at')).toHaveCount(0);
+    await page.unroute('**/api/v1/tutor/summary');
+    await section.getByRole('button', { name: 'ลองโหลดสรุปอีกครั้ง' }).click();
     await assertPopulated();
   });
 });
