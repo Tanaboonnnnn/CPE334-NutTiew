@@ -562,3 +562,85 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     expect(afterBody.meta.evaluatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
   }, 45_000);
 });
+
+describe('F-S3-01 Final Cancelled slice — #147', () => {
+  it('SUM-09 / VAL-028/029/036: returns current-owner cancellations from both actors, safely ordered and projected', async () => {
+    const emailA = 'sum09-a-' + marker + '@example.test';
+    const emailB = 'sum09-b-' + marker + '@example.test';
+    const customerEmail = 'sum09-private-' + marker + '@example.test';
+    const secretReason = 'PRIVATE_TUTOR_REASON_SUM09';
+    const tutorA = await createUser(emailA, 'Tutor');
+    const tutorB = await createUser(emailB, 'Tutor');
+    const customer = await createUser(customerEmail, 'Customer');
+    const oldSlot = await createSlot(tutorA, offsetIso(10), offsetIso(10, 1));
+    const currentSlot = await createSlot(tutorB, offsetIso(11), offsetIso(11, 1));
+    const otherSlot = await createSlot(tutorB, offsetIso(12), offsetIso(12, 1));
+    const foreignSlot = await createSlot(tutorA, offsetIso(13), offsetIso(13, 1));
+
+    const authA = await loginCookieAndBinding(app, emailA);
+    const authB = await loginCookieAndBinding(app, emailB);
+    const authCustomer = await loginCookieAndBinding(app, customerEmail);
+    const writeHeaders = async (auth: { cookie: string; binding: string }) => {
+      const csrf = await request(app).get('/api/v1/auth/csrf').set('Cookie', auth.cookie);
+      expect(csrf.status).toBe(200);
+      return {
+        ...headers,
+        Cookie: auth.cookie,
+        'X-CSRF-Token': csrf.body.csrfToken as string,
+        'X-NutTiew-Expected-Session-Binding': auth.binding,
+      };
+    };
+    const customerHeaders = await writeHeaders(authCustomer);
+    const tutorBHeaders = await writeHeaders(authB);
+    const zero = await request(app).get('/api/v1/tutor/summary').set('Cookie', authB.cookie);
+    expect(zero.status).toBe(200);
+    expect(zero.body.data).toMatchObject({ cancelledCount: 0, cancelled: [] });
+
+    const booked = await request(app).post('/api/v1/customer/bookings')
+      .set(customerHeaders).send({ slotId: oldSlot });
+    expect(booked.status).toBe(201);
+    const movedId = booked.body.data.id as string;
+    const movedPath = '/api/v1/customer/bookings/' + movedId;
+    expect((await request(app).post(movedPath + '/reschedule')
+      .set(customerHeaders).send({ slotId: currentSlot })).status).toBe(200);
+    const customerCancel = await request(app).post(movedPath + '/cancel').set(customerHeaders).send({});
+    expect(customerCancel.status).toBe(200);
+
+    const tutorCancelledId = await seedBooking({
+      customerId: customer, slotId: otherSlot, startsAtIso: offsetIso(12), endsAtIso: offsetIso(12, 1), status: 'Booked',
+    });
+    const tutorCancel = await request(app).post('/api/v1/tutor/bookings/' + tutorCancelledId + '/cancel')
+      .set(tutorBHeaders).send({ reason: secretReason });
+    expect(tutorCancel.status).toBe(200);
+
+    const foreignId = await seedBooking({
+      customerId: customer, slotId: foreignSlot, startsAtIso: offsetIso(13), endsAtIso: offsetIso(13, 1), status: 'Booked',
+    });
+    expect((await request(app).post('/api/v1/customer/bookings/' + foreignId + '/cancel')
+      .set(customerHeaders).send({})).status).toBe(200);
+
+    currentSummaryClock = offsetIso(15, 0, 123);
+    const summaryB = await request(app).get('/api/v1/tutor/summary').set('Cookie', authB.cookie);
+    expect(summaryB.status).toBe(200);
+    expect(summaryB.body.meta.evaluatedAt).toBe(currentSummaryClock);
+    expect(summaryB.body.data).toMatchObject({
+      pastBookedCount: 0, pastBooked: [], cancelledCount: 2,
+      cancelled: [
+        { id: tutorCancelledId, slotId: otherSlot, cancellationActor: 'Tutor', cancelledAt: tutorCancel.body.data.cancelledAt },
+        { id: movedId, slotId: currentSlot, cancellationActor: 'Customer', cancelledAt: customerCancel.body.data.cancelledAt },
+      ],
+    });
+    const exactFields = ['cancellationActor', 'cancelledAt', 'createdAt', 'customerRef', 'displayStatus', 'endsAt', 'id', 'slotId', 'startsAt', 'status'];
+    for (const row of summaryB.body.data.cancelled) {
+      expect(Object.keys(row).sort()).toEqual(exactFields);
+      expect(row).toMatchObject({ status: 'Cancelled', displayStatus: 'Cancelled', customerRef: 'CUST-' + customer.slice(0, 8) });
+    }
+    for (const secret of [customer, customerEmail, secretReason, authB.cookie.split(';')[0], foreignId, oldSlot]) {
+      expect(JSON.stringify(summaryB.body)).not.toContain(secret);
+    }
+    const summaryA = await request(app).get('/api/v1/tutor/summary').set('Cookie', authA.cookie);
+    expect(summaryA.status).toBe(200);
+    expect(summaryA.body.data.cancelledCount).toBe(1);
+    expect(summaryA.body.data.cancelled.map((row: { id: string }) => row.id)).toEqual([foreignId]);
+  });
+});
