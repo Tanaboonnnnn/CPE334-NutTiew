@@ -1,5 +1,7 @@
 # CPE334 NutTiew — Sprint 1 Requirements Specification
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+
 > **Artifact:** Sprint 1 requirements baseline (requirements-only review)
 > **Product:** Tutoring Appointment System — Theme 1: Appointment & Scheduling
 > **Version:** 0.1.0 — 3 November 2026
@@ -121,7 +123,7 @@ None of these open decisions authorizes a later-sprint feature or an unreviewed 
 
 **Time intervals:** use half-open intervals **[start, end)** when discussing overlap. Two intervals overlap when **startA < endB and startB < endA**. A Slot ending at 14:00 and the next starting at 14:00 are adjacent, not overlapping. Every Slot's end is exactly 60 minutes after its start (Q03). Appointment dates/times shown to Tutor/Customer use **Asia/Bangkok (UTC+07:00)**, independently of the viewer's browser timezone (Q29).
 
-**Lead time / single authoritative check:** let `T_elig` be the backend-authoritative instant read **inside the transaction after relevant waits/locks and immediately before the final guarded Booking write**. Evaluate **SlotStart − T_elig ≥ 60 minutes**. Exactly 60:00 passes; 59:59 fails. The HTTP request may have *arrived* earlier, and the transaction may *commit* slightly later; neither receipt time nor commit timestamp replaces `T_elig`. A request received at 13:59:59 but delayed until `T_elig = 14:00:01` for a 15:00 Slot **must fail**. If `T_elig = 14:00:00`, the cutoff check passes even when the successful transaction commits later, provided its other guards and atomicity hold. A genuinely **new** Booking attempt obtains a new `T_elig`; retrying only to retrieve a previously committed Booking is a separate unresolved retry-contract behavior. This is the proposed precise **engineering interpretation of Q05**, subject to peer acceptance and executable time/transaction design in the Booking Feature SDS; it does not change Q05's 60-minute business cutoff. Do not apply this *Booking* lead time automatically to Tutor's Slot-creation request; only valid/future Slot creation is confirmed so far.
+**Lead time / single authoritative check:** let `T_elig` be the backend-authoritative instant read **inside the transaction after relevant waits/locks and immediately before the final guarded Booking write**. Evaluate **SlotStart − T_elig ≥ 90 minutes**. Exactly 90:00 passes; 89:59 fails. The HTTP request may have *arrived* earlier, and the transaction may *commit* slightly later; neither receipt time nor commit timestamp replaces `T_elig`. A request received at 13:29:59 but delayed until `T_elig = 13:30:01` for a 15:00 Slot **must fail**. If `T_elig = 13:30:00`, the cutoff check passes even when the successful transaction commits later, provided its other guards and atomicity hold. A genuinely **new** Booking attempt obtains a new `T_elig`; retrying only to retrieve a previously committed Booking is a separate unresolved retry-contract behavior. CR-L7-01 changes the accepted Sprint 1 cutoff from 60 to 90 minutes without changing the authoritative clock or transaction design. Do not apply this *Booking* lead time automatically to Tutor's Slot-creation request; only valid/future Slot creation is confirmed so far.
 
 **State semantics:** a successful new Booking begins in **Booked**. The product also has a later **Cancelled** state per Q30, but Sprint 1 does not implement cancellation. Crossing a Slot's end-time does not transition Booked to another business state, release an Active Booking, or constitute lesson attendance. A Booking must not be presented as Completed. For possible later cancellation, withdrawn Slots will be historical non-bookable records; their overlap is ignored for new offered Slots (Q32), but withdrawal is **not a Sprint 1 action**.
 
@@ -197,7 +199,7 @@ Business rules are invariants or authorization/lifecycle constraints across all 
 | **BR-S1-04** | A Tutor (Staff) may create/manage offered Slots **only for their own authorized Tutor Schedule**. Customer and another Tutor have no such write right. | Q02 | 04–07 |
 | **BR-S1-05** | Two **currently offered** Slots of the **same Tutor** may not overlap, whether either is booked or not. Positive-duration overlap is forbidden; touching boundaries are permitted. | Q06 | 05–07 |
 | **BR-S1-06** | Distinct Tutors may offer the same time; the same-Tutor non-overlap rule is not a global restriction on everyone. | Q06 | 05–08 |
-| **BR-S1-07** | A new Booking is eligible only when its selected offered Slot is unoccupied, valid and begins **at least 60 minutes** after authoritative `T_elig` as defined in §3. Exactly 60:00 is eligible; less is not. | Q05 | 08–11 |
+| **BR-S1-07** | A new Booking is eligible only when its selected offered Slot is unoccupied, valid and begins **at least 90 minutes** after authoritative `T_elig` as defined in §3. Exactly 90:00 is eligible; less is not. | Q05 | 08–11 |
 | **BR-S1-08** | A single exclusive Slot may have **at most one Active Booking** at a time, including across concurrent requests. | Q01; Theme 1 minimum | 10–12 |
 | **BR-S1-09** | One Customer may not hold **overlapping Active Bookings** with any Tutors, including appointments with different Tutor owners. | Q28 | 10–13 |
 | **BR-S1-10** | Two Bookings for one Customer with **adjacent** [start, end) intervals do not overlap; adjacency alone is not a reason to reject. | Q28 | 10–13 |
@@ -222,7 +224,7 @@ Business rules are invariants or authorization/lifecycle constraints across all 
 
 **I-S1-03 — Customer's active schedule:** for one Customer, no two committed **Active Bookings** may have positive-duration overlap, even when the Slots' Tutors differ. Two appointments 13:00–14:00 and 14:00–15:00 are permitted by this overlap rule (other eligibility rules must still pass).
 
-**I-S1-04 — Eligibility before commitment:** an apparently free Slot is not bookable if its start is fewer than 60 minutes away at `T_elig`, sampled within its final transactional eligibility check as defined in §3. A stale UI availability result or earlier request-arrival timestamp cannot override this; an attempt may be declined after the user selected it or while waiting for a lock.
+**I-S1-04 — Eligibility before commitment:** an apparently free Slot is not bookable if its start is fewer than 90 minutes away at `T_elig`, sampled within its final transactional eligibility check as defined in §3. A stale UI availability result or earlier request-arrival timestamp cannot override this; an attempt may be declined after the user selected it or while waiting for a lock.
 
 **I-S1-05 — Atomic outcome:** every accepted booking has one persisted Booking and occupied Slot; a rejected booking changes none of the affected Booking/Slot occupancy relationships. Which DB constraint, lock or isolation strategy realizes this outcome belongs in the System/Feature SDS, not in the stakeholder requirement.
 
@@ -249,8 +251,8 @@ For each hazard, Part E must document the chosen isolation/locking/constraint/se
 | Customer X holds 13:00–14:00; wants 14:00–15:00 | Overlap rule allows; Q05 and others still apply | BR-10 |
 | Two Customers simultaneously claim Tutor A's same exclusive Slot | At most one committed Booking | BR-08/19 |
 | Customer X submits simultaneously for two distinct overlapping Tutors' Slots | No two overlapping bookings may both commit | BR-09/19 |
-| Slot 15:00, request at 14:00:00 Bangkok time | Exactly 60 minutes — eligible if otherwise valid | BR-07/12 |
-| Slot 15:00, request at 14:00:01 Bangkok time | 59m59s — reject | BR-07/12 |
+| Slot 15:00, request at 13:30:00 Bangkok time | Exactly 90 minutes — eligible if otherwise valid | BR-07/12 |
+| Slot 15:00, request at 13:30:01 Bangkok time | 89m59s — reject | BR-07/12 |
 | Booked lesson 13:00–14:00; now 15:00 | May display Past; status still Booked, not Completed | BR-14/22 |
 
 ## 7. Non-functional requirements (NFR) and acceptance targets
@@ -264,7 +266,7 @@ NFRs describe quality constraints and *how they will be verified*. Course-mandat
 | **NFR-S1-03** | **Persistent correctness:** after a successful Slot and Booking creation, authorized views must return the same committed records following page refresh and app process restart against the same persistent DB. Verify via API/DB and selected UI tests. | Instructor-required outcome | F-S1-02/04/05 |
 | **NFR-S1-04** | **Exclusive-booking race safety:** in a **proposed** burst of 20 simultaneous competing attempts to book one exclusive Slot, committed success count must be ≤1 and no partial records appear. Use a real transaction-capable test DB, not mocks only. | Business outcome required; run size proposed | F-S1-04 |
 | **NFR-S1-05** | **Same-Customer race safety:** in a **proposed** test of 10 simultaneous attempts by the same Customer to book distinct overlapping eligible Slots, no two overlapping Active Bookings can coexist. | Q28 outcome required; run size proposed | F-S1-04 |
-| **NFR-S1-06** | **Time-boundary correctness:** verify accepted and denied Q05 cases at **exactly 60:00** and immediately below, using backend `T_elig` as defined in §3, including a request that arrives before the cutoff but crosses it while waiting inside a transaction; use a controlled clock and test a non-Bangkok browser timezone. Test Tutor invalid/past Slot validation separately. | Q05/Q29 required; test method proposed | F-S1-02/03/04 |
+| **NFR-S1-06** | **Time-boundary correctness:** verify accepted and denied Q05 cases at **exactly 90:00** and immediately below, using backend `T_elig` as defined in §3, including a request that arrives before the cutoff but crosses it while waiting inside a transaction; use a controlled clock and test a non-Bangkok browser timezone. Test Tutor invalid/past Slot validation separately. | Q05/Q29 required; test method proposed | F-S1-02/03/04 |
 | **NFR-S1-07** | **Reproducible verification:** document setup/configuration, seed users, migration/data setup, commands to run app/build/tests, exact source SHA and pass/fail/skip counts. Do not claim success absent executed evidence. | Instructor-required evidence | Cross-cutting |
 | **NFR-S1-08** | **No secret leakage:** credentials, tokens, internal stack traces and another person's protected Booking details must not appear in user-visible error responses; review tested error cases, logs and public client artifacts. | Security outcome required; inspection proposed | Cross-cutting |
 | **NFR-S1-09** | **Usability (proposal):** a user can complete login, availability navigation, booking and viewing results with a keyboard and visible focus indication on primary controls; verify with a recorded manual checklist. | Proposed threshold; approval required | F-S1-01/03/04/05 |
@@ -367,8 +369,8 @@ These are **requirements-level validation examples**, not an executed Software T
 |---|---|---|---|
 | **VC-S1-15 / TEST-S1-15** | Customer logged in; eligible future offered Slot → browse | Tutor and time identifiable; no other Customer's private details exposed | FR-08/09, NFR-01 |
 | **VC-S1-16 / TEST-S1-16** | Eligible unoccupied Slot → Customer requests Booking | One persisted Booking, state Booked, own Customer and selected Tutor/Slot | FR-10, BR-01/07/08 |
-| **VC-S1-17 / TEST-S1-17** | Slot at 15:00, backend `T_elig` is 14:00:00 | Exactly 60-minute Q05 lead time **passes** if otherwise valid; later commit does not retroactively invalidate a passing checked write | FR-11, BR-07 |
-| **VC-S1-18 / TEST-S1-18** | Slot at 15:00, backend `T_elig` is 14:00:01 | Q05 lead time **fails**; no Booking/occupation | FR-11, BR-07 |
+| **VC-S1-17 / TEST-S1-17** | Slot at 15:00, backend `T_elig` is 13:30:00 | Exactly 90-minute Q05 lead time **passes** if otherwise valid; later commit does not retroactively invalidate a passing checked write | FR-11, BR-07 |
+| **VC-S1-18 / TEST-S1-18** | Slot at 15:00, backend `T_elig` is 13:30:01 | Q05 lead time **fails**; no Booking/occupation | FR-11, BR-07 |
 | **VC-S1-19 / TEST-S1-19** | Offered Slot already occupied → another Customer books it | Reject; previous Booking preserved and only one active claim remains | FR-11/12, BR-08 |
 | **VC-S1-20 / TEST-S1-20** | Customer holds 13:00–14:00 Tutor A → books 13:30–14:30 Tutor B | Reject cross-Tutor Customer overlap with no second Booking | FR-13, BR-09 |
 | **VC-S1-21 / TEST-S1-21** | Customer holds 13:00–14:00 → requests 14:00–15:00 | Customer-overlap check permits adjacent interval, subject to lead time | FR-13, BR-10 |
@@ -479,7 +481,7 @@ The matrices below link requirements to their proposed delivery owner and valida
 | Tutor overlaps | Adjacent offers by same Tutor | Two offered Slots overlap by one second or more | Old offered Slot unchanged |
 | Different Tutors | Same time offered by A and B | Global same-time prohibition would incorrectly reject | Distinct Tutor offers remain possible |
 | Available browsing | Current eligible open Slots | Occupied, past, inside Q05 cutoff, stale selection | Never promise reservation from cached view |
-| Booking lead-time | Start minus now exactly 60:00 | 59:59 (or less), measured at backend | No too-late Booking |
+| Booking lead-time | Start minus now exactly 90:00 | 89:59 (or less), measured at backend | No too-late Booking |
 | Occupied Slot | First valid Customer claims | Other Customer tries same Slot | One Active Booking maximum |
 | Customer overlaps | Adjacent bookings across Tutors | Partially/fully overlapping across Tutors | One Customer cannot attend overlapping bookings |
 | Same Slot concurrency | One winner under parallel requests | Two near-simultaneous submissions | At most one committed Booking |
@@ -499,7 +501,7 @@ The matrices below link requirements to their proposed delivery owner and valida
 - [ ] Reviewer confirms Theme 1 assignment and any changes in the authoritative group Master Specification; the available source is a draft.
 - [ ] Reviewer confirms FR-S1-01..19 and BR-S1-01..22 reflect the agreed Q01–Q06, Q28–Q30 scope, without silently importing Sprint 2 features.
 - [ ] Reviewer verifies both race conditions are represented separately: **one Slot/two Customers** and **one Customer/two overlapping Tutors**.
-- [ ] Reviewer verifies ownership matrices, server-side auth, time-zone and exact 60-minute boundary semantics.
+- [ ] Reviewer verifies ownership matrices, server-side auth, time-zone and the exact 90-minute Q05 boundary.
 - [ ] TBD-S1-01..07 are visible; any required new business assumption is documented and approved rather than guessed.
 - [ ] Proposed NFR numeric thresholds are explicitly accepted, revised or left open before Feature SDS/STS signoff.
 - [ ] The PR changes **only this requirements document**, not app code, CONTEXT, internal logs, Issue bodies or Sprint 1 staging.
@@ -579,8 +581,8 @@ Slot creation is not subject to the Customer new-Booking cutoff Q05 unless expli
 | AC | Given | When | Then (observable pass condition) | Validation |
 |---|---|---|---|---|
 | **AC-S1-19** | Eligible unoccupied Slot, Customer logged in without overlapping Booking | Submit Booking | One Booked record is committed with correct Customer, Tutor and Slot identifiers | VC-16 |
-| **AC-S1-20** | Slot begins 15:00; backend `T_elig` is exactly 14:00:00 | Submit Booking | Exact 60-minute cutoff accepted if all other checks pass and transaction subsequently commits | VC-17 |
-| **AC-S1-21** | Slot begins 15:00; backend `T_elig` is 14:00:01 | Submit Booking | Less-than-60-minute cutoff rejected, no Booking or occupation | VC-18 |
+| **AC-S1-20** | Slot begins 15:00; backend `T_elig` is exactly 13:30:00 | Submit Booking | Exact 90-minute cutoff accepted if all other checks pass and transaction subsequently commits | VC-17 |
+| **AC-S1-21** | Slot begins 15:00; backend `T_elig` is 13:30:01 | Submit Booking | Less-than-90-minute cutoff rejected, no Booking or occupation | VC-18 |
 | **AC-S1-22** | Customer A owns active Booking on Slot X | Customer B attempts same Slot X | Second request rejected, first Booking preserved | VC-19 |
 | **AC-S1-23** | Customer holds Tutor A 13:00–14:00 | Book Tutor B 13:30–14:30 | Reject overlapping appointment even across Tutors | VC-20 |
 | **AC-S1-24** | Customer holds an interval ending 14:00 | Request other Tutor 14:00–15:00 | Adjacency itself not blocked; other checks still apply | VC-21 |
@@ -606,7 +608,7 @@ AC-S1-29 does **not** invent an Idempotency-Key format, retention window or guar
 
 | AC | Given | When | Then (observable pass condition) | Validation |
 |---|---|---|---|---|
-| **AC-S1-35** | Slot starts 15:00; Booking HTTP request reaches server at 13:59:59 but waits for contention until final transactional `T_elig` is 14:00:01 | Backend performs final guarded eligibility check after wait | Reject as **less than 60 minutes remaining**, preserve Slot and all previously committed Bookings, and do not report success merely because HTTP arrival preceded the cutoff | VC-39 |
+| **AC-S1-35** | Slot starts 15:00; Booking HTTP request reaches server at 13:29:59 but waits for contention until final transactional `T_elig` is 13:30:01 | Backend performs final guarded eligibility check after wait | Reject as **less than 90 minutes remaining**, preserve Slot and all previously committed Bookings, and do not report success merely because HTTP arrival preceded the cutoff | VC-39 |
 
 ### Additional verification cases discovered during review
 
@@ -614,7 +616,7 @@ AC-S1-29 does **not** invent an Idempotency-Key format, retention window or guar
 |---|---|---|---|
 | **VC-S1-37 / TEST-S1-37** | Two requests concurrently create overlapping future offered Slots for same Tutor | At most one overlapping offer commits; no partial side effects | F-S1-02; Q06 |
 | **VC-S1-38 / TEST-S1-38** | Customer duplicates Booking submission while first outcome is in flight or unknown | At most one Active Booking for a Slot; Customer overlap invariant preserved, response semantics defined later | F-S1-04; Q01/Q28 |
-| **VC-S1-39 / TEST-S1-39** | For 15:00 Slot, request arrives at 13:59:59 but transaction waits until `T_elig = 14:00:01` before final guarded write | Refuse too-late Booking with no partial occupancy, despite pre-cutoff arrival; use controlled server clock/transaction synchronization, not client timestamps | F-S1-04; Q05, BR-S1-07/13, AC-S1-35 |
+| **VC-S1-39 / TEST-S1-39** | For 15:00 Slot, request arrives at 13:29:59 but transaction waits until `T_elig = 13:30:01` before final guarded write | Refuse too-late Booking with no partial occupancy, despite pre-cutoff arrival; use controlled server clock/transaction synchronization, not client timestamps | F-S1-04; Q05, BR-S1-07/13, AC-S1-35 |
 
 **Coverage by feature:** F-S1-01 AC-01..07; F-S1-02 AC-08..14; F-S1-03 AC-15..18; F-S1-04 AC-19..29 and cross-cutting AC-35; F-S1-05 AC-30..34. Every AC has a planned VC, but **none has a test pass** in this requirements-only PR. The implementation's STS must define fixtures, API/UI steps, DB assertions, controlled time, race synchronization and result recording.
 
@@ -674,7 +676,7 @@ This table is a guard against both missing a stakeholder policy and accidentally
 | Q02 | Tutor is Staff; owns only their authorized schedule | **Required**: FR-04/05/07/15, BR-04/15/16 |
 | Q03 | Fixed 60-minute Slot | **Required**: BR-02, FR-05 |
 | Q04 | Manual individual Slot offers, no recurrence | **Required**: BR-03, FR-05 |
-| Q05 | New Booking at least 60 minutes before start, boundary included | **Required**: BR-07, FR-11 |
+| Q05 | New Booking at least 90 minutes before start, boundary included | **Required**: BR-07, FR-11 |
 | Q06 | Same-Tutor current offered Slot overlap prohibited, adjacency allowed | **Required**: BR-05/06, FR-06 |
 | Q07 | Customer cancellation allowed at least 30 minutes ahead | Later sprint; no Cancel action |
 | Q08 | Customer cancellation reopens original Slot | Later sprint; no reopen action |
@@ -728,7 +730,7 @@ This table is a guard against both missing a stakeholder policy and accidentally
 - [ ] Each agreed direct decision Q01–Q06/Q28–Q30 maps to required behavior; Q07–Q27/Q31–Q32 remain explicit future-scope constraints.
 - [ ] Negative, boundary, privacy and both booking concurrency cases are separately inspectable.
 - [ ] **Two different race types** are covered: competing Customers for the same Slot; one Customer for distinct overlapping Tutors' Slots.
-- [ ] Q05 exact 60-minute boundary, Q29 Bangkok time, Q30 Past ≠ Completed and Q02 ownership remain internally consistent.
+- [ ] Q05 exact 90-minute boundary, Q29 Bangkok time, Q30 Past ≠ Completed and Q02 ownership remain internally consistent.
 - [ ] All TBDs and merely proposed NFR targets remain visibly unapproved until resolved.
 - [ ] Reviewer checks actual instructor master/Theme 1 assignment or records a blocker; no false source-verification claim.
 - [ ] Teammate **@Chxtamos** submits substantive PR review, noting findings and approval/change request reasons.

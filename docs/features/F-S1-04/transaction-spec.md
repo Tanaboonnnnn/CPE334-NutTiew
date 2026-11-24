@@ -1,5 +1,7 @@
 # F-S1-04 — PostgreSQL Booking Transaction, Lock and Retry Contract (Part E)
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](../../labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+
 > **Selected engineering design for peer review.** Application transaction contract only, not a migration or SQL implementation. #16 owns this adapter; #33 owns the canonical Booking model and single DB guard. Align with [System SDS](../../system-sds.md) §§7.1/7.3–7.5, [BDF-D11/D12](../../foundations/booking-data/data-spec.md#7-booking-trigger-ownership-and-sprint-1-guard) and [BDF-23](../../foundations/booking-data/tests.md#2-planned-database-test-cases).
 
 ## 1. Selected transaction mechanism
@@ -43,7 +45,7 @@ The Session is an existing Auth record, not a Booking data addition. The princip
 8. **Natural-key replay first:** query `Booking` for exact `(customerId=principal.userId, currentSlotId=slotId, status='Booked')`. If found and interval matches locked Slot, COMMIT the read-only transaction and return 200 with that Booking ID, even if the locked Tutor is now inactive or no longer has role `Tutor`. Do this **before** new-claim Tutor eligibility rejection, occupied-Slot rejection and new-booking Q05. This exception applies only to the already committed same-pair Booking; it does not authorize a new INSERT for an ineligible Tutor.
 9. **New-claim Tutor eligibility:** only if step 8 found no same-pair replay, require the selected Tutor's current locked User row to have `role='Tutor'` and `isActive=true`. If the Tutor is inactive or has another role, ROLLBACK and return generic 409 `SLOT_UNAVAILABLE`; do not disclose Tutor identity/status and do not create a Booking. This check never invalidates an existing same-pair replay.
 10. **New-claim conflicts:** if any other `Booked` row occupies Slot, return 409 `SLOT_UNAVAILABLE`. If Customer has a different `Booked` interval with positive overlap (`existing.startsAt < slot.endsAt AND slot.startsAt < existing.endsAt`), return 409 `CUSTOMER_OVERLAP`. Exact adjacency is allowed.
-11. **Guarded INSERT:** insert one row with server/DB-generated ID, authenticated Customer ID, locked Slot ID, persisted Slot interval and status `Booked`. #33 `booking_guard_s1()` locks/re-reads Slot (already held), then samples DB `clock_timestamp()` as authoritative `T_elig`; enforce `startsAt - T_elig >= interval '60 minutes'`. Exact 60:00 passes; 59:59 fails. Do not substitute application time, PostgreSQL transaction-start `now()`, HTTP arrival, #15 `T_view` or commit time.
+11. **Guarded INSERT:** insert one row with server/DB-generated ID, authenticated Customer ID, locked Slot ID, persisted Slot interval and status `Booked`. #33 `booking_guard_s1()` locks/re-reads Slot (already held), then samples DB `clock_timestamp()` as authoritative `T_elig`; enforce `startsAt - T_elig >= interval '90 minutes'`. Exact 90:00 passes; 89:59 fails. Do not substitute application time, PostgreSQL transaction-start `now()`, HTTP arrival, #15 `T_view` or commit time.
 12. **Commit:** COMMIT on the same connection. Return 201 with persisted Booking ID only after COMMIT acknowledgement.
 13. **Release:** on error, ROLLBACK when connection is usable, release it and classify per §6. No external side effect runs inside transaction.
 
@@ -82,7 +84,7 @@ Both attempts include same Customer User row in affected User lock set, even tho
 
 ### Q05 — post-contention eligibility
 
-Application acquires known conflict-serialization User/Slot locks before guarded INSERT. #33 trigger's Slot `FOR UPDATE` must re-lock a row already held, so it creates no new Slot wait after `T_elig`. Only trigger-side DB `clock_timestamp()` after that lock is authoritative. A request received at 13:59:59 that waits until 14:00:01 for a 15:00 Slot must fail; a valid 60:00 guard may still commit later.
+Application acquires known conflict-serialization User/Slot locks before guarded INSERT. #33 trigger's Slot `FOR UPDATE` must re-lock a row already held, so it creates no new Slot wait after `T_elig`. Only trigger-side DB `clock_timestamp()` after that lock is authoritative. A request received at 13:29:59 that waits until 13:30:01 for a 15:00 Slot must fail; a valid 90:00 guard may still commit later.
 
 ### Mandatory no-post-guard-contention proof
 
@@ -141,6 +143,6 @@ The fresh **User and Session** checks are mandatory for every post-ROLLBACK path
 
 ## 7. Real-PostgreSQL proof gate
 
-BDF-23 is owned by #16 and runs only after #33 Part F merges with exact schema SHA. Evidence must include independent sessions/barriers for Race B/C; backend PIDs/blockers; User → Slot → Session auth-lock order and Session revalidation after waits; fresh READ COMMITTED post-ROLLBACK User-then-Session authorization lock and allowlisted-constraint reconciliation before exact-pair read; trigger Slot lock already held; `T_elig` after required waits; forced unexpected unique/exclusion index wait; 60:00/59:59 and HTTP-arrival-before-cutoff cases; sequential/in-flight/lost-response same-pair replay; pre-COMMIT failure injection; final rows from fresh connection; PostgreSQL version, schema SHA, SQLSTATE/constraint, commands and source commit.
+BDF-23 is owned by #16 and runs only after #33 Part F merges with exact schema SHA. Evidence must include independent sessions/barriers for Race B/C; backend PIDs/blockers; User → Slot → Session auth-lock order and Session revalidation after waits; fresh READ COMMITTED post-ROLLBACK User-then-Session authorization lock and allowlisted-constraint reconciliation before exact-pair read; trigger Slot lock already held; `T_elig` after required waits; forced unexpected unique/exclusion index wait; 90:00/89:59 and HTTP-arrival-before-cutoff cases; sequential/in-flight/lost-response same-pair replay; pre-COMMIT failure injection; final rows from fresh connection; PostgreSQL version, schema SHA, SQLSTATE/constraint, commands and source commit.
 
 BDF-23 is **PLANNED / NOT RUN** in Part E. If post-guard contention challenge fails, do not approve adapter or claim #16 Part F complete.

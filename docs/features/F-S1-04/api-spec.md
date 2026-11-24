@@ -1,5 +1,7 @@
 # F-S1-04 — Customer Booking HTTP/API Contract (Part E)
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](../../labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+
 > **Proposed API contract for independent review; not implemented or runtime-tested.** See [Feature SDS](specification.md), [UI](ui-spec.md), [data](data-spec.md), [transaction protocol](transaction-spec.md), [STS](tests.md), and the accepted [Auth API contract](../F-S1-01/api-spec.md).
 
 ## 1. Transport and authorization
@@ -86,7 +88,7 @@ All success/error responses set `Cache-Control: no-store`. Timestamps are UTC RF
 | Missing Slot | 404 `SLOT_NOT_FOUND` | No Booking/private information |
 | Slot occupied by another Customer, Slot lifecycle is not `Offered`, or the current Tutor is inactive/no longer role `Tutor` for a **new claim** | 409 `SLOT_UNAVAILABLE` | Existing row preserved; no new Booking; no owner/Tutor-status disclosure |
 | Customer has a different overlapping Active Booking | 409 `CUSTOMER_OVERLAP` | No conflicting row |
-| Q05 fails at DB `T_elig` (59:59 or less) | 422 `BOOKING_NOT_ELIGIBLE` | No Booking/occupancy |
+| Q05 fails at DB `T_elig` (89:59 or less) | 422 `BOOKING_NOT_ELIGIBLE` | No Booking/occupancy |
 | Invalid/foreign Origin, explicit `Sec-Fetch-Site: cross-site`, missing/wrong/old-Session CSRF | 403 `ORIGIN_DENIED` / `CSRF_DENIED` | No mutation |
 | Missing or mismatched `X-NutTiew-Expected-Session-Binding` | 403 `SESSION_BINDING_MISMATCH` | No mutation; refresh identity and CSRF bootstrap |
 | Serialization/deadlock retry budget exhausted | 503 `TRANSACTION_RETRY_EXHAUSTED` | All attempts rolled back |

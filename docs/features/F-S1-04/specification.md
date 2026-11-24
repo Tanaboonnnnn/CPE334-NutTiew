@@ -1,5 +1,7 @@
 # F-S1-04 — Exclusive Booking Feature SDS (Part E)
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](../../labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+
 > **Documentation contract only; not implemented, executed or peer-approved yet.** Issue #16; owner @Chxtamos; independent reviewer @Tanaboonnnnn. This Part E records the user's Sprint 1 Booking decision for OD-013 and selects the PostgreSQL transaction design for review.
 
 ## 1. Authority and baseline
@@ -42,7 +44,7 @@ An authenticated Customer requests one selected Slot. The server derives Custome
 | State | New Sprint 1 Booking status is `Booked`; `Past` is display-only and does not release occupancy. |
 | Exclusivity | At most one Active (`Booked`) row per Slot. |
 | Customer overlap | No positive-duration overlapping Active Bookings for one Customer across Tutors; half-open `[start,end)` means adjacency is allowed. |
-| Q05 | At authoritative DB `T_elig`, `Slot.startsAt - T_elig >= 60 minutes`; exact 60:00 passes, 59:59 fails. |
+| Q05 | At authoritative DB `T_elig`, `Slot.startsAt - T_elig >= 90 minutes`; exact 90:00 passes, 89:59 fails. |
 | Atomicity | No success before COMMIT; rejected/aborted attempt leaves no partial Booking or phantom occupancy. |
 | Lifecycle | Sprint 1 Booking is append-only; this feature performs INSERT only. |
 
@@ -80,7 +82,7 @@ These are engineering selections pending independent @Tanaboonnnnn review and re
 | Existing criterion | Contract interpretation | Planned STS |
 |---|---|---|
 | AC-S1-19 | One eligible request commits one `Booked` row with authenticated Customer, actual Slot/Tutor relationship and copied interval. | BOOK-01 |
-| AC-S1-20 and AC-S1-21 | Exact 60:00 passes; 59:59 fails at trigger `T_elig`. | BOOK-02/03 |
+| AC-S1-20 and AC-S1-21 | Exact 90:00 passes; 89:59 fails at trigger `T_elig`. | BOOK-02/03 |
 | AC-S1-22 | Another Customer cannot claim an occupied Slot; no private owner data is returned. | BOOK-04 |
 | AC-S1-23 and AC-S1-24 | Positive same-Customer overlap across Tutors is denied; adjacency is allowed. | BOOK-05/06 |
 | AC-S1-25 and AC-S1-26 | Race B (two Customers/one Slot) and Race C (one Customer/two overlapping Tutors) have separate barriers and final-row assertions. | BOOK-10/11 |
