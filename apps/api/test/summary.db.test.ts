@@ -699,13 +699,26 @@ describe('F-S3-01 Final Upcoming & In-Progress slice — #146 (OD-006 Option 1)'
     });
     const bCancelledB = await seedBooking({
       customerId: customerB, slotId: slotCancelledB, startsAtIso: offsetIso(30, 11, 0), endsAtIso: offsetIso(30, 12, 0),
-      status: 'Cancelled', cancellationActor: 'Customer', cancelledAtIso: offsetIso(30, 3, 0),
+      status: 'Booked',
     });
 
     const authA = await loginCookieAndBinding(app, emailA);
     const authB = await loginCookieAndBinding(app, emailB);
     const authEmpty = await loginCookieAndBinding(app, emailEmpty);
     const authCustomer = await loginCookieAndBinding(app, customerEmail);
+    const authCustomerB = await loginCookieAndBinding(app, customerBEmail);
+    const csrfB = await request(app).get('/api/v1/auth/csrf').set('Cookie', authCustomerB.cookie);
+    expect(csrfB.status).toBe(200);
+    const cancelResB = await request(app)
+      .post('/api/v1/customer/bookings/' + bCancelledB + '/cancel')
+      .set({
+        ...headers,
+        Cookie: authCustomerB.cookie,
+        'X-CSRF-Token': csrfB.body.csrfToken as string,
+        'X-NutTiew-Expected-Session-Binding': authCustomerB.binding,
+      })
+      .send({});
+    expect(cancelResB.status).toBe(200);
 
     currentSummaryClock = tEval;
 
