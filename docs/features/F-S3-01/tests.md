@@ -1,6 +1,6 @@
 # F-S3-01 — Tutor Appointment Summary Software Test Specification (Part E)
 
-> **D2 STS (`SUM-01..08`) implemented and verified in `#145` / PR `#156` (`NutTiew CI` Run `45362315140`); `OD-006` Option 1 decided by `@Chxtamos` & `@Tanaboonnnnn` ([PR #157 review](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870)); Final STS (`SUM-09..10`) remains PLANNED / NOT RUN — gated on final human review confirmation & `sprint3` merge before `#146` / `#147` code.**
+> **D2 baseline:** #145 / PR #156, CI run [45362315140](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45362315140). **Final increments:** OD-006 Option 1 approved in [PR #157](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157); Cancelled merged to Sprint 3 in [PR #158](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/158); Upcoming/In-Progress in [PR #159](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/159). See the [#148 verification ledger](verification-148.md) for exact candidate evidence and limits.
 
 ## 1. Traceability and test setup
 
@@ -8,7 +8,7 @@ Sources: [Feature SDS](specification.md), [API](api-spec.md), [Data](data-spec.m
 
 Required Part F setup: disposable PostgreSQL 18 at the reviewed S2 schema SHA; Tutor A, Tutor B, Customer A; live Sessions; real persisted Bookings spanning past-ended (`endsAt <= T_eval`), exact-end boundary (`endsAt === T_eval`), in-progress (`startsAt <= T_eval < endsAt`), upcoming (`startsAt > T_eval`), and cancelled (`status = 'Cancelled'`); controlled `summaryClock` seam for exact boundary testing (use an exact SQL/test-clock timestamp, not a rounded JavaScript Date, for sub-millisecond fixtures); fresh API child process for restart durability.
 
-`SUM-01..08` are verified on `sprint3@175b88d9`; `SUM-09..10` below are **PLANNED / NOT RUN**.
+SUM-01..08 established the D2 Past Booked baseline at `sprint3@175b88d9`. D2 rows below describe that slice, not the absence of Final fields. SUM-09/10 cover the integrated Final contract.
 
 ## 2. Planned STS cases
 
@@ -32,4 +32,4 @@ Required Part F setup: disposable PostgreSQL 18 at the reviewed S2 schema SHA; T
 - `VAL-036`: `SUM-04` (D2), `SUM-09` (Final Cancelled response)
 - `NFR-001/003/006/007/015/016`: `SUM-01..08` (verified in `#145`), `SUM-09..10` (planned for Final `#146`/`#147`)
 
-**Status:** `SUM-01..08` verified (`sprint3@175b88d9`, plus `SUM-08b` test stabilization `d2c7f86` in PR `#157`); `SUM-09..10` PLANNED / NOT RUN (Option 1 adopted by `@Chxtamos` & `@Tanaboonnnnn`; `#146` runtime code gated on final human review confirmation & `sprint3` merge).
+**Status:** See [the verification ledger](verification-148.md). A staging check is not a production release, stakeholder acceptance, or evidence of an unrun case.

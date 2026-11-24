@@ -109,12 +109,12 @@ async function assertDisposableTestDatabase(db: Pick<Pool, 'query'>): Promise<vo
 }
 
 /**
- * Seed a genuinely past-ended historical Slot + Booking using the disposable
+ * Seed a historical Slot + Booking (past-ended or already started) using the disposable
  * test DB owner connection for real-clock OS-process restart verification (SUM-07).
  * Keeps slot_s2_row_guard enabled; toggles only booking_s2_row_guard inside one
  * transaction after the fail-closed disposable-DB preflight.
  */
-async function seedHistoricalPastBooking(tutorId: string, customerId: string, startsAtIso: string, endsAtIso: string): Promise<string> {
+async function seedHistoricalBooking(tutorId: string, customerId: string, startsAtIso: string, endsAtIso: string): Promise<string> {
   const client = await ownerPool.connect();
   try {
     await assertDisposableTestDatabase(client);
@@ -521,7 +521,7 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     expect(resB.body.data.pastBooked[0].id).toBe(bookingId);
   });
 
-  it('SUM-07 persists Past Booked count and row across a real API OS-process restart', async () => {
+  it('SUM-07 persists the four owner-only categories across a real API OS-process restart', async () => {
     const tutorEmail = `sum07-t-${marker}@example.test`;
     const custEmail = `sum07-c-${marker}@example.test`;
     const tutorId = await createUser(tutorEmail, 'Tutor');
@@ -530,7 +530,27 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     const pastStart = new Date(Date.now() - 48 * 3_600_000);
     pastStart.setUTCMinutes(0, 0, 0);
     const pastEnd = new Date(pastStart.getTime() + 3_600_000);
-    const bookingId = await seedHistoricalPastBooking(tutorId, custId, pastStart.toISOString(), pastEnd.toISOString());
+    const bookingId = await seedHistoricalBooking(tutorId, custId, pastStart.toISOString(), pastEnd.toISOString());
+
+    const activeStart = new Date(Math.floor(Date.now() / 60_000) * 60_000 - 20 * 60_000);
+    const activeEnd = new Date(activeStart.getTime() + 3_600_000);
+    const active = await seedHistoricalBooking(tutorId, custId, activeStart.toISOString(), activeEnd.toISOString());
+    const upcomingSlot = await createSlot(tutorId, offsetIso(30, 6, 0), offsetIso(30, 7, 0));
+    const upcoming = await seedBooking({
+      customerId: custId, slotId: upcomingSlot, startsAtIso: offsetIso(30, 6, 0), endsAtIso: offsetIso(30, 7, 0), status: 'Booked',
+    });
+    const cancelledSlot = await createSlot(tutorId, offsetIso(30, 8, 0), offsetIso(30, 9, 0));
+    const cancelled = await seedBooking({
+      customerId: custId, slotId: cancelledSlot, startsAtIso: offsetIso(30, 8, 0), endsAtIso: offsetIso(30, 9, 0), status: 'Booked',
+    });
+    const customer = await loginCookieAndBinding(app, custEmail);
+    const csrf = await request(app).get('/api/v1/auth/csrf').set('Cookie', customer.cookie);
+    expect(csrf.status).toBe(200);
+    const cancellation = await request(app).post('/api/v1/customer/bookings/' + cancelled + '/cancel')
+      .set({ ...headers, Cookie: customer.cookie, 'X-CSRF-Token': csrf.body.csrfToken as string,
+        'X-NutTiew-Expected-Session-Binding': customer.binding })
+      .send({});
+    expect(cancellation.status).toBe(200);
 
     const port = await unusedPort();
     const base1 = await startServer(port);
@@ -547,18 +567,27 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
 
     const beforeRes = await fetch(base1 + '/api/v1/tutor/summary', { headers: { Cookie: cookie! } });
     expect(beforeRes.status).toBe(200);
-    const beforeBody = await beforeRes.json() as { data: { pastBookedCount: number; pastBooked: Array<{ id: string }> } };
-    expect(beforeBody.data.pastBookedCount).toBe(1);
-    expect(beforeBody.data.pastBooked[0].id).toBe(bookingId);
+    type Snapshot = { data: Record<string, number | Array<{ id: string }>>; meta: { evaluatedAt: string } };
+    const assertCategories = ({ data }: Snapshot) => {
+      for (const [key, id] of [
+        ['pastBooked', bookingId], ['inProgressBooked', active],
+        ['upcomingBooked', upcoming], ['cancelled', cancelled],
+      ]) {
+        expect(data[key + 'Count']).toBe(1);
+        expect(data[key]).toMatchObject([{ id }]);
+      }
+    };
+    const beforeBody = await beforeRes.json() as Snapshot;
+    assertCategories(beforeBody);
 
     await stopServer();
     const base2 = await startServer(port);
 
     const afterRes = await fetch(base2 + '/api/v1/tutor/summary', { headers: { Cookie: cookie! } });
     expect(afterRes.status).toBe(200);
-    const afterBody = await afterRes.json() as { data: { pastBookedCount: number; pastBooked: Array<{ id: string }> }; meta: { evaluatedAt: string } };
-    expect(afterBody.data.pastBookedCount).toBe(1);
-    expect(afterBody.data.pastBooked[0].id).toBe(bookingId);
+    const afterBody = await afterRes.json() as Snapshot;
+    assertCategories(afterBody);
+    expect(afterBody.data).toEqual(beforeBody.data);
     expect(afterBody.meta.evaluatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
   }, 45_000);
 });
@@ -685,12 +714,16 @@ describe('F-S3-01 Final Upcoming & In-Progress slice — #146 (OD-006 Option 1)'
 
     // Tutor B non-overlapping 60-minute slots testing +1 microsecond boundaries:
     // 1) endsAt === T_eval + 1 μs (startsAt <= T_eval) -> inProgressBooked (NOT pastBooked)
+    const slotPastB = await createSlot(tutorB, offsetIso(30, 2, 0), offsetIso(30, 3, 0));
     const slotPreEnd1us = await createSlot(tutorB, offsetIso(30, 4, 500_001), offsetIso(30, 5, 500_001));
     // 2) startsAt === T_eval + 1 μs -> upcomingBooked (NOT inProgressBooked)
     const slotPreStart1us = await createSlot(tutorB, offsetIso(30, 5, 500_001), offsetIso(30, 6, 500_001));
     // 3) cancelled future slot -> cancelled only (never upcoming/in-progress/past)
     const slotCancelledB = await createSlot(tutorB, offsetIso(30, 11, 0), offsetIso(30, 12, 0));
 
+    const bPastB = await seedBooking({
+      customerId: customerB, slotId: slotPastB, startsAtIso: offsetIso(30, 2, 0), endsAtIso: offsetIso(30, 3, 0), status: 'Booked',
+    });
     const bPreEnd1us = await seedBooking({
       customerId: customerB, slotId: slotPreEnd1us, startsAtIso: offsetIso(30, 4, 500_001), endsAtIso: offsetIso(30, 5, 500_001), status: 'Booked',
     });
@@ -741,7 +774,7 @@ describe('F-S3-01 Final Upcoming & In-Progress slice — #146 (OD-006 Option 1)'
       expect(row).toMatchObject({ status: 'Booked', displayStatus: 'Booked', customerRef: 'CUST-' + customer.slice(0, 8) });
     }
     const bodyAStr = JSON.stringify(resA.body);
-    for (const forbidden of [customer, customerEmail, bPreEnd1us, bPreStart1us, bCancelledB, 'Completed']) {
+    for (const forbidden of [customer, customerEmail, bPreEnd1us, bPreStart1us, bCancelledB, bPastB, 'Completed']) {
       expect(bodyAStr).not.toContain(forbidden);
     }
 
@@ -753,12 +786,23 @@ describe('F-S3-01 Final Upcoming & In-Progress slice — #146 (OD-006 Option 1)'
     expect(resB.body.data.upcomingBooked.map((r: { id: string }) => r.id)).toEqual([bPreStart1us]);
     expect(resB.body.data.inProgressBookedCount).toBe(1);
     expect(resB.body.data.inProgressBooked.map((r: { id: string }) => r.id)).toEqual([bPreEnd1us]);
-    expect(resB.body.data.pastBookedCount).toBe(0);
-    expect(resB.body.data.pastBooked).toEqual([]);
+    expect(resB.body.data.pastBookedCount).toBe(1);
+    expect(resB.body.data.pastBooked.map((r: { id: string }) => r.id)).toEqual([bPastB]);
     expect(resB.body.data.cancelledCount).toBe(1);
     expect(resB.body.data.cancelled.map((r: { id: string }) => r.id)).toEqual([bCancelledB]);
+    const lists = ['upcomingBooked', 'inProgressBooked', 'pastBooked', 'cancelled'] as const;
+    for (const body of [resA.body, resB.body]) {
+      expect(Object.keys(body.meta).sort()).toEqual(['evaluatedAt', 'requestId']);
+      const ids: string[] = [];
+      for (const key of lists) {
+        const rows = body.data[key] as Array<{ id: string }>;
+        expect(body.data[key + 'Count']).toBe(rows.length);
+        ids.push(...rows.map((row) => row.id));
+      }
+      expect(new Set(ids).size).toBe(ids.length);
+    }
     const bodyBStr = JSON.stringify(resB.body);
-    for (const foreignId of [bExactEnd, bExactStart, bUpcoming1, bUpcoming2]) {
+    for (const foreignId of [bExactEnd, bExactStart, bUpcoming1, bUpcoming2, customerB, customerBEmail, 'tutorCancellationReason']) {
       expect(bodyBStr).not.toContain(foreignId);
     }
 
@@ -784,9 +828,9 @@ describe('F-S3-01 Final Upcoming & In-Progress slice — #146 (OD-006 Option 1)'
     // 5. Persisted Booking business state remains immutably 'Booked' after summary evaluation
     const dbCheck = await ownerPool.query<{ id: string; status: string }>(
       'SELECT "id", "status" FROM "Booking" WHERE "id" = ANY($1::uuid[])',
-      [[bExactEnd, bExactStart, bUpcoming1, bUpcoming2, bPreEnd1us, bPreStart1us]],
+      [[bExactEnd, bExactStart, bUpcoming1, bUpcoming2, bPreEnd1us, bPreStart1us, bPastB]],
     );
-    expect(dbCheck.rows).toHaveLength(6);
+    expect(dbCheck.rows).toHaveLength(7);
     for (const row of dbCheck.rows) {
       expect(row.status).toBe('Booked');
     }
