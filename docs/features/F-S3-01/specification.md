@@ -25,8 +25,9 @@ Per [Three-Sprint Plan](../../sprints/plan.md) §2–4 and [Issue #121](https://
 1. **OD-006 (In-progress appointment classification, `startsAt <= evaluatedAt < endsAt` while `status = 'Booked'` — OPEN stakeholder gate):**
    - **D2 Past Booked rule (already governed by `Q30` / `BR-030`):** Derive `Past Booked` strictly as `status = 'Booked' AND endsAt <= evaluatedAt` (matching Sprint 1 `F-S1-05`). An in-progress appointment (`startsAt <= evaluatedAt < endsAt`) is **excluded** from `pastBooked` and never labeled `Completed`. This D2 exclusion does not require resolving how Final buckets in-progress sessions.
    - **Final classification gate (`OPEN` in [SRS §13](../../srs.md)):** Peer review alone cannot settle `OD-006` for the Final Upcoming/In-Progress split; explicit stakeholder disposition is required before implementing the Final Upcoming/Cancelled code. As the single internally consistent **proposed** Final contract pending stakeholder confirmation, this specification proposes keeping `upcomingBooked` as `startsAt > evaluatedAt` and exposing `inProgressBookedCount` + `inProgressBooked` (`startsAt <= evaluatedAt < endsAt`, `displayStatus: 'Booked'`) separately so no active lesson is silently dropped or miscounted.
-2. **OD-009 (Snapshot, ordering, and pagination — proposed for teammate review):**
-   - **Proposed rule:** Evaluate `evaluatedAt`, all category counts, and all row lists in **one row-preserving SQL statement** anchored on PostgreSQL `statement_timestamp()` (`eval_snapshot LEFT JOIN`) so `meta.evaluatedAt`, counts, and lists come from one atomic snapshot even when a Tutor has 0 matching rows (`count === items.length`). Order `pastBooked` newest-ended first (`endsAt DESC, id DESC`), `upcomingBooked` / `inProgressBooked` soonest-start first (`startsAt ASC, id ASC`), and `cancelled` newest-cancelled first (`cancelledAt DESC, id DESC`). No pagination in S3 v1 (return full authorized owner set, consistent with `F-S1-05` and `F-S2-04`).
+2. **OD-009 (Snapshot, ordering, and pagination — APPROVED):**
+   - **Decision evidence:** @Chxtamos [confirmed the D2 Part E contract and OD-009](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/144#issuecomment-7125398026) on 24 November 2026 ICT against `sprint3@fea996d48c7edbbe260a2ce2e9e69ab79537ce0d`. Final classification remains subject to OD-006.
+   - **Approved rule:** Evaluate `evaluatedAt`, all category counts, and all row lists in **one row-preserving SQL statement** anchored on PostgreSQL `statement_timestamp()` (`eval_snapshot LEFT JOIN`) so `meta.evaluatedAt`, counts, and lists come from one atomic snapshot even when a Tutor has 0 matching rows (`count === items.length`). Order `pastBooked` newest-ended first (`endsAt DESC, id DESC`), `upcomingBooked` / `inProgressBooked` soonest-start first (`startsAt ASC, id ASC`), and `cancelled` newest-cancelled first (`cancelledAt DESC, id DESC`). No pagination in S3 v1 (return full authorized owner set, consistent with `F-S1-05` and `F-S2-04`).
 
 ## 4. Invariants
 
@@ -57,6 +58,6 @@ Per [Three-Sprint Plan](../../sprints/plan.md) §2–4 and [Issue #121](https://
 
 - [ ] Confirm `F-S3-01` D2 increment (Past Booked) vs mandatory Final scope (Upcoming Booked + Cancelled).
 - [ ] Confirm proposed `OD-006` in-progress classification (excluded from Past Booked; explicit handling for Final).
-- [ ] Confirm proposed `OD-009` single-snapshot `statement_timestamp()` and ordering rules.
+- [x] Confirm `OD-009` single-snapshot `statement_timestamp()`, empty results, ordering, no pagination, and owner/privacy rules; see the decision evidence in §3.
 - [ ] Confirm `requireRole('Tutor')`, owner-only `Slot.tutorId = principal.userId`, and `CUST-xxxxxxxx` privacy allowlist.
 - [ ] Confirm no code, migration, executable test, or PASS result is claimed by this Part E PR.
