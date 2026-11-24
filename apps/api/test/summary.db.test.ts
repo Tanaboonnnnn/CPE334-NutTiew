@@ -644,3 +644,152 @@ describe('F-S3-01 Final Cancelled slice — #147', () => {
     expect(summaryA.body.data.cancelled.map((row: { id: string }) => row.id)).toEqual([foreignId]);
   });
 });
+
+describe('F-S3-01 Final Upcoming & In-Progress slice — #146 (OD-006 Option 1)', () => {
+  it('SUM-09 / AC-S3-01-07 / VAL-028/029: classifies upcoming, in-progress, and past at microsecond start/end boundaries, enforces isolation, and keeps Booked immutable', async () => {
+    const emailA = 'sum09-146-a-' + marker + '@example.test';
+    const emailB = 'sum09-146-b-' + marker + '@example.test';
+    const emailEmpty = 'sum09-146-empty-' + marker + '@example.test';
+    const customerEmail = 'sum09-146-cust-' + marker + '@example.test';
+    const customerBEmail = 'sum09-146-cust-b-' + marker + '@example.test';
+    const tutorA = await createUser(emailA, 'Tutor');
+    const tutorB = await createUser(emailB, 'Tutor');
+    const tutorEmpty = await createUser(emailEmpty, 'Tutor');
+    const customer = await createUser(customerEmail, 'Customer');
+    const customerB = await createUser(customerBEmail, 'Customer');
+
+    // Anchor T_eval at day+30 05:00:00.500000Z (microsecond precision)
+    const tEval = offsetIso(30, 5, 500_000);
+
+    // Tutor A non-overlapping 60-minute slots:
+    // 1) exact end boundary: endsAt === T_eval -> pastBooked (NOT inProgressBooked)
+    const slotExactEnd = await createSlot(tutorA, offsetIso(30, 4, 500_000), tEval);
+    // 2) exact start boundary: startsAt === T_eval, endsAt > T_eval -> inProgressBooked (NOT upcomingBooked)
+    const slotExactStart = await createSlot(tutorA, tEval, offsetIso(30, 6, 500_000));
+    // 3) upcoming earlier & later -> upcomingBooked ordered startsAt ASC, id ASC
+    const slotUpcoming1 = await createSlot(tutorA, offsetIso(30, 7, 0), offsetIso(30, 8, 0));
+    const slotUpcoming2 = await createSlot(tutorA, offsetIso(30, 9, 0), offsetIso(30, 10, 0));
+
+    const bExactEnd = await seedBooking({
+      customerId: customer, slotId: slotExactEnd, startsAtIso: offsetIso(30, 4, 500_000), endsAtIso: tEval, status: 'Booked',
+    });
+    const bExactStart = await seedBooking({
+      customerId: customer, slotId: slotExactStart, startsAtIso: tEval, endsAtIso: offsetIso(30, 6, 500_000), status: 'Booked',
+    });
+    const bUpcoming2 = await seedBooking({
+      customerId: customer, slotId: slotUpcoming2, startsAtIso: offsetIso(30, 9, 0), endsAtIso: offsetIso(30, 10, 0), status: 'Booked',
+    });
+    const bUpcoming1 = await seedBooking({
+      customerId: customer, slotId: slotUpcoming1, startsAtIso: offsetIso(30, 7, 0), endsAtIso: offsetIso(30, 8, 0), status: 'Booked',
+    });
+
+    // Tutor B non-overlapping 60-minute slots testing +1 microsecond boundaries:
+    // 1) endsAt === T_eval + 1 μs (startsAt <= T_eval) -> inProgressBooked (NOT pastBooked)
+    const slotPreEnd1us = await createSlot(tutorB, offsetIso(30, 4, 500_001), offsetIso(30, 5, 500_001));
+    // 2) startsAt === T_eval + 1 μs -> upcomingBooked (NOT inProgressBooked)
+    const slotPreStart1us = await createSlot(tutorB, offsetIso(30, 5, 500_001), offsetIso(30, 6, 500_001));
+    // 3) cancelled future slot -> cancelled only (never upcoming/in-progress/past)
+    const slotCancelledB = await createSlot(tutorB, offsetIso(30, 11, 0), offsetIso(30, 12, 0));
+
+    const bPreEnd1us = await seedBooking({
+      customerId: customerB, slotId: slotPreEnd1us, startsAtIso: offsetIso(30, 4, 500_001), endsAtIso: offsetIso(30, 5, 500_001), status: 'Booked',
+    });
+    const bPreStart1us = await seedBooking({
+      customerId: customerB, slotId: slotPreStart1us, startsAtIso: offsetIso(30, 5, 500_001), endsAtIso: offsetIso(30, 6, 500_001), status: 'Booked',
+    });
+    const bCancelledB = await seedBooking({
+      customerId: customerB, slotId: slotCancelledB, startsAtIso: offsetIso(30, 11, 0), endsAtIso: offsetIso(30, 12, 0),
+      status: 'Booked',
+    });
+
+    const authA = await loginCookieAndBinding(app, emailA);
+    const authB = await loginCookieAndBinding(app, emailB);
+    const authEmpty = await loginCookieAndBinding(app, emailEmpty);
+    const authCustomer = await loginCookieAndBinding(app, customerEmail);
+    const authCustomerB = await loginCookieAndBinding(app, customerBEmail);
+    const csrfB = await request(app).get('/api/v1/auth/csrf').set('Cookie', authCustomerB.cookie);
+    expect(csrfB.status).toBe(200);
+    const cancelResB = await request(app)
+      .post('/api/v1/customer/bookings/' + bCancelledB + '/cancel')
+      .set({
+        ...headers,
+        Cookie: authCustomerB.cookie,
+        'X-CSRF-Token': csrfB.body.csrfToken as string,
+        'X-NutTiew-Expected-Session-Binding': authCustomerB.binding,
+      })
+      .send({});
+    expect(cancelResB.status).toBe(200);
+
+    currentSummaryClock = tEval;
+
+    // 1. Tutor A: exactStart in inProgressBooked, exactEnd in pastBooked, upcoming ordered startsAt ASC
+    const resA = await request(app).get('/api/v1/tutor/summary').set('Cookie', authA.cookie);
+    expect(resA.status).toBe(200);
+    expect(resA.body.meta.evaluatedAt).toBe(tEval);
+    expect(resA.body.data.upcomingBookedCount).toBe(2);
+    expect(resA.body.data.upcomingBooked.map((r: { id: string }) => r.id)).toEqual([bUpcoming1, bUpcoming2]);
+    expect(resA.body.data.inProgressBookedCount).toBe(1);
+    expect(resA.body.data.inProgressBooked.map((r: { id: string }) => r.id)).toEqual([bExactStart]);
+    expect(resA.body.data.pastBookedCount).toBe(1);
+    expect(resA.body.data.pastBooked.map((r: { id: string }) => r.id)).toEqual([bExactEnd]);
+    expect(resA.body.data.cancelledCount).toBe(0);
+    expect(resA.body.data.cancelled).toEqual([]);
+
+    const exactBookedFields = ['createdAt', 'customerRef', 'displayStatus', 'endsAt', 'id', 'slotId', 'startsAt', 'status'];
+    for (const row of [...resA.body.data.upcomingBooked, ...resA.body.data.inProgressBooked]) {
+      expect(Object.keys(row).sort()).toEqual(exactBookedFields);
+      expect(row).toMatchObject({ status: 'Booked', displayStatus: 'Booked', customerRef: 'CUST-' + customer.slice(0, 8) });
+    }
+    const bodyAStr = JSON.stringify(resA.body);
+    for (const forbidden of [customer, customerEmail, bPreEnd1us, bPreStart1us, bCancelledB, 'Completed']) {
+      expect(bodyAStr).not.toContain(forbidden);
+    }
+
+    // 2. Tutor B: +1 μs boundaries (startsAt = T_eval + 1 μs -> upcoming; endsAt = T_eval + 1 μs -> in-progress)
+    const resB = await request(app).get('/api/v1/tutor/summary').set('Cookie', authB.cookie);
+    expect(resB.status).toBe(200);
+    expect(resB.body.meta.evaluatedAt).toBe(tEval);
+    expect(resB.body.data.upcomingBookedCount).toBe(1);
+    expect(resB.body.data.upcomingBooked.map((r: { id: string }) => r.id)).toEqual([bPreStart1us]);
+    expect(resB.body.data.inProgressBookedCount).toBe(1);
+    expect(resB.body.data.inProgressBooked.map((r: { id: string }) => r.id)).toEqual([bPreEnd1us]);
+    expect(resB.body.data.pastBookedCount).toBe(0);
+    expect(resB.body.data.pastBooked).toEqual([]);
+    expect(resB.body.data.cancelledCount).toBe(1);
+    expect(resB.body.data.cancelled.map((r: { id: string }) => r.id)).toEqual([bCancelledB]);
+    const bodyBStr = JSON.stringify(resB.body);
+    for (const foreignId of [bExactEnd, bExactStart, bUpcoming1, bUpcoming2]) {
+      expect(bodyBStr).not.toContain(foreignId);
+    }
+
+    // 3. Empty Tutor sees 0 counts and empty lists under the exact same single-statement snapshot
+    const resEmpty = await request(app).get('/api/v1/tutor/summary').set('Cookie', authEmpty.cookie);
+    expect(resEmpty.status).toBe(200);
+    expect(resEmpty.body.meta.evaluatedAt).toBe(tEval);
+    expect(resEmpty.body.data).toEqual({
+      upcomingBookedCount: 0,
+      upcomingBooked: [],
+      inProgressBookedCount: 0,
+      inProgressBooked: [],
+      pastBookedCount: 0,
+      pastBooked: [],
+      cancelledCount: 0,
+      cancelled: [],
+    });
+
+    // 4. Role denials (Customer 403, anonymous 401)
+    expect((await request(app).get('/api/v1/tutor/summary').set('Cookie', authCustomer.cookie)).status).toBe(403);
+    expect((await request(app).get('/api/v1/tutor/summary')).status).toBe(401);
+
+    // 5. Persisted Booking business state remains immutably 'Booked' after summary evaluation
+    const dbCheck = await ownerPool.query<{ id: string; status: string }>(
+      'SELECT "id", "status" FROM "Booking" WHERE "id" = ANY($1::uuid[])',
+      [[bExactEnd, bExactStart, bUpcoming1, bUpcoming2, bPreEnd1us, bPreStart1us]],
+    );
+    expect(dbCheck.rows).toHaveLength(6);
+    for (const row of dbCheck.rows) {
+      expect(row.status).toBe('Booked');
+    }
+    expect(tutorEmpty).toBeTruthy();
+  });
+});

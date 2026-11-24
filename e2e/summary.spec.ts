@@ -266,3 +266,100 @@ test.describe('F-S3-01 SUM-10 — #147 Cancelled slice', () => {
     await expect(section).not.toContainText(customerId);
   });
 });
+
+test.describe('F-S3-01 SUM-10 — #146 Upcoming and In-Progress slice (OD-006 Option 1)', () => {
+  test.use({ timezoneId: 'America/Los_Angeles' });
+
+  test('renders server-classified Upcoming and In-Progress Booked in Asia/Bangkok, empty states, isolation, and reload persistence', async ({ page }) => {
+    // 1. Seed one Upcoming Booked (10 days ahead, 10:00-11:00 Asia/Bangkok) and one In-Progress Booked (now - 20m .. now + 40m)
+    const upcomingDay = new Date(Date.now() + 10 * 86_400_000 + 7 * 3_600_000).toISOString().slice(0, 10);
+    const upcomingStart = new Date(upcomingDay + 'T10:00:00.000+07:00');
+    const upcomingEnd = new Date(upcomingStart.getTime() + 3_600_000);
+
+    const nowRoundedMin = Math.floor(Date.now() / 60_000) * 60_000;
+    const inProgressStart = new Date(nowRoundedMin - 20 * 60_000);
+    const inProgressEnd = new Date(inProgressStart.getTime() + 3_600_000);
+
+    let upcomingBookingId = '';
+    let inProgressBookingId = '';
+    const client = await pool.connect();
+    try {
+      await assertDisposableTestDatabase(client);
+      await client.query('BEGIN');
+      const slotUp = await client.query<{ id: string }>(
+        'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2,$3,\'Offered\') RETURNING "id"',
+        [tutorId, upcomingStart, upcomingEnd],
+      );
+      const slotInProg = await client.query<{ id: string }>(
+        'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2,$3,\'Offered\') RETURNING "id"',
+        [tutorId, inProgressStart, inProgressEnd],
+      );
+      await client.query('ALTER TABLE public."Booking" DISABLE TRIGGER booking_s2_row_guard');
+      const bUp = await client.query<{ id: string }>(
+        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\') RETURNING "id"',
+        [customerId, slotUp.rows[0].id, upcomingStart, upcomingEnd],
+      );
+      const bInProg = await client.query<{ id: string }>(
+        'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\') RETURNING "id"',
+        [customerId, slotInProg.rows[0].id, inProgressStart, inProgressEnd],
+      );
+      await client.query('ALTER TABLE public."Booking" ENABLE TRIGGER booking_s2_row_guard');
+      await client.query('COMMIT');
+      upcomingBookingId = bUp.rows[0].id;
+      inProgressBookingId = bInProg.rows[0].id;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // 2. Another Tutor (tutorEmptyEmail) sees 0 counts and explicit empty states (no cross-Tutor leakage)
+    await signIn(page, tutorEmptyEmail);
+    const section = page.getByTestId('tutor-appointment-summary');
+    await expect(section.getByTestId('tutor-summary-upcoming-count')).toContainText('นัดหมายที่กำลังจะมาถึง (Upcoming Booked): 0 รายการ');
+    await expect(section.getByTestId('tutor-summary-upcoming-empty')).toHaveText('ยังไม่มีนัดหมายที่กำลังจะมาถึง');
+    await expect(section.getByTestId('tutor-summary-in-progress-count')).toContainText('กำลังดำเนินการอยู่ (In-Progress Booked): 0 รายการ');
+    await expect(section.getByTestId('tutor-summary-in-progress-empty')).toHaveText('ยังไม่มีนัดหมายที่กำลังดำเนินการอยู่');
+    await expect(section).not.toContainText(upcomingBookingId);
+    await expect(section).not.toContainText(inProgressBookingId);
+    await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
+    await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
+
+    // 3. Owning Tutor sees Upcoming Booked & In-Progress Booked in Asia/Bangkok and persists across reload
+    await signIn(page, tutorEmail);
+    const bangkokClockFmt = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    });
+
+    const assertPopulated = async () => {
+      await expect(section.getByTestId('tutor-summary-upcoming-count')).toContainText('นัดหมายที่กำลังจะมาถึง (Upcoming Booked): 1 รายการ');
+      const upItems = section.getByTestId('tutor-summary-upcoming-item');
+      await expect(upItems).toHaveCount(1);
+      await expect(upItems.first()).toContainText(upcomingBookingId);
+      await expect(upItems.first()).toContainText('10:00');
+      await expect(upItems.first()).toContainText('11:00');
+      await expect(upItems.first()).toContainText('(Asia/Bangkok)');
+      await expect(upItems.first()).toContainText('CUST-' + customerId.slice(0, 8));
+      await expect(upItems.first().getByTestId('tutor-summary-upcoming-status-badge')).toHaveText('มีนัดหมาย (Booked)');
+
+      await expect(section.getByTestId('tutor-summary-in-progress-count')).toContainText('กำลังดำเนินการอยู่ (In-Progress Booked): 1 รายการ');
+      const inProgItems = section.getByTestId('tutor-summary-in-progress-item');
+      await expect(inProgItems).toHaveCount(1);
+      await expect(inProgItems.first()).toContainText(inProgressBookingId);
+      await expect(inProgItems.first()).toContainText(bangkokClockFmt.format(inProgressStart));
+      await expect(inProgItems.first()).toContainText(bangkokClockFmt.format(inProgressEnd));
+      await expect(inProgItems.first()).toContainText('(Asia/Bangkok)');
+      await expect(inProgItems.first()).toContainText('CUST-' + customerId.slice(0, 8));
+      await expect(inProgItems.first().getByTestId('tutor-summary-in-progress-status-badge')).toHaveText('มีนัดหมาย (Booked)');
+      await expect(inProgItems.first()).not.toContainText('Past');
+      await expect(inProgItems.first()).not.toContainText('Completed');
+      await expect(section).not.toContainText(customerEmail);
+      await expect(section).not.toContainText(customerId);
+    };
+
+    await assertPopulated();
+    await page.reload();
+    await assertPopulated();
+  });
+});
