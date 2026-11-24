@@ -29,15 +29,29 @@ test.beforeAll(async () => {
   tutorId = users.rows.find(u => u.role === 'Tutor')!.id;
   customerId = users.rows.find(u => u.role === 'Customer')!.id;
 
-  const slot = await pool.query<{ id: string }>(
-    'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2,$3,\'Offered\') RETURNING "id"',
-    [tutorId, pastStart, pastEnd],
-  );
-  const booking = await pool.query<{ id: string }>(
-    'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\') RETURNING "id"',
-    [customerId, slot.rows[0].id, pastStart, pastEnd],
-  );
-  pastBookingId = booking.rows[0].id;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('ALTER TABLE public."Slot" DISABLE TRIGGER slot_s2_row_guard');
+    await client.query('ALTER TABLE public."Booking" DISABLE TRIGGER booking_s2_row_guard');
+    const slot = await client.query<{ id: string }>(
+      'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2,$3,\'Offered\') RETURNING "id"',
+      [tutorId, pastStart, pastEnd],
+    );
+    const booking = await client.query<{ id: string }>(
+      'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\') RETURNING "id"',
+      [customerId, slot.rows[0].id, pastStart, pastEnd],
+    );
+    await client.query('ALTER TABLE public."Booking" ENABLE TRIGGER booking_s2_row_guard');
+    await client.query('ALTER TABLE public."Slot" ENABLE TRIGGER slot_s2_row_guard');
+    await client.query('COMMIT');
+    pastBookingId = booking.rows[0].id;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
 test.afterAll(async () => {

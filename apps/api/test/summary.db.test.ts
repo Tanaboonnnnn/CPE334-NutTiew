@@ -17,6 +17,17 @@ const headers = { Origin: origin };
 const marker = randomUUID().slice(0, 10);
 const password = 'SummaryPassword!2026';
 
+// Anchor future dates so all Slot/Booking inserts satisfy S2 Q05 eligibility guards naturally.
+const futureAnchorMs = (() => {
+  const d = new Date(Date.now() + 20 * 86_400_000);
+  d.setUTCHours(8, 0, 0, 0);
+  return d.getTime();
+})();
+const offsetIso = (days: number, hours = 0, extraMicros = 0): string => {
+  const base = new Date(futureAnchorMs + days * 86_400_000 + hours * 3_600_000).toISOString();
+  return base.replace(/\.(\d{3})Z$/, `.${String(extraMicros).padStart(6, '0')}Z`);
+};
+
 let currentSummaryClock: string | null = null;
 let app: Express;
 let server: ChildProcess | undefined;
@@ -66,6 +77,36 @@ async function seedBooking(params: {
     ],
   );
   return res.rows[0].id;
+}
+
+/**
+ * Seed a genuinely past-ended historical Slot + Booking using the disposable
+ * test DB owner connection for real-clock OS-process restart verification (SUM-07).
+ */
+async function seedHistoricalPastBooking(tutorId: string, customerId: string, startsAtIso: string, endsAtIso: string): Promise<string> {
+  const client = await ownerPool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('ALTER TABLE public."Slot" DISABLE TRIGGER slot_s2_row_guard');
+    await client.query('ALTER TABLE public."Booking" DISABLE TRIGGER booking_s2_row_guard');
+    const slotRes = await client.query<{ id: string }>(
+      'INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle") VALUES($1,$2::timestamptz,$3::timestamptz,\'Offered\') RETURNING "id"',
+      [tutorId, startsAtIso, endsAtIso],
+    );
+    const bookingRes = await client.query<{ id: string }>(
+      'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3::timestamptz,$4::timestamptz,\'Booked\') RETURNING "id"',
+      [customerId, slotRes.rows[0].id, startsAtIso, endsAtIso],
+    );
+    await client.query('ALTER TABLE public."Booking" ENABLE TRIGGER booking_s2_row_guard');
+    await client.query('ALTER TABLE public."Slot" ENABLE TRIGGER slot_s2_row_guard');
+    await client.query('COMMIT');
+    return bookingRes.rows[0].id;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function loginCookieAndBinding(targetApp: Express, email: string): Promise<{ cookie: string; binding: string }> {
@@ -163,19 +204,20 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     const tutorBId = await createUser(tutorBEmail, 'Tutor');
     const custId = await createUser(custEmail, 'Customer');
 
-    currentSummaryClock = '2026-11-22T12:00:00.000000Z';
+    const slotPastOld = await createSlot(tutorAId, offsetIso(1, 0), offsetIso(1, 1));
+    const slotPastNew = await createSlot(tutorAId, offsetIso(2, 0), offsetIso(2, 1));
+    const slotUpcoming = await createSlot(tutorAId, offsetIso(6, 0), offsetIso(6, 1));
+    const slotCancelled = await createSlot(tutorAId, offsetIso(0, 0), offsetIso(0, 1));
+    const slotTutorB = await createSlot(tutorBId, offsetIso(2, 0), offsetIso(2, 1));
 
-    const slotPastOld = await createSlot(tutorAId, '2026-11-20T08:00:00.000Z', '2026-11-20T09:00:00.000Z');
-    const slotPastNew = await createSlot(tutorAId, '2026-11-21T08:00:00.000Z', '2026-11-21T09:00:00.000Z');
-    const slotUpcoming = await createSlot(tutorAId, '2026-11-25T08:00:00.000Z', '2026-11-25T09:00:00.000Z');
-    const slotCancelled = await createSlot(tutorAId, '2026-11-19T08:00:00.000Z', '2026-11-19T09:00:00.000Z');
-    const slotTutorB = await createSlot(tutorBId, '2026-11-21T08:00:00.000Z', '2026-11-21T09:00:00.000Z');
+    const bPastOld = await seedBooking({ customerId: custId, slotId: slotPastOld, startsAtIso: offsetIso(1, 0), endsAtIso: offsetIso(1, 1), status: 'Booked' });
+    const bPastNew = await seedBooking({ customerId: custId, slotId: slotPastNew, startsAtIso: offsetIso(2, 0), endsAtIso: offsetIso(2, 1), status: 'Booked' });
+    await seedBooking({ customerId: custId, slotId: slotUpcoming, startsAtIso: offsetIso(6, 0), endsAtIso: offsetIso(6, 1), status: 'Booked' });
+    await seedBooking({ customerId: custId, slotId: slotCancelled, startsAtIso: offsetIso(0, 0), endsAtIso: offsetIso(0, 1), status: 'Cancelled', cancellationActor: 'Customer', cancelledAtIso: new Date().toISOString() });
+    await seedBooking({ customerId: custId, slotId: slotTutorB, startsAtIso: offsetIso(2, 0), endsAtIso: offsetIso(2, 1), status: 'Booked' });
 
-    const bPastOld = await seedBooking({ customerId: custId, slotId: slotPastOld, startsAtIso: '2026-11-20T08:00:00.000Z', endsAtIso: '2026-11-20T09:00:00.000Z', status: 'Booked' });
-    const bPastNew = await seedBooking({ customerId: custId, slotId: slotPastNew, startsAtIso: '2026-11-21T08:00:00.000Z', endsAtIso: '2026-11-21T09:00:00.000Z', status: 'Booked' });
-    await seedBooking({ customerId: custId, slotId: slotUpcoming, startsAtIso: '2026-11-25T08:00:00.000Z', endsAtIso: '2026-11-25T09:00:00.000Z', status: 'Booked' });
-    await seedBooking({ customerId: custId, slotId: slotCancelled, startsAtIso: '2026-11-19T08:00:00.000Z', endsAtIso: '2026-11-19T09:00:00.000Z', status: 'Cancelled', cancellationActor: 'Customer', cancelledAtIso: '2026-11-18T08:00:00.000Z' });
-    await seedBooking({ customerId: custId, slotId: slotTutorB, startsAtIso: '2026-11-21T08:00:00.000Z', endsAtIso: '2026-11-21T09:00:00.000Z', status: 'Booked' });
+    const tEval = offsetIso(4, 0);
+    currentSummaryClock = tEval;
 
     const { cookie, binding } = await loginCookieAndBinding(app, tutorAEmail);
     const res = await request(app).get('/api/v1/tutor/summary').set('Cookie', cookie);
@@ -191,7 +233,7 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
       expect(item.displayStatus).toBe('Past');
       expect(item.customerRef).toBe('CUST-' + custId.slice(0, 8));
     }
-    expect(res.body.meta.evaluatedAt).toBe('2026-11-22T12:00:00.000000Z');
+    expect(res.body.meta.evaluatedAt).toBe(tEval);
   });
 
   it('SUM-02 includes exact-end boundary (endsAt === T_eval) and excludes in-progress (1 us after T_eval) with microsecond precision', async () => {
@@ -202,20 +244,20 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     const tutorBId = await createUser(tutorBEmail, 'Tutor');
     const custId = await createUser(custEmail, 'Customer');
 
-    const tEval = '2026-11-22T11:00:00.000123Z';
+    const tEval = offsetIso(3, 1, 123); // exact microsecond .000123Z
     currentSummaryClock = tEval;
 
     // Exact boundary: endsAt === T_eval (included)
-    const slotExact = await createSlot(tutorAId, '2026-11-22T10:00:00.000123Z', '2026-11-22T11:00:00.000123Z');
-    const bExact = await seedBooking({ customerId: custId, slotId: slotExact, startsAtIso: '2026-11-22T10:00:00.000123Z', endsAtIso: '2026-11-22T11:00:00.000123Z', status: 'Booked' });
+    const slotExact = await createSlot(tutorAId, offsetIso(3, 0, 123), offsetIso(3, 1, 123));
+    const bExact = await seedBooking({ customerId: custId, slotId: slotExact, startsAtIso: offsetIso(3, 0, 123), endsAtIso: offsetIso(3, 1, 123), status: 'Booked' });
 
     // Adjacent in-progress on same Tutor: startsAt === T_eval < endsAt (excluded)
-    const slotInProgSameTutor = await createSlot(tutorAId, '2026-11-22T11:00:00.000123Z', '2026-11-22T12:00:00.000123Z');
-    await seedBooking({ customerId: custId, slotId: slotInProgSameTutor, startsAtIso: '2026-11-22T11:00:00.000123Z', endsAtIso: '2026-11-22T12:00:00.000123Z', status: 'Booked' });
+    const slotInProgSameTutor = await createSlot(tutorAId, offsetIso(3, 1, 123), offsetIso(3, 2, 123));
+    await seedBooking({ customerId: custId, slotId: slotInProgSameTutor, startsAtIso: offsetIso(3, 1, 123), endsAtIso: offsetIso(3, 2, 123), status: 'Booked' });
 
     // Sub-millisecond in-progress on Tutor B: endsAt is 1 microsecond after T_eval (excluded)
-    const slotOneUsAfter = await createSlot(tutorBId, '2026-11-22T10:00:00.000124Z', '2026-11-22T11:00:00.000124Z');
-    await seedBooking({ customerId: custId, slotId: slotOneUsAfter, startsAtIso: '2026-11-22T10:00:00.000124Z', endsAtIso: '2026-11-22T11:00:00.000124Z', status: 'Booked' });
+    const slotOneUsAfter = await createSlot(tutorBId, offsetIso(3, 0, 124), offsetIso(3, 1, 124));
+    await seedBooking({ customerId: custId, slotId: slotOneUsAfter, startsAtIso: offsetIso(3, 0, 124), endsAtIso: offsetIso(3, 1, 124), status: 'Booked' });
 
     const authA = await loginCookieAndBinding(app, tutorAEmail);
     const resA = await request(app).get('/api/v1/tutor/summary').set('Cookie', authA.cookie);
@@ -239,7 +281,7 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     await createUser(tutorEmptyEmail, 'Tutor');
     await createUser(custEmail, 'Customer');
 
-    const tEval = '2026-11-22T11:00:00.000456Z';
+    const tEval = offsetIso(4, 1, 456);
     currentSummaryClock = tEval;
 
     const anonRes = await request(app).get('/api/v1/tutor/summary');
@@ -266,21 +308,21 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     const tutorId = await createUser(tutorEmail, 'Tutor');
     const custId = await createUser(secretCustEmail, 'Customer');
 
-    currentSummaryClock = '2026-11-22T12:00:00.000000Z';
-
-    const slotPast = await createSlot(tutorId, '2026-11-20T05:00:00.000Z', '2026-11-20T06:00:00.000Z');
-    const slotCancelled = await createSlot(tutorId, '2026-11-21T05:00:00.000Z', '2026-11-21T06:00:00.000Z');
-    await seedBooking({ customerId: custId, slotId: slotPast, startsAtIso: '2026-11-20T05:00:00.000Z', endsAtIso: '2026-11-20T06:00:00.000Z', status: 'Booked' });
+    const slotPast = await createSlot(tutorId, offsetIso(1, 3), offsetIso(1, 4));
+    const slotCancelled = await createSlot(tutorId, offsetIso(2, 3), offsetIso(2, 4));
+    await seedBooking({ customerId: custId, slotId: slotPast, startsAtIso: offsetIso(1, 3), endsAtIso: offsetIso(1, 4), status: 'Booked' });
     await seedBooking({
       customerId: custId,
       slotId: slotCancelled,
-      startsAtIso: '2026-11-21T05:00:00.000Z',
-      endsAtIso: '2026-11-21T06:00:00.000Z',
+      startsAtIso: offsetIso(2, 3),
+      endsAtIso: offsetIso(2, 4),
       status: 'Cancelled',
       cancellationActor: 'Tutor',
-      cancelledAtIso: '2026-11-20T01:00:00.000Z',
+      cancelledAtIso: new Date().toISOString(),
       tutorCancellationReason: secretReason,
     });
+
+    currentSummaryClock = offsetIso(5, 0);
 
     const auth = await loginCookieAndBinding(app, tutorEmail);
     const res = await request(app).get('/api/v1/tutor/summary').set('Cookie', auth.cookie);
@@ -327,14 +369,10 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     const tutorBId = await createUser(tutorBEmail, 'Tutor');
     await createUser(custEmail, 'Customer');
 
-    // Create future slots eligible for real Sprint 2 booking & reschedule
-    const baseFuture = new Date(Date.now() + 30 * 86_400_000);
-    baseFuture.setUTCHours(8, 0, 0, 0);
-    const oldStart = baseFuture.toISOString();
-    const oldEnd = new Date(baseFuture.getTime() + 3_600_000).toISOString();
-    const newStartDate = new Date(baseFuture.getTime() + 24 * 3_600_000);
-    const newStart = newStartDate.toISOString();
-    const newEnd = new Date(newStartDate.getTime() + 3_600_000).toISOString();
+    const oldStart = offsetIso(10, 0);
+    const oldEnd = offsetIso(10, 1);
+    const newStart = offsetIso(11, 0);
+    const newEnd = offsetIso(11, 1);
 
     const oldSlotA = await createSlot(tutorAId, oldStart, oldEnd);
     const newSlotB = await createSlot(tutorBId, newStart, newEnd);
@@ -367,8 +405,7 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
       .send({ slotId: newSlotB });
     expect(rescheduleRes.status).toBe(200);
 
-    // Advance summary clock past the rescheduled slot's end time
-    currentSummaryClock = new Date(newStartDate.getTime() + 2 * 3_600_000).toISOString().replace(/\.(\d{3})Z$/, '.$1000Z');
+    currentSummaryClock = offsetIso(12, 0);
 
     const authA = await loginCookieAndBinding(app, tutorAEmail);
     const authB = await loginCookieAndBinding(app, tutorBEmail);
@@ -393,14 +430,7 @@ describe('F-S3-01 (D2 Past Booked) — SUM-01..SUM-07', () => {
     const pastStart = new Date(Date.now() - 48 * 3_600_000);
     pastStart.setUTCMinutes(0, 0, 0);
     const pastEnd = new Date(pastStart.getTime() + 3_600_000);
-    const slotId = await createSlot(tutorId, pastStart.toISOString(), pastEnd.toISOString());
-    const bookingId = await seedBooking({
-      customerId: custId,
-      slotId,
-      startsAtIso: pastStart.toISOString(),
-      endsAtIso: pastEnd.toISOString(),
-      status: 'Booked',
-    });
+    const bookingId = await seedHistoricalPastBooking(tutorId, custId, pastStart.toISOString(), pastEnd.toISOString());
 
     const port = await unusedPort();
     const base1 = await startServer(port);
