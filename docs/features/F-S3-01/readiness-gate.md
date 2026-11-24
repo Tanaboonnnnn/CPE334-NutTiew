@@ -26,9 +26,13 @@
 
 ## OD-006 — In-progress booking classification
 
-**OPEN, stakeholder decision required.** With `startsAt <= evaluatedAt < endsAt` and persisted `Booked`, the D2 count and list both exclude the appointment from Past Booked. At `endsAt = evaluatedAt` it becomes Past for display only. Never invent a `Completed` state or count it as Past early.
+**PROPOSED OPTION 1 BY `@Chxtamos` (Product Owner role, 24 Nov 2026 ICT) — AWAITING `@Tanaboonnnnn` TEAMMATE APPROVAL ON THIS PR BEFORE `#146` IMPLEMENTATION.** Consistent with Q01–Q32 and Sprint 2 `OD-014` ([PR #131](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/131)), `@Chxtamos` proposes adopting **Option 1** against `sprint3@175b88d985fe2c63028304610e57b1f4ccd47e3d` for [#146](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/146) (explicitly not claiming separate instructor/TA sign-off):
 
-Request a written stakeholder choice through the team: (1) the existing proposal keeps Upcoming strictly future and displays a separate in-progress subgroup/count/list, with no new persisted state, or (2) a specifically approved treatment within the existing categories, e.g. a clearly labeled in-progress subset within Upcoming with matching amended count/list, if the stakeholder accepts that meaning. Neither option has been selected here. Stakeholder decision then teammate review must establish time boundaries, DTO/category naming, UI labeling/counts, and SUM-09/10 in controlled specs. If the SRS's before-contract gate is read as blocking even the unaffected D2 subset, explicitly review the D2/Final split rather than assuming this note waives it. It blocks affected Final classification, not design review of the D2 Past predicate.
+- `upcomingBooked`: `status = 'Booked' AND startsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`, `upcomingBookedCount === upcomingBooked.length`, `displayStatus: 'Booked'`.
+- `inProgressBooked`: `status = 'Booked' AND startsAt <= evaluatedAt AND endsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`, `inProgressBookedCount === inProgressBooked.length`, `displayStatus: 'Booked'` (never labeled `Past` or `Completed`; zero new persisted Booking state or migration; rendered explicitly in the Tutor UI via a dedicated in-progress display/count).
+- `pastBooked`: unchanged (`status = 'Booked' AND endsAt <= evaluatedAt`, ordered `endsAt DESC, id DESC`, `displayStatus: 'Past'`; already implemented and merged in [#145](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/145) / [PR #156](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/156)).
+
+**Gate preserved:** Final `#146` code and `SUM-09`/`SUM-10` remain gated until `@Tanaboonnnnn` reviews and approves this PR and it merges into `sprint3`.
 
 ## OD-009 — Summary query policy
 
