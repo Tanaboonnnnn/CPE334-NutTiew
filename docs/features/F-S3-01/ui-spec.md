@@ -1,6 +1,6 @@
 # F-S3-01 — Tutor Appointment Summary UI Specification (Part E)
 
-> **Part E UI contract only; no component, route, browser test or screenshot is implemented.** Tutor-only view; never rendered in the Customer workspace.
+> **D2 Past Booked implemented (`#145` / PR `#156`); `OD-006` Option 1 decided by `@Chxtamos` & `@Tanaboonnnnn` under instructor-delegated authority ([PR #157 review](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870)); Final multi-category UI (`#146` / `#147`) remains planned and gated on final human review confirmation & `sprint3` merge.** Tutor-only view; never rendered in the Customer workspace.
 
 ## 1. Screen and shared design system
 
@@ -18,17 +18,18 @@ Reuse the NutTiew Tutor Dashboard card, KPI tile, agenda list, focus ring, error
    - An explicit note that **Upcoming Booked** and **Cancelled** summary categories are scheduled for Final completion (until implemented for 30 Nov / Final).
 3. A **รีเฟรชสรุป** button reloads `GET /api/v1/tutor/summary` with request-scoped `AbortController`/version guards.
 
-## 3. Final three-category UI contract (mandatory by 30 Nov / Final 13 Dec; `inProgressBooked` gated on stakeholder `OD-006`)
+## 3. Final UI contract (mandatory by 30 Nov / Final 13 Dec; `OD-006` Option 1 DECIDED — gated on final human review & `sprint3` merge before `#146` code)
 
-When Upcoming Booked and Cancelled are enabled for Final, the same **สรุปนัดหมายผู้สอน** section renders all categories from one `GET /api/v1/tutor/summary` response (`meta.evaluatedAt`):
+When Upcoming Booked, In-Progress Booked (adopted `OD-006` Option 1), and Cancelled are enabled for Final (after final human review confirmation and `sprint3` merge of PR `#157`), the same **สรุปนัดหมายผู้สอน** section renders all categories from one `GET /api/v1/tutor/summary` response (`meta.evaluatedAt`):
 
 1. **Summary count strip (all driven strictly from server counts, matching exact rendered list lengths):**
    - **นัดหมายที่กำลังจะมาถึง (Upcoming Booked):** `data.upcomingBookedCount` รายการ
+   - **กำลังดำเนินการอยู่ (In-Progress Booked — adopted `OD-006` Option 1, [PR #157 review `PRR_kwDOVg8MSM8AAAABZ_gshg`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870)):** `data.inProgressBookedCount` รายการ
    - **นัดหมายที่ผ่านมาแล้ว (Past Booked):** `data.pastBookedCount` รายการ
    - **นัดหมายที่ยกเลิกแล้ว (Cancelled):** `data.cancelledCount` รายการ
-   - **กำลังดำเนินการอยู่ (In-Progress Booked — proposed `OD-006` pending stakeholder confirmation):** shown explicitly when `data.inProgressBookedCount > 0` (or dedicated tile) with status `มีนัดหมาย (Booked)`, never labeled `Past` or `Completed`.
 2. **Matching category lists:**
    - **Upcoming Booked:** `customerRef`, `Asia/Bangkok` date/interval, status badge `มีนัดหมาย (Booked)`, Booking ID. Empty state: `ยังไม่มีนัดหมายที่กำลังจะมาถึง`.
+   - **In-Progress Booked (`OD-006` Option 1):** `customerRef`, `Asia/Bangkok` date/interval, status badge `มีนัดหมาย (Booked)` (**never** `Past` or `Completed`), Booking ID. Empty state: `ยังไม่มีนัดหมายที่กำลังดำเนินการอยู่` (when `inProgressBookedCount === 0`, count `0` matches empty list).
    - **Past Booked:** `customerRef`, `Asia/Bangkok` date/interval, status badge `สิ้นสุดแล้ว (Past)`, Booking ID. Empty state: `ยังไม่มีนัดหมายที่ผ่านมาแล้ว`.
    - **Cancelled:** `customerRef`, `Asia/Bangkok` original date/interval, status badge `ยกเลิกแล้ว (Cancelled)`, cancellation actor label (`ผู้เรียนยกเลิก` / `ผู้สอนยกเลิก`), `cancelledAt` in `Asia/Bangkok`, Booking ID. **Never** displays `tutorCancellationReason` (`BR-022`/`NFR-007`). Empty state: `ยังไม่มีนัดหมายที่ถูกยกเลิก`.
 3. **Refresh, timezone, and accessibility:**

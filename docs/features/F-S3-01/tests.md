@@ -1,6 +1,6 @@
 # F-S3-01 — Tutor Appointment Summary Software Test Specification (Part E)
 
-> **Planned STS only.** No executable test, PostgreSQL run, browser test, or PASS result is included in this Part E document. Execute against disposable PostgreSQL 18 at the reviewed S2 schema SHA and record exact source SHA and results in the implementation PR.
+> **D2 STS (`SUM-01..08`) implemented and verified in `#145` / PR `#156` (`NutTiew CI` Run `45362315140`); `OD-006` Option 1 decided by `@Chxtamos` & `@Tanaboonnnnn` ([PR #157 review](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870)); Final STS (`SUM-09..10`) remains PLANNED / NOT RUN — gated on final human review confirmation & `sprint3` merge before `#146` / `#147` code.**
 
 ## 1. Traceability and test setup
 
@@ -8,7 +8,7 @@ Sources: [Feature SDS](specification.md), [API](api-spec.md), [Data](data-spec.m
 
 Required Part F setup: disposable PostgreSQL 18 at the reviewed S2 schema SHA; Tutor A, Tutor B, Customer A; live Sessions; real persisted Bookings spanning past-ended (`endsAt <= T_eval`), exact-end boundary (`endsAt === T_eval`), in-progress (`startsAt <= T_eval < endsAt`), upcoming (`startsAt > T_eval`), and cancelled (`status = 'Cancelled'`); controlled `summaryClock` seam for exact boundary testing (use an exact SQL/test-clock timestamp, not a rounded JavaScript Date, for sub-millisecond fixtures); fresh API child process for restart durability.
 
-All cases below are **PLANNED / NOT RUN**.
+`SUM-01..08` are verified on `sprint3@175b88d9`; `SUM-09..10` below are **PLANNED / NOT RUN**.
 
 ## 2. Planned STS cases
 
@@ -22,14 +22,14 @@ All cases below are **PLANNED / NOT RUN**.
 | `SUM-06` | **D2** | `FR-024/035`; `OD-015`; `AC-S3-01-01` | Booking originally on Tutor A is rescheduled to Tutor B and ends before `T_eval`. Both Tutors call `GET /api/v1/tutor/summary`. | Appears in Tutor B's `pastBooked` (`pastBookedCount: 1`); absent from former Tutor A's `pastBooked` (`pastBookedCount: 0`). |
 | `SUM-07` | **D2** | `NFR-003`; `AC-S3-01-05` | Seed persisted Past Booked row, restart API process (`spawn`), and call `GET /api/v1/tutor/summary`. | Exact `pastBookedCount` and matching row persist across API restart. |
 | `SUM-08` | **D2** | `AC-S3-01-05`; `NFR-006` | Playwright Edge E2E (non-Bangkok browser timezone `America/Los_Angeles`): Tutor logs in, sees Past Booked count + matching list in `Asia/Bangkok` time (no `Completed` text), reloads page, sees persisted count/list; Customer cannot access summary. | UI count equals list length, Bangkok time preserved, survives reload, no Customer email or `Completed` label. |
-| `SUM-09` | **Final** | `FR-035`; `OD-006/009`; `AC-S3-01-07/08`; `VAL-028/029/036` | Seed Upcoming Booked, In-Progress Booked, Past Booked, and Cancelled (both Customer and Tutor actors) under one `T_eval`. | All category counts equal their matching list lengths under one `evaluatedAt`; approved `OD-006` in-progress handling verified; the exact Cancelled DTO allowlist excludes `tutorCancellationReason`, raw Customer identity, and other private fields. Include ties in each Final category to verify its ordering and ID tie-breaker. |
-| `SUM-10` | **Final** | `AC-S3-01-09` | Playwright Edge E2E for full three-category Tutor Summary (Upcoming Booked, Past Booked, Cancelled) + empty states + reload. | All three categories render accurately with consistent counts/lists and Bangkok labels. |
+| `SUM-09` | **Final** | `FR-035`; `OD-006/009`; `AC-S3-01-07/08`; `VAL-028/029/036` | Seed real persisted Upcoming Booked, exact-start (`startsAt === T_eval`, `endsAt > T_eval`), `1 μs` pre-start (`startsAt === T_eval + 1 μs`), exact-end (`endsAt === T_eval`), `1 μs` pre-end (`endsAt === T_eval + 1 μs`), Past Booked, and Cancelled (Customer & Tutor actors) rows under one microsecond `T_eval`, plus foreign-Tutor/Customer/anonymous negative callers. | Exact boundary partitioning under one `evaluatedAt`: `startsAt === T_eval` → `inProgressBooked` (NOT `upcomingBooked`); `startsAt === T_eval + 1 μs` → `upcomingBooked`; `endsAt === T_eval` → `pastBooked` (NOT `inProgressBooked`); `endsAt === T_eval + 1 μs` → `inProgressBooked`. Every category count equals its matching list length (`upcomingBookedCount === upcomingBooked.length`, `inProgressBookedCount === inProgressBooked.length`, `pastBookedCount === pastBooked.length`, `cancelledCount === cancelled.length`). Business state stays `Booked` (never `Completed`); Cancelled DTO omits `tutorCancellationReason` and raw Customer identity; cross-Tutor/Customer/anonymous denials hold; non-violating tie-breaker ordering checked consistently with `SUM-01` (`offered_slot_no_overlap_per_tutor`). |
+| `SUM-10` | **Final** | `AC-S3-01-09` | Playwright Edge E2E (non-Bangkok browser timezone `America/Los_Angeles`) for full Tutor Summary UI (`Upcoming Booked`, `In-Progress Booked` per Option 1, `Past Booked`, `Cancelled`) including populated counts/lists, zero-row empty states (`0 รายการ` + Thai empty labels), `Asia/Bangkok` labels, reload persistence, and no PII/reason/Completed leakage. | Server-driven counts equal exact rendered list lengths across Upcoming Booked, In-Progress Booked, Past Booked, and Cancelled; In-Progress renders `มีนัดหมาย (Booked)` (never `Past` or `Completed`); all empty states, `Asia/Bangkok` timestamps, and reload persistence pass without Customer email or `tutorCancellationReason` disclosure. |
 
 ## 3. Anchor coverage
 
 - `VAL-028`: `SUM-01`, `SUM-02`, `SUM-09`
 - `VAL-029`: `SUM-02`, `SUM-03`, `SUM-09`
 - `VAL-036`: `SUM-04` (D2), `SUM-09` (Final Cancelled response)
-- `NFR-001/003/006/007/015/016`: `SUM-01..08`
+- `NFR-001/003/006/007/015/016`: `SUM-01..08` (verified in `#145`), `SUM-09..10` (planned for Final `#146`/`#147`)
 
-**Status:** PLANNED / NOT RUN.
+**Status:** `SUM-01..08` verified (`sprint3@175b88d9`, plus `SUM-08b` test stabilization `d2c7f86` in PR `#157`); `SUM-09..10` PLANNED / NOT RUN (Option 1 adopted by `@Chxtamos` & `@Tanaboonnnnn`; `#146` runtime code gated on final human review confirmation & `sprint3` merge).

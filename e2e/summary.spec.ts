@@ -157,10 +157,15 @@ test.describe('F-S3-01 SUM-08 — Tutor Past Booked Summary E2E (non-Bangkok bro
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ' })).toBeVisible();
 
     // 2. Error + retry state on transient 503 without fabricating 0 count
-    let failOnce = true;
+    let permitSuccessfulGet = false;
     await page.route('**/api/v1/tutor/summary', async (route) => {
-      if (failOnce) {
-        failOnce = false;
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+      // React StrictMode may abort and reissue the initial GET on mount; keep 503
+      // active until the user explicitly triggers the retry action.
+      if (!permitSuccessfulGet) {
         await route.fulfill({
           status: 503,
           contentType: 'application/json',
@@ -176,6 +181,7 @@ test.describe('F-S3-01 SUM-08 — Tutor Past Booked Summary E2E (non-Bangkok bro
     await expect(page.getByTestId('tutor-summary-error')).toContainText('ไม่สามารถโหลดสรุปนัดหมายได้');
     await expect(page.getByTestId('tutor-summary-past-count')).toHaveCount(0);
 
+    permitSuccessfulGet = true;
     await page.getByRole('button', { name: 'ลองโหลดสรุปอีกครั้ง' }).click();
     await expect(page.getByTestId('tutor-summary-past-count')).toContainText('นัดหมายที่ผ่านมาแล้ว (Past Booked): 1 รายการ');
     await expect(page.getByTestId('tutor-summary-past-item')).toHaveCount(1);

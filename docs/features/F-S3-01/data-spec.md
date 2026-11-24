@@ -43,11 +43,11 @@ ORDER BY b."endsAt" DESC NULLS LAST, b."id" DESC NULLS LAST;
 - Serialize the same SQL snapshot directly as UTC ISO-8601, preserving six fractional digits (`US`) because the schema stores microseconds. Do not truncate via JavaScript `Date` before publishing the API snapshot or classifying results. UI formatting may show less precision; the UI must not reclassify timestamps. See [OD-009 decision/readiness record](readiness-gate.md#od-009--summary-query-policy).
 - Application projection filters rows where `row.id !== null`, formats `customerRef = 'CUST-' + row.customerId.slice(0, 8)` (matching `F-S1-05`, never serializing raw `customerId`), and sets `pastBookedCount = pastBooked.length`.
 
-## 3. Final three-category extension (planned for 30 Nov, subject to OD-006 stakeholder confirmation)
+## 3. Final extension (planned for 30 Nov; `OD-006` Option 1 DECIDED — gated on final human review & `sprint3` merge before `#146` code)
 
-The Final query uses the same anchored `eval_snapshot LEFT JOIN` pattern (all owned `Booking` rows where `s."tutorId" = $1::uuid`) in one SQL statement and partitions non-null rows under that single `evaluatedAt` into:
+The Final query uses the same anchored `eval_snapshot LEFT JOIN` pattern (all owned `Booking` rows where `s."tutorId" = $1::uuid`) in one SQL statement and partitions non-null rows under that single `evaluatedAt` into mutually disjoint predicates:
 - `upcomingBooked` (`status = 'Booked' AND startsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`)
-- `inProgressBooked` (`status = 'Booked' AND startsAt <= evaluatedAt AND endsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`; subject to `OD-006` stakeholder disposition)
+- `inProgressBooked` (`status = 'Booked' AND startsAt <= evaluatedAt AND endsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`; **adopted `OD-006` Option 1** by `@Chxtamos` & `@Tanaboonnnnn` in [PR #157 review `PRR_kwDOVg8MSM8AAAABZ_gshg`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870) — runtime code remains gated on PR `#157` merge into `sprint3`)
 - `pastBooked` (`status = 'Booked' AND endsAt <= evaluatedAt`, ordered `endsAt DESC, id DESC`)
 - `cancelled` (`status = 'Cancelled'`, ordered `cancelledAt DESC, id DESC`; omits `tutorCancellationReason`)
 
