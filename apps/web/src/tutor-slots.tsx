@@ -5,6 +5,16 @@ import { computeTutorKpis, selectNextTutorLesson, type TutorBookingSummary } fro
 
 type SlotList = { data: TutorSlot[]; meta: { requestId:string; evaluatedAt:string } };
 export type TutorScheduleBooking = TutorBookingSummary;
+type TutorSummaryActiveBooking = {
+  id: string;
+  slotId: string;
+  customerRef: string;
+  startsAt: string;
+  endsAt: string;
+  status: 'Booked';
+  displayStatus: 'Booked';
+  createdAt: string;
+};
 type TutorSummaryPastBooking = {
   id: string;
   slotId: string;
@@ -23,6 +33,10 @@ type TutorSummaryCancelled = Omit<TutorSummaryPastBooking, 'status' | 'displaySt
 };
 type TutorSummaryPayload = {
   data: {
+    upcomingBookedCount: number;
+    upcomingBooked: TutorSummaryActiveBooking[];
+    inProgressBookedCount: number;
+    inProgressBooked: TutorSummaryActiveBooking[];
     pastBookedCount: number;
     pastBooked: TutorSummaryPastBooking[];
     cancelledCount: number;
@@ -818,7 +832,7 @@ export function TutorAvailability({
         <div>
           <p className="dashboard-kicker">APPOINTMENT SUMMARY</p>
           <h2 id="tutor-summary-title">สรุปนัดหมายผู้สอน</h2>
-          <p className="agenda-subtitle">สรุปนัดหมายที่ผ่านมาแล้วและนัดหมายที่ยกเลิก (Asia/Bangkok)</p>
+          <p className="agenda-subtitle">สรุปนัดหมายที่กำลังจะมาถึง กำลังดำเนินการ ที่ผ่านมาแล้ว และที่ยกเลิก (Asia/Bangkok)</p>
         </div>
         <button
           type="button"
@@ -840,46 +854,113 @@ export function TutorAvailability({
           </div>
         ) : summary ? (
           <>
-            <p style={{ margin: '0 0 6px 0', fontWeight: 600 }} data-testid="tutor-summary-past-count">
-              นัดหมายที่ผ่านมาแล้ว (Past Booked): {summary.pastBookedCount} รายการ
-            </p>
             {summaryEvaluatedAt && (
-              <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: '#58697f' }} data-testid="tutor-summary-evaluated-at">
+              <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#58697f' }} data-testid="tutor-summary-evaluated-at">
                 ประเมิน ณ {bangkokLongDate(new Date(summaryEvaluatedAt))} {bangkokClock(new Date(summaryEvaluatedAt))} น. (Asia/Bangkok)
               </p>
             )}
-            <p style={{ margin: '0 0 10px 0', fontSize: '12.5px', color: '#58697f' }}>
-              หมายเหตุ: นัดหมายที่กำลังจะมาถึงและนัดหมายที่กำลังเรียนยังไม่รวมในหน้านี้
-            </p>
-            {summary.pastBooked.length === 0 ? (
-              <p className="empty-slots" data-testid="tutor-summary-empty">ยังไม่มีนัดหมายที่ผ่านมาแล้ว</p>
-            ) : (
-              <ul className="slot-list" aria-label="รายการนัดหมายที่ผ่านมาแล้ว" data-testid="tutor-summary-past-list">
-                {summary.pastBooked.map(item => {
-                  const start = new Date(item.startsAt);
-                  const end = new Date(item.endsAt);
-                  return (
-                    <li key={item.id} className="slot-item customer-booking-item" data-testid="tutor-summary-past-item" data-booking-id={item.id}>
-                      <div className="agenda-color-mark" style={{ background: '#475569' }} aria-hidden="true" />
-                      <div className="agenda-row-main">
-                        <div className="slot-item-date">{bangkokLongDate(start)}</div>
-                        <div className="slot-item-hours">
-                          <time dateTime={item.startsAt}>{bangkokClock(start)}</time>
-                          <span aria-hidden="true">–</span>
-                          <time dateTime={item.endsAt}>{bangkokClock(end)}</time> น. (Asia/Bangkok)
+            <section aria-labelledby="tutor-summary-upcoming-title" style={{ marginBottom: '16px' }}>
+              <h3 id="tutor-summary-upcoming-title" data-testid="tutor-summary-upcoming-count">
+                นัดหมายที่กำลังจะมาถึง (Upcoming Booked): {summary.upcomingBookedCount} รายการ
+              </h3>
+              {summary.upcomingBooked.length === 0 ? (
+                <p className="empty-slots" data-testid="tutor-summary-upcoming-empty">ยังไม่มีนัดหมายที่กำลังจะมาถึง</p>
+              ) : (
+                <ul className="slot-list" aria-label="รายการนัดหมายที่กำลังจะมาถึง" data-testid="tutor-summary-upcoming-list">
+                  {summary.upcomingBooked.map(item => {
+                    const start = new Date(item.startsAt);
+                    const end = new Date(item.endsAt);
+                    return (
+                      <li key={item.id} className="slot-item customer-booking-item" data-testid="tutor-summary-upcoming-item" data-booking-id={item.id}>
+                        <div className="agenda-color-mark" style={{ background: '#0f766e' }} aria-hidden="true" />
+                        <div className="agenda-row-main">
+                          <div className="slot-item-date">{bangkokLongDate(start)}</div>
+                          <div className="slot-item-hours">
+                            <time dateTime={item.startsAt}>{bangkokClock(start)}</time>
+                            <span aria-hidden="true">–</span>
+                            <time dateTime={item.endsAt}>{bangkokClock(end)}</time> น. (Asia/Bangkok)
+                          </div>
+                          <div style={{ fontSize: '13px', color: '#58697f', marginTop: '4px' }}>
+                            ผู้จอง: <strong data-testid="tutor-summary-upcoming-customer-ref">{item.customerRef}</strong> • รหัสการจอง: <code data-testid="tutor-summary-upcoming-booking-id">{item.id}</code>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '13px', color: '#58697f', marginTop: '4px' }}>
-                          ผู้จอง: <strong data-testid="tutor-summary-customer-ref">{item.customerRef}</strong> • รหัสการจอง: <code data-testid="tutor-summary-booking-id">{item.id}</code>
+                        <div className="slot-tags">
+                          <span data-testid="tutor-summary-upcoming-status-badge">มีนัดหมาย (Booked)</span>
                         </div>
-                      </div>
-                      <div className="slot-tags">
-                        <span className="badge-past" data-testid="tutor-summary-status-badge">สิ้นสุดแล้ว (Past)</span>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+            <section aria-labelledby="tutor-summary-in-progress-title" style={{ marginBottom: '16px' }}>
+              <h3 id="tutor-summary-in-progress-title" data-testid="tutor-summary-in-progress-count">
+                กำลังดำเนินการอยู่ (In-Progress Booked): {summary.inProgressBookedCount} รายการ
+              </h3>
+              {summary.inProgressBooked.length === 0 ? (
+                <p className="empty-slots" data-testid="tutor-summary-in-progress-empty">ยังไม่มีนัดหมายที่กำลังดำเนินการอยู่</p>
+              ) : (
+                <ul className="slot-list" aria-label="รายการนัดหมายที่กำลังดำเนินการอยู่" data-testid="tutor-summary-in-progress-list">
+                  {summary.inProgressBooked.map(item => {
+                    const start = new Date(item.startsAt);
+                    const end = new Date(item.endsAt);
+                    return (
+                      <li key={item.id} className="slot-item customer-booking-item" data-testid="tutor-summary-in-progress-item" data-booking-id={item.id}>
+                        <div className="agenda-color-mark" style={{ background: '#b45309' }} aria-hidden="true" />
+                        <div className="agenda-row-main">
+                          <div className="slot-item-date">{bangkokLongDate(start)}</div>
+                          <div className="slot-item-hours">
+                            <time dateTime={item.startsAt}>{bangkokClock(start)}</time>
+                            <span aria-hidden="true">–</span>
+                            <time dateTime={item.endsAt}>{bangkokClock(end)}</time> น. (Asia/Bangkok)
+                          </div>
+                          <div style={{ fontSize: '13px', color: '#58697f', marginTop: '4px' }}>
+                            ผู้จอง: <strong data-testid="tutor-summary-in-progress-customer-ref">{item.customerRef}</strong> • รหัสการจอง: <code data-testid="tutor-summary-in-progress-booking-id">{item.id}</code>
+                          </div>
+                        </div>
+                        <div className="slot-tags">
+                          <span data-testid="tutor-summary-in-progress-status-badge">มีนัดหมาย (Booked)</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+            <section aria-labelledby="tutor-summary-past-title" style={{ marginBottom: '16px' }}>
+              <h3 id="tutor-summary-past-title" data-testid="tutor-summary-past-count">
+                นัดหมายที่ผ่านมาแล้ว (Past Booked): {summary.pastBookedCount} รายการ
+              </h3>
+              {summary.pastBooked.length === 0 ? (
+                <p className="empty-slots" data-testid="tutor-summary-empty">ยังไม่มีนัดหมายที่ผ่านมาแล้ว</p>
+              ) : (
+                <ul className="slot-list" aria-label="รายการนัดหมายที่ผ่านมาแล้ว" data-testid="tutor-summary-past-list">
+                  {summary.pastBooked.map(item => {
+                    const start = new Date(item.startsAt);
+                    const end = new Date(item.endsAt);
+                    return (
+                      <li key={item.id} className="slot-item customer-booking-item" data-testid="tutor-summary-past-item" data-booking-id={item.id}>
+                        <div className="agenda-color-mark" style={{ background: '#475569' }} aria-hidden="true" />
+                        <div className="agenda-row-main">
+                          <div className="slot-item-date">{bangkokLongDate(start)}</div>
+                          <div className="slot-item-hours">
+                            <time dateTime={item.startsAt}>{bangkokClock(start)}</time>
+                            <span aria-hidden="true">–</span>
+                            <time dateTime={item.endsAt}>{bangkokClock(end)}</time> น. (Asia/Bangkok)
+                          </div>
+                          <div style={{ fontSize: '13px', color: '#58697f', marginTop: '4px' }}>
+                            ผู้จอง: <strong data-testid="tutor-summary-customer-ref">{item.customerRef}</strong> • รหัสการจอง: <code data-testid="tutor-summary-booking-id">{item.id}</code>
+                          </div>
+                        </div>
+                        <div className="slot-tags">
+                          <span className="badge-past" data-testid="tutor-summary-status-badge">สิ้นสุดแล้ว (Past)</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
             <section aria-labelledby="tutor-summary-cancelled-title">
               <h3 id="tutor-summary-cancelled-title" data-testid="tutor-summary-cancelled-count">
                 นัดหมายที่ยกเลิกแล้ว (Cancelled): {summary.cancelledCount} รายการ
