@@ -1,6 +1,6 @@
 # F-S3-01 — Tutor Appointment Summary HTTP/API Contract (Part E)
 
-> **D2 Past Booked implemented (`#145` / PR `#156`); Final extension (`#146` / `#147`) remains planned and gated on `OD-006` disposition and human peer review.** See [Feature SDS](specification.md), [UI](ui-spec.md), [data](data-spec.md), [STS](tests.md), and [readiness-gate](readiness-gate.md#od-006--in-progress-booking-classification).
+> **D2 Past Booked implemented (`#145` / PR `#156`); `OD-006` Option 1 decided by `@Chxtamos` & `@Tanaboonnnnn` under instructor-delegated authority ([PR #157 review](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870)); Final extension (`#146` / `#147`) remains planned and gated on final human review confirmation & `sprint3` merge.** See [Feature SDS](specification.md), [UI](ui-spec.md), [data](data-spec.md), [STS](tests.md), and [readiness-gate](readiness-gate.md#od-006--in-progress-booking-classification).
 
 ## 1. Transport and authorization
 
@@ -42,12 +42,12 @@ For the Deliverable 2 increment, the endpoint evaluates and returns the **Past B
 }
 ```
 
-### 2.2 Full Final response extension (mandatory by 30 Nov / Final 13 Dec; `inProgressBooked` Option 1 PROPOSED — gated on `OD-006`)
+### 2.2 Full Final response extension (mandatory by 30 Nov / Final 13 Dec; `OD-006` Option 1 DECIDED — gated on final human review & `sprint3` merge before `#146` code)
 
-When Upcoming Booked and Cancelled are implemented for Final (gated on explicit `OD-006` stakeholder/authorized product-owner disposition, Part E contract sync, actual human peer review, and `sprint3` merge before `#146` code), `data` extends additively under the **same** single-statement `meta.evaluatedAt` snapshot without breaking D2 consumers. Under **proposed `OD-006` Option 1**, the three `Booked` intervals are mutually disjoint and cover every `status = 'Booked'` row with zero new persisted state (`count === list.length` for every category):
+When Upcoming Booked, In-Progress Booked (`OD-006` Option 1), and Cancelled are implemented for Final (after final human review confirmation and `sprint3` merge of PR `#157`), `data` extends additively under the **same** single-statement `meta.evaluatedAt` snapshot without breaking D2 consumers. Under **adopted `OD-006` Option 1**, the three `Booked` intervals are mutually disjoint and cover every `status = 'Booked'` row with zero new persisted state (`count === list.length` for every category):
 
 - `upcomingBookedCount: number`, `upcomingBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Booked'`, `startsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`)
-- `inProgressBookedCount: number`, `inProgressBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Booked'`, `startsAt <= evaluatedAt AND endsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`; **PROPOSED `OD-006` Option 1 in PR `#157` — gated on explicit `OD-006` disposition and actual human peer review before `#146` code**)
+- `inProgressBookedCount: number`, `inProgressBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Booked'`, `startsAt <= evaluatedAt AND endsAt > evaluatedAt`, ordered `startsAt ASC, id ASC`; **adopted `OD-006` Option 1** by `@Chxtamos` & `@Tanaboonnnnn` in [PR #157 review `PRR_kwDOVg8MSM8AAAABZ_gshg`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870) — runtime code remains gated on PR `#157` merge into `sprint3`)
 - `pastBookedCount: number`, `pastBooked: TutorSummaryBookingDto[]` (`status: 'Booked'`, `displayStatus: 'Past'`, `endsAt <= evaluatedAt`, ordered `endsAt DESC, id DESC`)
 - `cancelledCount: number`, `cancelled: TutorSummaryCancelledDto[]` (`status: 'Cancelled'`, `displayStatus: 'Cancelled'`, ordered `cancelledAt DESC, id DESC`)
 

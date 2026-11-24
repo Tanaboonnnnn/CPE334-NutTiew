@@ -1,6 +1,6 @@
 # F-S3-01 — Tutor Appointment Summary UI Specification (Part E)
 
-> **D2 Past Booked implemented (`#145` / PR `#156`); Final multi-category UI (`#146` / `#147`) remains planned and gated on explicit `OD-006` disposition and human peer review.** Tutor-only view; never rendered in the Customer workspace.
+> **D2 Past Booked implemented (`#145` / PR `#156`); `OD-006` Option 1 decided by `@Chxtamos` & `@Tanaboonnnnn` under instructor-delegated authority ([PR #157 review](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870)); Final multi-category UI (`#146` / `#147`) remains planned and gated on final human review confirmation & `sprint3` merge.** Tutor-only view; never rendered in the Customer workspace.
 
 ## 1. Screen and shared design system
 
@@ -18,13 +18,13 @@ Reuse the NutTiew Tutor Dashboard card, KPI tile, agenda list, focus ring, error
    - An explicit note that **Upcoming Booked** and **Cancelled** summary categories are scheduled for Final completion (until implemented for 30 Nov / Final).
 3. A **รีเฟรชสรุป** button reloads `GET /api/v1/tutor/summary` with request-scoped `AbortController`/version guards.
 
-## 3. Final UI contract (mandatory by 30 Nov / Final 13 Dec; `inProgressBooked` Option 1 PROPOSED — gated on `OD-006` & human peer review)
+## 3. Final UI contract (mandatory by 30 Nov / Final 13 Dec; `OD-006` Option 1 DECIDED — gated on final human review & `sprint3` merge before `#146` code)
 
-When Upcoming Booked, In-Progress Booked (per approved `OD-006` Option 1), and Cancelled are enabled for Final (after explicit stakeholder/authorized product-owner `OD-006` disposition, Part E review, and `sprint3` merge), the same **สรุปนัดหมายผู้สอน** section renders all categories from one `GET /api/v1/tutor/summary` response (`meta.evaluatedAt`):
+When Upcoming Booked, In-Progress Booked (adopted `OD-006` Option 1), and Cancelled are enabled for Final (after final human review confirmation and `sprint3` merge of PR `#157`), the same **สรุปนัดหมายผู้สอน** section renders all categories from one `GET /api/v1/tutor/summary` response (`meta.evaluatedAt`):
 
 1. **Summary count strip (all driven strictly from server counts, matching exact rendered list lengths):**
    - **นัดหมายที่กำลังจะมาถึง (Upcoming Booked):** `data.upcomingBookedCount` รายการ
-   - **กำลังดำเนินการอยู่ (In-Progress Booked — PROPOSED `OD-006` Option 1 in PR `#157`, gated on `OD-006` disposition & actual human peer review):** `data.inProgressBookedCount` รายการ
+   - **กำลังดำเนินการอยู่ (In-Progress Booked — adopted `OD-006` Option 1, [PR #157 review `PRR_kwDOVg8MSM8AAAABZ_gshg`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870)):** `data.inProgressBookedCount` รายการ
    - **นัดหมายที่ผ่านมาแล้ว (Past Booked):** `data.pastBookedCount` รายการ
    - **นัดหมายที่ยกเลิกแล้ว (Cancelled):** `data.cancelledCount` รายการ
 2. **Matching category lists:**

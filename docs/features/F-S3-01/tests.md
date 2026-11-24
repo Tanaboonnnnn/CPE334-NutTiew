@@ -1,6 +1,6 @@
 # F-S3-01 — Tutor Appointment Summary Software Test Specification (Part E)
 
-> **D2 STS (`SUM-01..08`) implemented and verified in `#145` / PR `#156` (`NutTiew CI` Run `45362315140`); Final STS (`SUM-09..10`) remains PLANNED / NOT RUN — gated on `OD-006` disposition and human peer review before `#146` / `#147` code.**
+> **D2 STS (`SUM-01..08`) implemented and verified in `#145` / PR `#156` (`NutTiew CI` Run `45362315140`); `OD-006` Option 1 decided by `@Chxtamos` & `@Tanaboonnnnn` ([PR #157 review](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/157#pullrequestreview-6039284870)); Final STS (`SUM-09..10`) remains PLANNED / NOT RUN — gated on final human review confirmation & `sprint3` merge before `#146` / `#147` code.**
 
 ## 1. Traceability and test setup
 
@@ -32,4 +32,4 @@ Required Part F setup: disposable PostgreSQL 18 at the reviewed S2 schema SHA; T
 - `VAL-036`: `SUM-04` (D2), `SUM-09` (Final Cancelled response)
 - `NFR-001/003/006/007/015/016`: `SUM-01..08` (verified in `#145`), `SUM-09..10` (planned for Final `#146`/`#147`)
 
-**Status:** `SUM-01..08` verified (`sprint3@175b88d9`); `SUM-09..10` PLANNED / NOT RUN (gated on `OD-006` disposition and human peer review).
+**Status:** `SUM-01..08` verified (`sprint3@175b88d9`, plus `SUM-08b` test stabilization `d2c7f86` in PR `#157`); `SUM-09..10` PLANNED / NOT RUN (Option 1 adopted by `@Chxtamos` & `@Tanaboonnnnn`; `#146` runtime code gated on final human review confirmation & `sprint3` merge).
