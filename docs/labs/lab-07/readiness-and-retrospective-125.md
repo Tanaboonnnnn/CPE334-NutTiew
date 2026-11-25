@@ -150,3 +150,37 @@
 3. **Lab 6 `RT-04` Caveat:** Partner retest `RT-04` (`#110`) remains partner-reported `PASS` without direct NUL-byte screenshot/case evidence (the attached 400/no-cookie screenshots covered the empty-body control request, not the NUL-byte `RT-04` case); direct automated NUL/control-character regression evidence is separately provided by `AUTH-NUL-01` (PR `#140`).
 4. **Deferred Later-Sprint Reconciliation (`TD-01`):** Sprint 2's `booking_guard_s2()` still enforces `60 minutes`; reconciling `CR-L7-01` into Sprint 2/3 is intentionally excluded from Lab 7 and tracked separately under `#149`.
 5. **Local Edge E2E Port Collision:** Local Playwright Edge launch hit a local port conflict during `#123`; full Edge E2E (`72/72 PASS`) was verified in isolated GitHub Actions CI (`45461841734`, `45464164774`, `45471154386`).
+
+
+## 5. Post-Release Evidence Addendum (`2026-11-25 18:26 ICT`)
+
+> This addendum supersedes the **current-state** statements in the frozen `17:00 ICT` staging snapshot above. The frozen `sprint1@adb70e7` record remains historical evidence; the live release candidate is `main@c14853e`.
+
+### EV-L7-07 — Reviewed Main Release, Annotated Tag & Cloud Run Deployment
+
+| Gate | Current verified evidence | Status |
+|---|---|---|
+| Release PR | [PR `#166`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/166), `sprint1 -> main`, merged `2026-11-25T10:32:12Z`; merge SHA `c14853e001e31dc3d05c14f1430690aba36b9d23` | **PASS** |
+| Main CI | [Run `45595923541`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45595923541), exact merge SHA, 3/3 jobs; Unit `36/36`, PostgreSQL `113/113`, Edge E2E `72/72`; GH-05 offline checks `158/158` | **PASS** |
+| Annotated tag | [`lab7-s1-q05-90m`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/tree/lab7-s1-q05-90m) points to the exact merge SHA above | **PASS** |
+| CD migration + deploy | [Run `45599744167`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45599744167), `workflow_dispatch` on the exact main SHA; migration, revision readiness, read-only smoke and traffic switch succeeded | **PASS** |
+| Cloud Run revision | Service `nuttiew`, revision `nuttiew-00014-req`, `100%` traffic; runtime digest `sha256:c0da19cd65d81a81e912c197fb62601506b910a61e4d2ff762e571a41c3432f0`; migration digest `sha256:f329aa2dcf363941105d30b3f14b51cafa7accc5a20cf78f295214dabc42f30a` | **PASS** |
+| Read-only production smoke | `GET /` → HTTP `200`; `GET /api/ready` → HTTP `200`, `{"status":"ready"}` on the staged revision and production URL | **PASS** |
+| Deployment safety reset | Repository variable `DEPLOY_ENABLED=false` re-verified after successful deployment | **PASS** |
+
+### EV-L7-08 — Live Boundary & Final Submission Gates
+
+| Gate | Current verified state | Status |
+|---|---|---|
+| Lab 6 RT-04 / Issue `#139` | Issue `#139` closed `COMPLETED` at `2026-11-25T11:15:31Z`; Chxtamos recorded direct live retest on `nuttiew-00014-req` (3/3 HTTP `400 INVALID_INPUT`, no `Set-Cookie`) and controls in [the closure comment](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/139#issuecomment-7160806031). A further product-team check also passed NUL-in-email, trailing NUL, and SOH-in-email (3/3, no cookie). | **PASS** |
+| Q05 live boundary (`90:00` / `89:59`) | **NOT RUN.** CD workflow smoke is intentionally read-only (`/` and `/api/ready`) and does not create Slots or Bookings. No authenticated disposable production fixture/cleanup path was available in this session; no production Booking or Slot was created. Automated PostgreSQL tests remain `221/221` green but do not replace the required live boundary check. | **PENDING** |
+| Final metrics | Refreshed post-release five-metric reconciliation is in [metrics-124.md §5](metrics-124.md#5-post-release-snapshot--five-metric-reconciliation-2026-11-25-1826-ict), snapshot `2026-11-25 18:26 ICT`, `main@c14853e`. | **PASS** |
+| Controlled Parts A–D PDF | No final `Lab7_CPE334_NutTiew_Parts_A_D.pdf` was present in the available local workspace. The required private Student IDs are not present in the public repository and must not be invented or committed. | **PENDING** |
+| LEB2 upload / receipt | No CPE334 LEB2 upload or receipt is recorded. The currently readable browser tab was a CPE342 material page, not the CPE334 Lab 7 submission page. | **PENDING** |
+
+### Current Release & Submission Verdict
+
+- **Sprint 1 Lab 7 deployed release:** `DEPLOYED` — main merge `c14853e`, annotated tag `lab7-s1-q05-90m`, Cloud Run `nuttiew-00014-req` at `100%` traffic, CD Run `45599744167` success.
+- **Final Lab 7 submission:** **`NOT READY`** until the authenticated live Q05 boundary check is captured, the controlled Parts A–D PDF is assembled with both students' legal names and private Student IDs, and the PDF is uploaded to the correct CPE334 LEB2 assignment with its actual receipt recorded.
+- **Downstream Sprint 2/3:** remain separate. `#149` continues to track the `booking_guard_s2()` 60→90 minute forward reconciliation; do not claim the Sprint 2/3 release gate is satisfied by this Sprint 1 release.
+- **Safety:** `DEPLOY_ENABLED=false` after deployment. No further GCP deployment, migration, traffic change, or production data mutation is authorized by this addendum.

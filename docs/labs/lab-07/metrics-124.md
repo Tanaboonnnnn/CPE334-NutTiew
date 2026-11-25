@@ -1,8 +1,8 @@
 # Lab 7 Part C — Five Sourced Engineering Metrics & Evidence-Based Action (`L7-03` / Issue #124)
 
-> **Status: PRE-RELEASE SNAPSHOT ON MAINTAINED `sprint1@02672d4` (25 Nov 2026 01:56 ICT).**
-> This document delivers [Issue #124](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/124) (`Lab 7` Part C) from live GitHub Issues, Pull Requests, GitHub Actions runs, and Lab 6 triage records for repository `Tanaboonnnnn/CPE334-NutTiew`.
-> **Honesty boundary:** `#123` (PR `#163`) is merged and CI-verified on `origin/sprint1@02672d4b475dc15018e182467c0468c4f63accf4`, while the separate `sprint1 -> main` Lab 7 release PR and GCP Cloud Run deploy remain **PENDING / NOT RUN** (`origin/main` is still Lab 6 `f94dce99`). Refresh this snapshot after the `#123` `sprint1 -> main` release and post-deploy smoke test before assembling the final Lab 7 PDF (`#125`).
+> **Historical pre-release snapshot:** `sprint1@02672d4` at `2026-11-25 01:56 ICT`. The refreshed post-release snapshot is in **§5** (`main@c14853e`, `2026-11-25 18:26 ICT`).
+> This document preserves the original Part C evidence snapshot and appends a five-metric post-release reconciliation from live GitHub Issues, Pull Requests, GitHub Actions runs, and Lab 6 triage records for `Tanaboonnnnn/CPE334-NutTiew`.
+> **Snapshot boundary:** §§1–4 below describe the historical `01:56 ICT` pre-release cohort and must not be read as current deployment status. **§5 is the current metric snapshot** after PR `#166`, tag `lab7-s1-q05-90m`, Cloud Run deployment, and closure of `#139`.
 
 ## 1. Observation Window & Snapshot Provenance
 
@@ -117,3 +117,91 @@
 ## 4. Evidence-Based Interpretation & Action (<= 100 Words)
 
 Although maintained `sprint1@02672d4` passes 221/221 automated tests and 76/76 `main+sprint1` `NutTiew CI` runs, two concrete risks appear in the metrics: (1) Defect Issue `#139` remains `OPEN` despite PR `#140`/`#142` deployment and `#110` acceptance, causing tracker drift; and (2) Lab 7 Q05 (`90` minutes) is not yet released to `main`/GCP (`origin/main` remains `f94dce9`), while Sprint 2's `booking_guard_s2()` still enforces `60` minutes. **Action:** `@Tanaboonnnnn` closes `#139` with `#110` evidence and `@Chxtamos` reviews the `#123` `sprint1 -> main` release PR plus GCP smoke test before 29 Nov 2026; both reconcile Q05 into Sprint 2/3 under `#149`.
+
+
+## 5. Post-Release Snapshot & Five-Metric Reconciliation (`2026-11-25 18:26 ICT`)
+
+> **Current snapshot:** `main@c14853e001e31dc3d05c14f1430690aba36b9d23`, annotated tag [`lab7-s1-q05-90m`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/tree/lab7-s1-q05-90m), Cloud Run revision `nuttiew-00014-req` at `100%` traffic. The historical `01:56 ICT` tables in §§1–4 are retained unchanged; this section supersedes their pre-release status statements for final Lab 7 reporting.
+> **Observation boundary:** repository records and Actions runs through `2026-11-25 18:26 ICT`. Workflow totals count the latest attempt per unique run ID. The current live Q05 `90:00`/`89:59` boundary test is **not** claimed by the read-only deployment smoke; see §5.3 and the Part D post-release addendum.
+
+### 5.1 Metric 1 — Completed Issues (Current)
+
+| Scope | Completed | `NOT_PLANNED` | Open | Total |
+|---|---:|---:|---:|---:|
+| Sprint 1 Core | 18 | 0 | 0 | 18 |
+| Lab 5 | 11 | 5 | 0 | 16 |
+| Lab 6 | 9 | 0 | 0 | 9 |
+| Lab 7 | 4 | 0 | 0 | 4 |
+| **Sprint 1 + Labs 5–7** | **42** | **5** | **0** | **47** |
+| Sprint 2 | 9 | 0 | 0 | 9 |
+| Sprint 3 | 5 | 0 | 2 (`#149`, `#150`) | 7 |
+| **Repository total** | **56** | **5** | **2** | **63** |
+
+- **Current completion rate:** `56/58 = 96.6%` excluding the five `NOT_PLANNED` placeholders; `56/63 = 88.9%` of all Issues.
+- **Sprint 1 + Labs 5–7:** `42/42 = 100.0%` of planned Issues excluding `NOT_PLANNED`; `42/47 = 89.4%` including those placeholders.
+- Lab 7 Issues `#122`–`#125` are all `COMPLETED`. Lab 6 defect `#139` was closed as `COMPLETED` at `2026-11-25T11:15:31Z` after the controlled live RT-04 retest documented in [#139 comment](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/139#issuecomment-7160806031). Remaining open Issues are Sprint 3 `#149` and `#150`.
+- **Source:** GitHub Issues API / `gh issue list --state all`; state reasons reconciled via GraphQL (`56 COMPLETED`, `5 NOT_PLANNED`, `2 OPEN`).
+
+### 5.2 Metric 2 — Merged Pull Requests (Current)
+
+| Target branch | Merged PRs |
+|---|---:|
+| `sprint1` | 63 |
+| `main` | 13 |
+| `sprint2` (separate) | 12 |
+| `sprint3` (separate) | 7 |
+| **Total merged** | **95** |
+
+- Repository PR population: **101** total = `95` merged + `5` closed-unmerged + `1` open (`#161`, Sprint 3 release-gate audit).
+- Merge rate: `95/101 = 94.1%`; excluding the intentionally failing GH-04 probe PR `#73`, `95/100 = 95.0%`.
+- Lab 7 release lineage: PRs `#162`–`#165`, `#167`–`#169` merged into `sprint1`; PR `#166` merged into `main` at `c14853e`.
+- **Source:** GitHub Pull Requests API / `gh pr list --state all --limit 300`, grouped by `baseRefName` and `mergedAt`.
+
+### 5.3 Metric 3 — Automated Tests & Deployed Release Verification (Current)
+
+| Suite / Evidence | Current result | Source |
+|---|---:|---|
+| Unit — API | `29/29` PASS | Main CI `45595923541`, job `139141826313` |
+| Unit — Web | `7/7` PASS | Main CI `45595923541`, job `139141826313` |
+| PostgreSQL 18 integration | `113/113` PASS | Main CI `45595923541`, job `139141826840` |
+| Microsoft Edge E2E | `72/72` PASS | Main CI `45595923541`, job `139141826950` |
+| **Application automated tests** | **`221/221` PASS; `0` fail; `0` skip** | [Main CI `45595923541`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45595923541), exact SHA `c14853e` |
+| GH-05 offline deploy checks | `158/158` PASS | Main CI Unit job `139141826313` |
+
+**Post-release deployment evidence:**
+
+- Annotated Git tag [`lab7-s1-q05-90m`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/tree/lab7-s1-q05-90m) points to `c14853e001e31dc3d05c14f1430690aba36b9d23`.
+- [CD Run `45599744167`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45599744167) completed `success`: migration, staged revision readiness, read-only smoke, and traffic switch all succeeded.
+- Cloud Run service `nuttiew`: revision **`nuttiew-00014-req`**, **`100%` traffic**. Runtime image digest: `sha256:c0da19cd65d81a81e912c197fb62601506b910a61e4d2ff762e571a41c3432f0`. Migration image digest: `sha256:f329aa2dcf363941105d30b3f14b51cafa7accc5a20cf78f295214dabc42f30a`.
+- Read-only live smoke on the staged revision and production URL: `/` returned HTTP `200`; `/api/ready` returned HTTP `200` with `{"status":"ready"}`.
+- **Important limitation:** the CD smoke is read-only and does **not** prove Q05 `90:00` accepted / `89:59` rejected through an authenticated live Booking flow. That live boundary smoke remains `NOT RUN`; automated PostgreSQL integration coverage is green, but it is not a substitute for the live boundary check. No production Booking or Slot was created as part of this snapshot.
+- After successful deployment, repository variable `DEPLOY_ENABLED` was reset to `false` (verified at `2026-11-25 18:26 ICT`).
+
+### 5.4 Metric 4 — UAT Defect Status (Current)
+
+| Finding | Classification | Current state | Evidence |
+|---|---|---|---|
+| `DEF-NT-TH038-01` / `#139` | Accepted Minor defect | **Fixed, deployed, live-verified and tracker CLOSED** | RED→GREEN PR `#140`; Lab 6 release PR `#142`; current Lab 7 main release PR `#166`; partner acceptance in `#110`; direct controlled live RT-04 retest on `nuttiew-00014-req` (3/3 HTTP `400 INVALID_INPUT`, no `Set-Cookie`) and control checks; [closure record](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/139#issuecomment-7160806031) |
+| `NT-OBS-01` | Not-defect | Triaged out | Sprint 1 non-PII `tutorRef` contract; PR `#137` |
+| `NT-ENH-01` | Enhancement / non-blocking | Deferred | Optional security headers and `X-RateLimit-*` headers |
+
+- Reconciliation: `1/1` accepted defect fixed and deployed; `1/1` tracker issue closed; `0` Critical/Major defects. Partner `RT-04` was originally reported PASS without a direct screenshot in `#110`; Chxtamos subsequently performed and recorded the direct live retest on the corrected Lab 7 revision, and an additional product-team retest returned `400 INVALID_INPUT` with no `Set-Cookie` for NUL-in-email, trailing NUL, and SOH-in-email cases.
+
+### 5.5 Metric 5 — CI/CD Run Outcomes (Current)
+
+| Workflow / scope | Success | Failure | Cancelled | Total | Success rate |
+|---|---:|---:|---:|---:|---:|
+| `NutTiew CI` — `main` + `sprint1` | **86** | 0 | 0 | **86** | **100.0%** |
+| `NutTiew CI` — all branches | 248 | 22 | 41 | 311 | 79.7% |
+| `NutTiew CD - Release deploy` — `main` | 4 | 15 | 1 | 20 | 20.0% |
+| `Build Illustrated D1 PDF` (non-required) | 1 | 2 | 0 | 3 | 33.3% |
+| **All repository workflow runs** | **253** | **39** | **42** | **334** | — |
+
+- The protected/integration `main` + `sprint1` CI population is `86/86` success (`sprint1`: `75/75`; `main`: `11/11`). The current `main` run is `45595923541` on `c14853e`.
+- CD successes include the three prior authorized manual releases and current Lab 7 manual release [Run `45599744167`](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45599744167). The `15` failures include fail-closed `push` runs with `DEPLOY_ENABLED=false` and earlier Lab 5 bring-up failures; the post-merge push run `45595923463` was intentionally fail-closed, not a failed deployment attempt. The current successful manual run deployed the release.
+- `DEPLOY_ENABLED=false` after the successful deployment; future `main` pushes therefore fail closed until separately authorized.
+- **Source:** GitHub Actions Runs API, all pages (`334` unique run IDs), created `2026-11-03` through `2026-11-25 18:26 ICT`, latest attempt per run ID. Counts reconcile: `311 + 20 + 3 = 334`.
+
+### 5.6 Evidence-Based Action (Post-Release, ≤100 Words)
+
+Keep the Q05 `90-minute` policy on Sprint 1 `main`; preserve the separate Sprint 2/3 reconciliation gate because `booking_guard_s2()` still has the prior `60-minute` rule. Keep `DEPLOY_ENABLED=false` after the successful deployment. Before final LEB2 submission, complete a controlled authenticated live Q05 boundary check (`90:00` accepted; `89:59` rejected without a persisted Booking), refresh the final PDF with both students' private IDs, upload it to the correct CPE334 LEB2 assignment, and record the actual receipt. Do not treat the read-only readiness smoke as Q05 boundary proof.
