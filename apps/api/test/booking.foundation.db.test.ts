@@ -4,6 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 
 const owner = new Pool({ connectionString: process.env.DATABASE_URL!, max: 8 });
+const fixtureDb = process.env.S2_FIXTURE_DATABASE_URL
+  ? new Pool({ connectionString: process.env.S2_FIXTURE_DATABASE_URL }) : null;
+const candidate = process.env.S2_REGRESSION_SCHEMA === 'candidate';
 const runtimeUrl = process.env.DATABASE_URL_APP;
 const probeUrl = process.env.DATABASE_URL_BOOKING_PROBE;
 const runtime = runtimeUrl ? new Pool({ connectionString: runtimeUrl, max: 2 }) : null;
@@ -30,6 +33,15 @@ async function fixture(start = future()) : Promise<Fixture> {
   return { customerId, tutorId, slotId: r.rows[0].id, startsAt: start, endsAt };
 }
 async function insertBooking(f: Fixture, status = 'Booked', pool: Pool = owner) {
+  if (status === 'Cancelled' && candidate) {
+    // Synthetic historical fixture only: truthful actor/time is explicit in the fixture.
+    const at = new Date();
+    if (!fixtureDb) throw new Error('Candidate requires a separate fixture login');
+    return fixtureDb.query<{ id: string }>(
+      'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status","cancellationActor","cancelledAt","updatedAt") VALUES($1,$2,$3,$4,$5,$6,$7,$7) RETURNING "id"',
+      [f.customerId, f.slotId, f.startsAt, f.endsAt, status, 'Customer', at],
+    );
+  }
   return pool.query<{ id: string }>(
     'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,$5) RETURNING "id"',
     [f.customerId, f.slotId, f.startsAt, f.endsAt, status],
@@ -60,7 +72,7 @@ beforeAll(async () => {
   console.info('BDF_BTREE_GIST_VERSION', extension.rows[0].extversion);
 });
 afterAll(async () => {
-  await Promise.all([owner.end(), runtime?.end(), probe?.end()]);
+  await Promise.all([owner.end(), runtime?.end(), probe?.end(), fixtureDb?.end()]);
 });
 
 describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
@@ -82,7 +94,9 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     const triggers = await owner.query<{ tgname: string }>(
       `SELECT tgname FROM pg_trigger WHERE tgrelid='"Booking"'::regclass AND NOT tgisinternal ORDER BY tgname`,
     );
-    expect(triggers.rows.map(x => x.tgname)).toEqual(['booking_s1_row_guard','booking_s1_truncate_guard']);
+    expect(triggers.rows.map(x => x.tgname)).toEqual(candidate
+      ? ['booking_s2_row_guard','booking_s2_truncate_guard','booking_s2_tutor_cancel_commit_guard']
+      : ['booking_s1_row_guard','booking_s1_truncate_guard']);
   });
 
   it('BDF-03 preserves existing Auth and Slot schema objects after migration', async () => {
@@ -94,9 +108,9 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     const slotTriggers = await owner.query<{ tgname: string }>(
       `SELECT tgname FROM pg_trigger WHERE tgrelid='"Slot"'::regclass AND NOT tgisinternal`,
     );
-    expect(slotTriggers.rows.map(x => x.tgname).sort()).toEqual([
-      'slot_s1_insert_guard','slot_s1_truncate_guard','slot_s1_update_delete_guard',
-    ]);
+    expect(slotTriggers.rows.map(x => x.tgname).sort()).toEqual(candidate
+      ? ['s2_init_slot_guard','slot_s2_row_guard','slot_s2_truncate_guard']
+      : ['slot_s1_insert_guard','slot_s1_truncate_guard','slot_s1_update_delete_guard']);
   });
 
   it('BDF-04 persists Booked and Cancelled as distinct stored statuses', async () => {
@@ -254,9 +268,9 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     await expect(owner.query('UPDATE "User" SET "id"=$2 WHERE "id"=$1',[f.customerId,randomUUID()]))
       .rejects.toMatchObject({ code: expect.stringMatching(/^(23001|23503)$/), constraint: 'booking_customer_fk' });
     await expect(owner.query('DELETE FROM "Slot" WHERE "id"=$1',[f.slotId]))
-      .rejects.toMatchObject({ code:'23514', constraint:'slot_s1_immutable' });
+      .rejects.toMatchObject(candidate ? {code:'0A000',constraint:'slot_s2_delete_forbidden'} : {code:'23514',constraint:'slot_s1_immutable'});
     await expect(owner.query('UPDATE "Slot" SET "startsAt"="startsAt"+interval \'1 minute\' WHERE "id"=$1',[f.slotId]))
-      .rejects.toMatchObject({ code:'23514', constraint:'slot_s1_immutable' });
+      .rejects.toMatchObject({ code:'23514', constraint:candidate ? 'slot_s2_immutable' : 'slot_s1_immutable' });
   });
 
   it('BDF-17 derives occupied Slot and Customer overlap from committed Booking rows', async () => {
@@ -299,13 +313,17 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
 
   it('BDF-20 rejects non-Offered Booked INSERT and every UPDATE/DELETE with 0A000', async () => {
     const f = await fixture();
-    await owner.query('ALTER TABLE "Slot" DISABLE TRIGGER slot_s1_insert_guard');
-    try {
-      await owner.query(
-        'INSERT INTO "Slot"("id","tutorId","startsAt","endsAt","lifecycle","withdrawnAt") VALUES($1,$2,$3,$4,\'Withdrawn\',now())',
-        [randomUUID(),f.tutorId,f.startsAt,f.endsAt],
-      );
-    } finally { await owner.query('ALTER TABLE "Slot" ENABLE TRIGGER slot_s1_insert_guard'); }
+    if (candidate) {
+      await owner.query(`UPDATE "Slot" SET "lifecycle"='Withdrawn', "withdrawnAt"=clock_timestamp() WHERE "id"=$1`, [f.slotId]);
+    } else {
+      await owner.query('ALTER TABLE "Slot" DISABLE TRIGGER slot_s1_insert_guard');
+      try {
+        await owner.query(
+          'INSERT INTO "Slot"("id","tutorId","startsAt","endsAt","lifecycle","withdrawnAt") VALUES($1,$2,$3,$4,\'Withdrawn\',now())',
+          [randomUUID(),f.tutorId,f.startsAt,f.endsAt],
+        );
+      } finally { await owner.query('ALTER TABLE "Slot" ENABLE TRIGGER slot_s1_insert_guard'); }
+    }
     const withdrawn = await owner.query<{ id: string }>(
       'SELECT "id" FROM "Slot" WHERE "tutorId"=$1 AND "lifecycle"=\'Withdrawn\' AND "startsAt"=$2',[f.tutorId,f.startsAt],
     );
@@ -329,7 +347,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       ['DELETE FROM "Booking" WHERE "id"=$1',[booked.rows[0].id]],
     ];
     for (const [sql,params] of mutations) {
-      await expect(probe!.query(sql,params)).rejects.toMatchObject({ code:'0A000' });
+      await expect(probe!.query(sql,params)).rejects.toMatchObject({ code:candidate && sql.startsWith('UPDATE') ? '23514' : '0A000' });
     }
   });
 
@@ -415,7 +433,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       await expect(client.query(
         'UPDATE "Slot" SET "id"="id" WHERE "id"=$1',
         [f.slotId],
-      )).rejects.toMatchObject({ code:'23514', constraint:'slot_s1_immutable' });
+      )).rejects.toMatchObject({ code:'23514', constraint:candidate ? 'slot_s2_immutable' : 'slot_s1_immutable' });
     } finally {
       await client.query('ROLLBACK').catch(() => {});
       client.release();

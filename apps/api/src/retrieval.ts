@@ -1,19 +1,26 @@
 import type { Pool } from 'pg';
 import { BookingError, isValidUuid } from './bookings.js';
 
-export type CustomerBookingListItemDto = {
+type CustomerBookingBaseDto = {
   id: string;
   slotId: string;
   tutorId: string;
   tutorRef: string;
   startsAt: string;
   endsAt: string;
-  status: 'Booked';
-  displayStatus: 'Booked' | 'Past';
+  status: 'Booked' | 'Cancelled';
+  displayStatus: 'Booked' | 'Past' | 'Cancelled';
+  cancellationActor: 'Customer' | 'Tutor' | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
   createdAt: string;
 };
 
-export type CustomerBookingDetailDto = CustomerBookingListItemDto & {
+export type CustomerBookingListItemDto = CustomerBookingBaseDto & {
+  hasRescheduled: boolean;
+};
+
+export type CustomerBookingDetailDto = CustomerBookingBaseDto & {
   updatedAt: string;
 };
 
@@ -45,10 +52,17 @@ type CustomerBookingRow = {
   tutorId: string;
   startsAt: string;
   endsAt: string;
-  status: string;
+  status: CustomerBookingListItemDto['status'];
   createdAt: string;
-  displayStatus: 'Booked' | 'Past';
+  displayStatus: CustomerBookingListItemDto['displayStatus'];
+  cancellationActor: 'Customer' | 'Tutor' | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
   evaluatedAt: string;
+};
+
+type CustomerBookingListRow = CustomerBookingRow & {
+  hasRescheduled: boolean;
 };
 
 type CustomerBookingDetailRow = CustomerBookingRow & {
@@ -81,7 +95,7 @@ export async function listCustomerBookings(
   customerId: string,
   evalDate?: Date,
 ): Promise<ListCustomerBookingsResult> {
-  const res = await pool.query<CustomerBookingRow>(
+  const res = await pool.query<CustomerBookingListRow>(
     `WITH eval_snapshot AS (
        SELECT COALESCE($2::timestamptz, statement_timestamp()) AS evaluated_at
      )
@@ -91,9 +105,13 @@ export async function listCustomerBookings(
        s."tutorId",
        to_char(b."startsAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt",
        to_char(b."endsAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
-       b."status",
+       b."status", b."cancellationActor",
+       to_char(b."cancelledAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "cancelledAt",
+       CASE WHEN b."cancellationActor" = 'Tutor' THEN b."tutorCancellationReason" END AS "cancellationReason",
        to_char(b."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
+       EXISTS (SELECT 1 FROM "RescheduleHistory" h WHERE h."bookingId" = b."id") AS "hasRescheduled",
        CASE
+         WHEN b."status" = 'Cancelled' THEN 'Cancelled'
          WHEN b."endsAt" <= s_clock.evaluated_at THEN 'Past'
          ELSE 'Booked'
        END AS "displayStatus",
@@ -115,8 +133,12 @@ export async function listCustomerBookings(
     tutorRef: 'TUTOR-' + row.tutorId.slice(0, 8),
     startsAt: row.startsAt,
     endsAt: row.endsAt,
-    status: 'Booked',
+    status: row.status,
+    cancellationActor: row.cancellationActor,
+    cancelledAt: row.cancelledAt,
+    cancellationReason: row.cancellationReason,
     displayStatus: row.displayStatus,
+    hasRescheduled: row.hasRescheduled,
     createdAt: row.createdAt,
   }));
 
@@ -124,7 +146,7 @@ export async function listCustomerBookings(
 }
 
 export async function getCustomerBookingDetail(
-  pool: Pool,
+  pool: Pick<Pool, 'query'>,
   customerId: string,
   bookingId: string,
   evalDate?: Date,
@@ -143,10 +165,13 @@ export async function getCustomerBookingDetail(
        s."tutorId",
        to_char(b."startsAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startsAt",
        to_char(b."endsAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endsAt",
-       b."status",
+       b."status", b."cancellationActor",
+       to_char(b."cancelledAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "cancelledAt",
+       CASE WHEN b."cancellationActor" = 'Tutor' THEN b."tutorCancellationReason" END AS "cancellationReason",
        to_char(b."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
        to_char(b."updatedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "updatedAt",
        CASE
+         WHEN b."status" = 'Cancelled' THEN 'Cancelled'
          WHEN b."endsAt" <= s_clock.evaluated_at THEN 'Past'
          ELSE 'Booked'
        END AS "displayStatus",
@@ -170,7 +195,10 @@ export async function getCustomerBookingDetail(
     tutorRef: 'TUTOR-' + row.tutorId.slice(0, 8),
     startsAt: row.startsAt,
     endsAt: row.endsAt,
-    status: 'Booked',
+    status: row.status,
+    cancellationActor: row.cancellationActor,
+    cancelledAt: row.cancelledAt,
+    cancellationReason: row.cancellationReason,
     displayStatus: row.displayStatus,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

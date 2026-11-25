@@ -699,3 +699,43 @@ main.dashboard-root {
     padding: 18px 16px;
   }
 }
+
+.tutor-cancel-dialog {
+  width: min(32rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  margin: auto;
+  overflow: auto;
+  border: 1px solid #d5dee9;
+  border-radius: 1rem;
+  background: #fff;
+  color: #162640;
+  padding: 1.25rem;
+}
+.tutor-cancel-dialog::backdrop { background: rgb(15 23 42 / 65%); }
+.tutor-cancel-dialog h2 { margin-top: 0; }
+.tutor-cancel-dialog label { display: block; font-weight: 600; }
+.tutor-cancel-dialog textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: .4rem 0;
+  border: 1px solid #8293a9;
+  border-radius: .5rem;
+  padding: .6rem;
+  font: inherit;
+}
+.tutor-cancel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; }
+.tutor-cancel-confirm {
+  min-height: 44px;
+  border: 1px solid #a22331;
+  border-radius: .55rem;
+  background: #a22331;
+  color: #fff;
+  padding: .5rem .8rem;
+  font: inherit;
+  font-weight: 600;
+}
+.tutor-cancel-confirm:disabled { opacity: .6; }
+.tutor-cancel-dialog :focus-visible { outline: 2px solid #255ac9; outline-offset: 2px; }
+.tutor-cancel-message, .tutor-cancel-notice { margin: .6rem 0; }
+.tutor-cancel-message:empty, .tutor-cancel-notice:empty { margin: 0; }

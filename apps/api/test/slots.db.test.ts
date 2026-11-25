@@ -68,7 +68,7 @@ describe('F-S1-02 real PostgreSQL Tutor Slots HTTP and persistence', () => {
     expect(db.rows[0].endsAt.getTime() - db.rows[0].startsAt.getTime()).toBe(3_600_000);
     const list = await ownList();
     expect(list.status).toBe(200);
-    expect(list.body.data).toContainEqual(created.body.data);
+    expect(list.body.data).toContainEqual({...created.body.data,withdrawnAt:null});
   });
 
   it('SLOT-03/04/05 rejects overlapping same-Tutor offers, allows adjacency and different Tutors', async () => {

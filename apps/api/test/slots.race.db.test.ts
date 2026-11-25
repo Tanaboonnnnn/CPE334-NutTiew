@@ -9,6 +9,7 @@ import { createApp } from '../src/app.js';
 const url = process.env.DATABASE_URL_APP ?? process.env.DATABASE_URL!;
 // Disposable-migration owner tests native triggers; production API pools use
 // the separate, least-privileged runtime role when DATABASE_URL_APP is set.
+const candidate = process.env.S2_REGRESSION_SCHEMA === 'candidate';
 const owner = new Pool({ connectionString: process.env.DATABASE_URL! });
 const appPoolA = new Pool({ connectionString: url, max: 1 });
 const appPoolB = new Pool({ connectionString: url, max: 1 });
@@ -149,7 +150,7 @@ describe('F-S1-02 SLOT-10/11/16/17 — real SQL and deterministic Race A', () =>
       [id, invalidDurationStart, new Date(invalidDurationStart.getTime() + 59 * 60_000)], '23514');
     const withdrawnStart = fresh();
     await attempt('INSERT INTO "Slot"("tutorId","startsAt","endsAt","lifecycle","withdrawnAt") VALUES($1,$2,$3,$4,now())',
-      [id, withdrawnStart, new Date(withdrawnStart.getTime() + 3_600_000), 'Withdrawn'], '23514', 'slot_s1_insert_lifecycle');
+      [id, withdrawnStart, new Date(withdrawnStart.getTime() + 3_600_000), 'Withdrawn'], '23514', candidate ? 'slot_s2_insert_lifecycle' : 'slot_s1_insert_lifecycle');
     for (const sql of [
       'UPDATE "Slot" SET "id"=gen_random_uuid() WHERE "id"=$1',
       'UPDATE "Slot" SET "tutorId"=$2 WHERE "id"=$1',
@@ -160,7 +161,9 @@ describe('F-S1-02 SLOT-10/11/16/17 — real SQL and deterministic Race A', () =>
       'UPDATE "Slot" SET "id"="id" WHERE "id"=$1',
       'DELETE FROM "Slot" WHERE "id"=$1',
     ]) {
-      await attempt(sql, sql.includes('$2') ? [slotId, sql.includes('tutorId') ? randomUUID() : 'Withdrawn'] : [slotId], '23514', 'slot_s1_immutable');
+      const s2Delete = candidate && sql.startsWith('DELETE');
+      await attempt(sql, sql.includes('$2') ? [slotId, sql.includes('tutorId') ? randomUUID() : 'Withdrawn'] : [slotId],
+        s2Delete ? '0A000' : '23514', s2Delete ? 'slot_s2_delete_forbidden' : candidate ? 'slot_s2_immutable' : 'slot_s1_immutable');
     }
     // Booking's composite FK blocks parent TRUNCATE before Slot triggers.
     await attempt('TRUNCATE "Slot"', [], '0A000');
@@ -214,7 +217,7 @@ describe('F-S1-02 SLOT-10/11/16/17 — real SQL and deterministic Race A', () =>
       expect(rights.rows[0].canUpdate).toBe(false);
       expect(rights.rows[0].canDelete).toBe(false);
       expect(rights.rows[0].canTruncate).toBe(false);
-      await expect(runtime.query('ALTER TABLE "Slot" DISABLE TRIGGER slot_s1_update_delete_guard'))
+      await expect(runtime.query('ALTER TABLE "Slot" DISABLE TRIGGER ' + (candidate ? 'slot_s2_row_guard' : 'slot_s1_update_delete_guard')))
         .rejects.toMatchObject({ code: '42501' });
       console.info('SLOT_RUNTIME_LEAST_PRIVILEGE', JSON.stringify({ role: rights.rows[0].username, canAlterSlot: false }));
     } finally {

@@ -1,6 +1,6 @@
-# Requirement Traceability — Deliverable 1 Part B
+# Requirement Traceability — Whole-Product Baseline (D1 Part B, updated for Sprint 2 integration)
 
-DRAFT. Source: [SRS](srs.md), [features](features.md), [Sprint 1 requirements](requirements.md). All validation is PLANNED, NOT EXECUTED.
+Source: [SRS](srs.md), [features](features.md), [Sprint 1 requirements](requirements.md). The FR/BR/NFR and Sprint 1 AC/VC tables below preserve the original Deliverable 1 **planned crosswalk** (not an execution log); see the **Sprint 2 integration traceability** section at the bottom of this file and [Sprint 2 integration & release evidence](sprints/sprint2-integration-release-evidence.md) for executed Sprint 2 verification results on `sprint2` (`f0cf44a`).
 
 | Product requirement | Complete SRS intent (linked source) | Accountable feature / responsibility | Target sprint | Planned validation |
 |---|---|---|---|---|
@@ -229,10 +229,27 @@ All 35 AC and all 39 VC/TEST identifiers below are **planned evidence anchors, n
 
 Changes to future-sprint validation or policy proposals require the SRS §13 approval gates. There is no claim that any of the above tests has been run.
 
+## Sprint 2 integration traceability (`sprint2` @ `f0cf44a`)
+
+> **Scope & honesty boundary:** All Sprint 2 contracts (`#126`), shared migration (`#128`), `OD-014` policy (`#131`), and feature implementations (`F-S2-01..05`, PRs `#129`, `#130`, `#132`, `#133`, `#134`) are integrated on `sprint2` (`f0cf44aa1e8f679ae515df2a6ec888535d600c68`) with full hosted GitHub Actions CI **PASS** ([Run 45012307653](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45012307653)). Separate human-reviewed `sprint2 -> main` release and Lab 5 GCP deployment remain **PENDING**; Sprint 3 (`F-S3-01`) is **NOT STARTED**. See [Sprint 2 integration & release evidence](sprints/sprint2-integration-release-evidence.md) for the complete ledger.
+
+| Feature | Linked FR / BR / NFR | Feature AC | Actual VAL & STS / E2E tests executed | Observed result (`sprint2` `f0cf44a`) | Accepted PR / merge SHA |
+|---|---|---|---|---|---|
+| **F-S2-01** | `FR-020/021`; `BR-007/008/030/033/034`; `NFR-001/003/005/006/007/015` | `AC-S2-01-01..10` | `VAL-015/016`; `CAN-01..14` (`apps/api/test/cancellation.db.test.ts`); `e2e/cancellation.spec.ts` | **PASS** ([Run 45012307653](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45012307653)) | PR [#129](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/129) (`26ae6ad`) |
+| **F-S2-02** | `FR-022..027`; `BR-009..016/033/034`; `NFR-001/003/005/006/007/008/015` | `AC-S2-02-01..10` | `VAL-017..020/030`; `RSC-01..16` + `RSC-options` (`apps/api/test/reschedule.db.test.ts`); `e2e/reschedule.spec.ts` | **PASS** ([Run 45012307653](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45012307653)) | PR [#130](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/130) (`31e5740`) |
+| **F-S2-03** | `FR-028..030`; `BR-017..020/030/033/034`; `NFR-001/003/005/006/007/015` | `AC-S2-03-01..10` | `VAL-021..023/036`; `TCAN-01..14` (`apps/api/test/cancellation.db.test.ts`, `apps/api/test/tutor-cancellation-reason.test.ts`); `e2e/tutor-cancellation.spec.ts` | **PASS** ([Run 45012307653](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45012307653)) | PRs [#131](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/131) (`458ba33`), [#132](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/132) (`ee796d7`) |
+| **F-S2-04** | `FR-031/032`; `BR-021..025/033`; `NFR-001/003/007/014/015` | `AC-S2-04-01..09` | `VAL-023/024/036`; `NTF-01..12` (`apps/api/test/notifications.db.test.ts`, `apps/api/test/notifications-error.test.ts`); `e2e/notifications.spec.ts` | **PASS** ([Run 45012307653](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45012307653)) | PR [#133](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/133) (`02f81ed`) |
+| **F-S2-05** | `FR-033/034`; `BR-026/027/032/033/034`; `NFR-001/003/004/005/006/007/015` | `AC-S2-05-01..09` | `VAL-025..027`; `WDR-01..14` (`apps/api/test/withdrawal.db.test.ts`, `apps/api/test/slots.db.test.ts`); `e2e/withdrawal.spec.ts` | **PASS** ([Run 45012307653](https://github.com/Tanaboonnnnn/CPE334-NutTiew/actions/runs/45012307653)) | PR [#134](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/134) (`f0cf44a`) |
+
+### Approved Sprint 2 change register
+
+- **OD-014 (accepted in PR [#131](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/131)):** Tutor cancellation reason policy (JSON string, server `trim()`, >= 1 Unicode letter `\p{L}`, max 500 Unicode scalar values, no `U+0000` or unpaired surrogates, no normalization).
+- **CHG-S2-01 (accepted in PR [#130](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/130)):** Added owner-scoped `GET /api/v1/customer/bookings/:id/reschedule/options` excluding the moving Booking from overlap checks while keeping Sprint 1 `GET /api/v1/customer/availability` unchanged.
+- **CHG-S2-02 (accepted in PR [#134](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/134)):** Extended `GET /api/v1/tutor/slots` `SlotDto` with `lifecycle: 'Offered' | 'Withdrawn'`, `withdrawnAt`, and `meta.evaluatedAt` while keeping Sprint 1 `POST /api/v1/tutor/slots` response unchanged.
+- **Open decisions preserved:** `OD-008` (retention/deletion governance), `OD-013` (general idempotency/replay protocol), and `OD-011/012` (instructor final Master/Theme verification) remain open.
+
 ## Audit and approval gates
 
 FR: 36/36 assigned; BR: 35/35 assigned; NFR: 16/16 assigned; Q: 32/32 assigned. No silent orphans. SYS-01 owns cross-cutting requirements while relevant features must still satisfy them.
 
-S2/S3 assignments are proposals pending team approval in Issue #12. OD-001..015 remain open or conditional per SRS §13; OD-011/012 instructor Master/Theme unverified, so final sign-off is blocked. Proposed NFR-009/010 are not mandatory thresholds until approved.
-
-Issue #10 PR into sprint1 requires @Tanaboonnnnn peer review; this document neither proves test passes nor grants stakeholder approval.
+Sprint 1 (`F-S1-01..05`) is released on `main` (`42bb762`); Sprint 2 (`F-S2-01..05`) is integrated on `sprint2` (`f0cf44a`) pending the separate human-reviewed `sprint2 -> main` release PR and Lab 5 GCP deployment. Sprint 3 (`F-S3-01`) remains proposed/unstarted. `OD-014` is accepted (PR #131); `OD-008`, `OD-011/012`, `OD-013`, and `OD-015` remain open per SRS §13. Proposed NFR-009/010 are not mandatory thresholds until approved.
