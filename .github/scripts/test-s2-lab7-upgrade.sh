@@ -121,9 +121,9 @@ BEGIN
   WITH valid_start AS (SELECT clock_timestamp()+interval '120 minutes' AS starts_at),
        late_start AS (SELECT clock_timestamp()+interval '89 minutes' AS starts_at)
   INSERT INTO public."Slot" ("id","tutorId","startsAt","endsAt")
-  SELECT valid_slot,'10000000-0000-4000-8000-000000000007',starts_at,starts_at+interval '60 minutes' FROM valid_start
+  SELECT valid_slot,'10000000-0000-4000-8000-000000000007'::uuid,starts_at,starts_at+interval '60 minutes' FROM valid_start
   UNION ALL
-  SELECT late_slot,'10000000-0000-4000-8000-000000000011',starts_at,starts_at+interval '60 minutes' FROM late_start;
+  SELECT late_slot,'10000000-0000-4000-8000-000000000011'::uuid,starts_at,starts_at+interval '60 minutes' FROM late_start;
 
   INSERT INTO public."Booking" ("id","customerId","currentSlotId","startsAt","endsAt")
   SELECT '10000000-0000-4000-8000-000000000009','10000000-0000-4000-8000-000000000006',"id","startsAt","endsAt"
