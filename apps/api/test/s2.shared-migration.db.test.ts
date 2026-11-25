@@ -65,27 +65,42 @@ async function transaction(work: (client: PoolClient) => Promise<void>, finish: 
   }
 }
 
-describe('shared S2 migration draft on isolated PostgreSQL 18', () => {
+describe('Sprint 2 shared migration and Booking/Slot guards on isolated PostgreSQL 18', () => {
   beforeAll(async () => {
     const url = new URL(process.env.S2_REVIEW_DATABASE_URL ?? 'invalid:');
     const instance = process.env.S2_REVIEW_INSTANCE;
     const dbName = process.env.S2_REVIEW_DB_NAME ?? '';
-    if (url.protocol !== 'postgresql:' || url.hostname !== '127.0.0.1' || url.port !== '15439' ||
-        !/^nuttiew_s2_pair_final(?:_[a-z0-9]+)?$/.test(dbName) || url.pathname !== '/' + dbName || url.username !== 'nuttiew_ci_runtime' || url.search || !instance) {
+    const githubCi = process.env.CI === 'true' && process.env.GITHUB_ACTIONS === 'true';
+    const expectedPort = githubCi ? '5432' : '15439';
+    const expectedDb = githubCi ? dbName === 'nuttiew_ci' : /^nuttiew_s2_pair_final(?:_[a-z0-9]+)?$/.test(dbName);
+    const expectedProbeRole = githubCi ? 'nuttiew_ci_booking_probe' : 's2_review_probe';
+    if (url.protocol !== 'postgresql:' || url.hostname !== '127.0.0.1' || url.port !== expectedPort ||
+        !expectedDb || url.pathname !== '/' + dbName || url.username !== 'nuttiew_ci_runtime' || url.search || !instance ||
+        (githubCi && process.env.S2_REGRESSION_SCHEMA !== 'candidate')) {
       throw new Error('Expected the dedicated loopback S2 review database and runtime role');
     }
     const result = await db.query("SELECT current_database() AS db, current_user AS role, session_user AS login, inet_server_port() AS port, current_setting('server_version_num')::int / 10000 AS major, current_setting('nuttiew.review_instance', true) AS instance");
     expect(result.rows[0]).toEqual({ db: dbName, role: 'nuttiew_ci_runtime', login: 'nuttiew_ci_runtime', port: 5432, major: 18, instance });
     customer = (await db.query('INSERT INTO "User"("email","passwordHash","role") VALUES($1,$2,$3) RETURNING "id"', [marker + '-c@example.test', 'fixture', 'Customer'])).rows[0].id;
     const probeUrl = new URL(process.env.S2_PROBE_DATABASE_URL ?? 'invalid:');
-    expect([probeUrl.protocol,probeUrl.hostname,probeUrl.port,probeUrl.pathname,probeUrl.username,probeUrl.search]).toEqual(['postgresql:','127.0.0.1','15439',url.pathname,'s2_review_probe','']);
-    expect((await admin.query("SELECT current_database() db, current_user AS role, current_setting('nuttiew.review_instance', true) AS instance")).rows[0]).toEqual({db:dbName,role:'s2_review_probe',instance});
+    expect([probeUrl.protocol,probeUrl.hostname,probeUrl.port,probeUrl.pathname,probeUrl.username,probeUrl.search]).toEqual(['postgresql:','127.0.0.1',expectedPort,url.pathname,expectedProbeRole,'']);
+    expect((await admin.query("SELECT current_database() db, current_user AS role, current_setting('nuttiew.review_instance', true) AS instance")).rows[0]).toEqual({db:dbName,role:expectedProbeRole,instance});
   }, 120_000);
   afterAll(async () => { await Promise.all([db.end(),admin.end()]); }, 60_000);
 
-  it('preserves S1 Booked INSERT and authoritative Q05 cutoff', async () => {
-    const valid = await slot(); await expect(booking(valid)).resolves.toBeTruthy();
-    const tooLate = await slot(45); await rejected(() => booking(tooLate), 'P0B02');
+  it('enforces inherited Lab 7 Q05 90-minute cutoff through the S2 Booking guard', async () => {
+    const exactArithmetic = await db.query<{ exactPass: boolean; belowFails: boolean }>(
+      `SELECT ($1::timestamptz - $2::timestamptz >= interval '90 minutes') AS "exactPass",
+              ($3::timestamptz - $2::timestamptz >= interval '90 minutes') AS "belowFails"`,
+      ['2030-01-01T01:30:00Z', new Date('2030-01-01T00:00:00.000Z'), '2030-01-01T01:29:59.999999Z'],
+    );
+    expect(exactArithmetic.rows[0]).toEqual({ exactPass: true, belowFails: false });
+
+    const valid = await slot(120);
+    await expect(booking(valid)).resolves.toBeTruthy();
+    // 89 minutes would still pass the old 60-minute S2 guard; it must now fail Q05.
+    const tooLate = await slot(89);
+    await rejected(() => booking(tooLate), 'P0B02');
   });
 
   it('cancels a Customer Booking without changing Slot and rejects Cancelled-to-Booked', async () => {

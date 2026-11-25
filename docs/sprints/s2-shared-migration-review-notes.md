@@ -61,7 +61,7 @@ The prior #115 proposal table was incorrect. This mapping is derived from `docs/
 | AC-S2-01-01 | Successful owner cancel at >=30m; committed Cancelled/Customer/time; Slot still Offered/unoccupied | CAN-01; CAN-05 covers Slot projection/reopen behavior |
 | AC-S2-01-02 | Exact 30:00 succeeds; 29:59.999 returns 422 without change | CAN-02 |
 | AC-S2-01-03 | Foreign/unknown 404; already cancelled 409; anonymous 401; wrong role 403 | CAN-03 (foreign/unknown/auth); CAN-04 (repeat/lost response) |
-| AC-S2-01-04 | Reopened slot remains subject to independent Q05 <60m rejection | CAN-06; CAN-05 covers availability read when >=60m |
+| AC-S2-01-04 | Reopened slot remains subject to independent Q05 <90m rejection | CAN-06; CAN-05 covers availability read when >=90m |
 | AC-S2-01-05 | Cancel vs new Booking race in both orders, safe persisted outcomes | CAN-07, CAN-08 |
 | AC-S2-01-06 | DB failure or Session revocation leaves state unchanged | CAN-09 and CAN-10 |
 | AC-S2-01-07 | Post-lock T_elig cutoff after a lock wait crossing 30m | CAN-11 |
@@ -69,6 +69,6 @@ The prior #115 proposal table was incorrect. This mapping is derived from `docs/
 | AC-S2-01-09 | Direct SQL cannot repeat, reverse cancellation or alter identity/interval | CAN-13 |
 | separate durability NFR | API restart and persistent reread | CAN-14 |
 
-CAN-08 is concurrent double-cancel uniqueness/state evidence; CAN-05 is the availability/Slot-no-write case; CAN-06 is the separate 60-minute cutoff. These identifiers are intentionally not reassigned.
+CAN-08 is concurrent double-cancel uniqueness/state evidence; CAN-05 is the availability/Slot-no-write case; CAN-06 is the separate 90-minute Q05 cutoff. These identifiers are intentionally not reassigned. The 60-minute Q10/Q11 reschedule and Q18 Tutor-cancel cutoffs remain unchanged.
 
 The AC/CAN traces are the feature verification plan, not a claim that the HTTP/UI cases have passed. OD-008, OD-013, OD-014 and OD-015 remain open. No staging, commit, push, GitHub/Project mutation, production DB operation or deployment.
