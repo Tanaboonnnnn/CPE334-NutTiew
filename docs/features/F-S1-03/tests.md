@@ -1,6 +1,6 @@
 # F-S1-03 — Customer Availability Software Test Specification (Part E)
 
-> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](../../labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](../../labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](../../labs/lab-07/cr-l7-01.md).
 
 > **UX delta proposed 2026-11-10 (Issue #44, pending peer review):** preserve `AVA-01..19` below (whose initial `#15` executions are recorded in [verification ledger](verification-ledger.md) and which remain mandatory regression checks alongside Option A) and add the planned `UX-CAL-01..10` calendar test cases from [UX decision 2026-11-10](ui-decision-2026-11-10.md) and [amended UI spec](ui-spec.md). All `UX-CAL-01..10` checks and human WCAG 2.2 AA sign-off are **PLANNED / NOT RUN** in this docs-only Part E PR. Do **not** renumber existing `AC-S1-01..35` or `VC/TEST-S1-01..39`.
 

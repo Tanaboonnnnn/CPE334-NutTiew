@@ -1,6 +1,6 @@
 # NutTiew — Whole-product System Design Specification (SDS)
 
-> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](labs/lab-07/cr-l7-01.md).
 
 ## 0. Document control and design authority
 
@@ -199,7 +199,7 @@ The preceding constraints directly enforce **same-Tutor offered overlap** (Race 
 - **Storage/transport:** TIMESTAMPTZ instants in PostgreSQL and RFC 3339 ISO-8601 timestamps with an explicit offset on wire, normalized to UTC Z in JSON responses. Reject timezone-free date-time strings in mutation input. Render with an explicit Asia/Bangkok formatter; browser timezone or clock cannot affect eligibility.
 - **Intervals:** half-open [startsAt, endsAt); overlap exactly when a.start < b.end AND b.start < a.end. Exact adjacency is permitted for one Tutor's offers and a Customer's active Bookings (Q06/Q28).
 - **Tutor creation:** future 60-minute Slot; do **not** silently apply the **new Booking** 90-minute cutoff to Slot creation; proposed hours, horizon and minute grid stay OD-001..003.
-- **New Booking (Q05):** S - T_elig >= **60 min**, equality passes. T_elig is a fresh DB-authoritative instant obtained **inside the transaction after relevant lock/contention waits and immediately before the final guarded write**. It is **not** HTTP arrival time, transaction start time, client time or commit time.
+- **New Booking (Q05):** S - T_elig >= **90 min**, equality passes. T_elig is a fresh DB-authoritative instant obtained **inside the transaction after relevant lock/contention waits and immediately before the final guarded write**. It is **not** HTTP arrival time, transaction start time, client time or commit time.
 - **Customer cancellation (Q07, S2):** start minus authoritative decision >= **30 min**, equality passes; reopen original Slot but Q05 still applies to later claims.
 - **Reschedule (Q10/Q11, S2):** both original appointment and destination start are >= **60 min** away at authoritative decision, equality passes; at most one successful reschedule (Q16).
 - **Tutor cancellation (Q18, S2):** start minus authoritative decision >= **60 min**, equality passes; requires meaningful nonblank reason and withdraws Slot.
