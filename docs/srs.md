@@ -1,6 +1,6 @@
 # Tutoring Appointment System: whole-product software requirements specification
 
-> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](labs/lab-07/cr-l7-01.md).
 
 ## 0. Document control
 
@@ -167,7 +167,7 @@ For each journey below, `S1/S2/S3` is the **proposed verification sprint**, not 
 
 ### 4.6 J-06: Customer cancels own Booking (S2)
 
-**Preconditions:** authenticated owning Customer; active Booking starts at least 30 minutes from authoritative request decision. **Flow:** cancel the Booking as `Cancelled` and reopen its original Slot as one consistent persisted change. **Alternatives/failures:** nonowner, already cancelled or less-than-30-minute attempt is rejected with unchanged records. **Postcondition:** the reopened offer may still be **unbookable** under the independent 60-minute new-Booking rule. **References:** FR-020/021, BR-007/008; VAL-015/016.
+**Preconditions:** authenticated owning Customer; active Booking starts at least 30 minutes from authoritative request decision. **Flow:** cancel the Booking as `Cancelled` and reopen its original Slot as one consistent persisted change. **Alternatives/failures:** nonowner, already cancelled or less-than-30-minute attempt is rejected with unchanged records. **Postcondition:** the reopened offer may still be **unbookable** under the independent 90-minute new-Booking rule. **References:** FR-020/021, BR-007/008; VAL-015/016.
 
 ### 4.7 J-07: Customer reschedules once (S2)
 

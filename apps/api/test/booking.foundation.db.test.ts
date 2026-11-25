@@ -639,7 +639,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     // Consequently:
     // 1. Rogue is serialized at User lock BEFORE entering GiST.
     // 2. Adapter's INSERT executes with ZERO reverse wait (pg_blocking_pids is empty).
-    // 3. Pre/post Q05 separation: Adapter samples T_elig at > 60m, delays across the 60m cutoff without
+    // 3. Pre/post Q05 separation: Adapter samples T_elig at > 90m, delays across the 90m cutoff without
     //    any index wait, and commits cleanly ("a valid 90:00 guard may still commit later").
     // 4. Rogue unblocks after Adapter commits and fails with 23P01 (CUSTOMER_OVERLAP), NEVER 40P01 (deadlock).
     // 5. Exactly 1 Booked row commits.
@@ -649,11 +649,11 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     const tutorBId = await user('Tutor');
 
     const now = Date.now();
-    // slotA starts at +60m + 700ms to test pre/post Q05 commit separation
+    // slotA starts at +90m + 700ms to test pre/post Q05 commit separation
     const slotAStartsAt = new Date(now + 90 * 60_000 + 700);
     const slotAEndsAt = new Date(slotAStartsAt.getTime() + 60 * 60_000);
 
-    // slotB overlaps slotA by +30m, well above 60m so Q05 passes on Rogue unblock
+    // slotB overlaps slotA by +30m, well above 90m so Q05 passes on Rogue unblock
     const slotBStartsAt = new Date(slotAStartsAt.getTime() + 30 * 60_000);
     const slotBEndsAt = new Date(slotBStartsAt.getTime() + 60 * 60_000);
 
@@ -707,7 +707,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       rogueBlockers = obsRogue.rows[0].blockers;
       expect(rogueBlockers).toContain(adapterPid);
 
-      // 4. Adapter executes INSERT into Booking: trigger runs, samples T_elig (> 60m), and inserts into GiST
+      // 4. Adapter executes INSERT into Booking: trigger runs, samples T_elig (> 90m), and inserts into GiST
       const insertStartMs = Date.now();
       await adapterClient.query(
         'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
@@ -726,8 +726,8 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       expect(adapterReverseBlockers.length).toBe(0);
 
       // 6. Demonstrate pre/post Q05 separation:
-      // T_elig was sampled during INSERT at > 60m remaining.
-      // Now delay 800ms across the 60m boundary so remaining notice is < 60m.
+      // T_elig was sampled during INSERT at > 90m remaining.
+      // Now delay 800ms across the 90m boundary so remaining notice is < 90m.
       await new Promise(resolve => setTimeout(resolve, 800));
       remainingNoticeAtCommitMs = slotAStartsAt.getTime() - Date.now();
       expect(remainingNoticeAtCommitMs).toBeLessThan(90 * 60_000);

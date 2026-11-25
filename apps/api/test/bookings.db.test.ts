@@ -1532,7 +1532,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const userBlockers = await waitForBlockedBy(adapterUserPid, roguePid);
       expect(userBlockers).toContain(roguePid);
 
-      // Hold the FK-induced User lock wait until DB clock crosses the 60-minute Q05 cutoff, then ROLLBACK rogueClient
+      // Hold the FK-induced User lock wait until DB clock crosses the 90-minute Q05 cutoff, then ROLLBACK rogueClient
       while (true) {
         const c = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
         if (c.rows[0].now.getTime() >= cutoff1A.getTime() + 150) break;
@@ -1587,7 +1587,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const slotBlockers = await waitForBlockedBy(adapterSlotPid, roguePid);
       expect(slotBlockers).toContain(roguePid);
 
-      // Hold the trigger/FK-induced Slot lock wait until DB clock crosses the 60-minute Q05 cutoff, then ROLLBACK rogueClient
+      // Hold the trigger/FK-induced Slot lock wait until DB clock crosses the 90-minute Q05 cutoff, then ROLLBACK rogueClient
       while (true) {
         const c = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
         if (c.rows[0].now.getTime() >= cutoff1B.getTime() + 150) break;
@@ -1694,7 +1694,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       // Part 1C2 (Remediated Canonical Schema — Reviewer specific Stop Gate check: Rogue canceled/rolled back while held):
       // On the remediated schema, Rogue direct-SQL is blocked on the User row in `booking_guard_s1()` in BEFORE ROW.
       // Rogue NEVER enters the GiST index, so Adapter completes INSERT immediately with zero index wait.
-      // Adapter commits cleanly with fresh notice (> 60m remaining).
+      // Adapter commits cleanly with fresh notice (> 90m remaining).
       // Even if Rogue is held until after Q05 cutoff and canceled, Rogue never blocked Adapter in GiST,
       // proving stale-T_elig commit is structurally eliminated.
       const tempCustomerEmail1C2 = `book-c19-1c2-${marker}@example.test`;

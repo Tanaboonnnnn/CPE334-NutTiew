@@ -1,6 +1,6 @@
 # CPE334 NutTiew — Sprint 1 Requirements Specification
 
-> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](labs/lab-07/cr-l7-01.md).
 
 > **Artifact:** Sprint 1 requirements baseline (requirements-only review)
 > **Product:** Tutoring Appointment System — Theme 1: Appointment & Scheduling
@@ -716,7 +716,7 @@ This table is a guard against both missing a stakeholder policy and accidentally
 | Customer sees valid bookable offers | §§2,5,9,13 | Past/occupied/too-soon Slots shown as guaranteed bookable |
 | One Slot cannot be claimed twice | §§5–6,8–9,13 | Race only tested at UI level, invariant unprotected |
 | One Customer cannot book overlapping Tutors | §§5–6,8–9,13 | No cross-Tutor overlap enforcement on commit |
-| Cutoff exactly 60 minutes | §§3,6,9,13 | Boundary rejected or less-than-60 accepted |
+| Cutoff exactly 90 minutes (Q05) | §§3,6,9,13 | Boundary 90:00 rejected or just-below-90 accepted |
 | Customer/Tutor private reads | §§4–6,9,13–14 | Other Customer's or Tutor's restricted data exposed |
 | Past is not Completed | §§3,5–6,9,13,15 | Status silently updated by clock |
 | No invented policies | §§2.3,7,12,14–15 | Working hours, horizon, minute grid, response schema assumed without approval |

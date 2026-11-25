@@ -1,6 +1,6 @@
 # F-S1-03 — Customer Availability HTTP/API Contract (Part E)
 
-> **Lab 7 contract revision CR-L7-01 (2026-11-25):** This specifies the proposed maintenance behavior for new Customer Bookings only. It is not a claim that the application or deployed Sprint 1 release already implements 90 minutes. See the [change record and baseline evidence](../../labs/lab-07/cr-l7-01.md) and obtain teammate review before implementing.
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](../../labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](../../labs/lab-07/cr-l7-01.md).
 
 > **Part E docs-only contract; not implemented/runtime-tested.** Peer-review decisions are recorded in [Feature SDS §5](specification.md#5-peer-review-decision-record). See [UI](ui-spec.md), [Data](data-spec.md), [STS](tests.md), [Auth API](../F-S1-01/api-spec.md), [Tutor Slot API](../F-S1-02/api-spec.md).
 
