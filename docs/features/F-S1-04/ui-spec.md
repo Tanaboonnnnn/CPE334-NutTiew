@@ -1,5 +1,7 @@
 # F-S1-04 — Customer Booking Confirmation UI Specification (Part E)
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](../../labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](../../labs/lab-07/cr-l7-01.md).
+
 > **Part E UI contract only; no component, route or browser test is implemented.** This flow completes the selection hand-off from [F-S1-03 Availability](../F-S1-03/ui-spec.md); it does not turn selection into a reservation until the server commits.
 >
 > **2026-11-10 UX Follow-up Cross-Reference (Issue #44, pending peer review):** Customer availability browsing in [F-S1-03](../F-S1-03/ui-spec.md) and [UX Decision 2026-11-10](../F-S1-03/ui-decision-2026-11-10.md) is proposed to adopt Option A (Date-First Monthly Calendar). All `F-S1-04` confirmation, CSRF + post-CSRF `/auth/me` binding recheck, server `T_elig` revalidation, `201`/`200` natural-key replay, `409`/`422`/`503` handling, `UnknownBookingOutcome` replacement lockout across calendar switches, and privacy rules remain **unchanged**; `#selected-offer-summary` sits as a non-sticky inline card directly after the selected day's time list without obscuring controls or focus (`WCAG 2.2 SC 2.4.11`).
@@ -49,7 +51,7 @@ The Session binding is a non-credential response/request consistency value, not 
 | New success | 201 after COMMIT | Show “จองสำเร็จ”; display returned Booking ID and confirmed time |
 | Replay success | 200 same-pair replay | Show same Booking ID and indicate booking already exists; no new local item |
 | Conflict | 409 occupied Slot / non-Offered Slot / Customer overlap | No success; explain selected time is unavailable; refresh #15 |
-| Not eligible | 422 Q05 minimum-notice cutoff (59:59 or less) | No success; explain offer can no longer be booked; refresh |
+| Not eligible | 422 Q05 minimum-notice cutoff (89:59 or less) | No success; explain offer can no longer be booked; refresh |
 | Unknown outcome | Network loss, timeout or `503 BOOKING_OUTCOME_UNKNOWN` | Do not assert success/failure; preserve same `slotId`; offer **ส่งคำขอเดิมอีกครั้ง** |
 | Service unavailable | 503 known no-commit result | Safe error; retain selection for explicit retry |
 | Session changed | Logout, login, account switch, or Session A → Session B (including two Sessions for the same User) | Increment auth/session epoch; clear private summary, selected Slot, pending intent, CSRF token and binding; ignore any late response whose captured epoch/binding differs. Never render its Booking ID/details in the new Session. |

@@ -1,5 +1,7 @@
 # F-S1-03 — Customer Availability UI Specification (Part E)
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](../../labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](../../labs/lab-07/cr-l7-01.md).
+
 > **2026-11-10 UX-only Option A amendment (Issue #44, pending peer review):** Replace only the simultaneous full-list layout (`dateGroups.map(...)`) with **Option A — Date-First Monthly Calendar (Progressive Disclosure)** as directed in [Issue #15 comment #6763909620](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15#issuecomment-6763909620) and detailed in [UX decision 2026-11-10](ui-decision-2026-11-10.md). The historical Part E baseline below ([PR #32](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/32) / Part F [PR #37](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/37)) remains preserved for traceability; only its simultaneous chronological full-list page layout is proposed to be superseded. The read-only API contract ([API](api-spec.md)), PostgreSQL eligibility/T_view (`OD-002 = 60 days`), `OD-AV-01..08`, `F-S1-04` confirmation/security ([F-S1-04 UI](../F-S1-04/ui-spec.md)), and `F-S1-05` `การจองของฉัน` tab ([F-S1-05 UI](../F-S1-05/ui-spec.md)) remain **unchanged**.
 
 > **Review sequencing (Two-PR Gate):** This is a **docs-only Part E amendment** under Issue [#44](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/44) (separate from Deliverable 1 [#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) / PR [#43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43)). Obtain independent review from @Tanaboonnnnn and merge into `sprint1` **before** opening the Part F code-only PR.
@@ -107,7 +109,7 @@ Selecting an offer stores slotId in transient UI state only. It does not POST, r
 
 ### Display policy OD-AV-01
 
-**Confirmed: Customer-specific bookable-only.** Show only offers the API evaluated as bookable for the authenticated Customer at `meta.evaluatedAt`: current Offered Slot, not occupied by an Active `Booked` row, at least 60 minutes before start, and not overlapping that Customer's own Active Booking even if the existing Booking belongs to another Tutor. Exact adjacency is allowed. Do not render unavailable offers or disclose why another Slot was excluded.
+**Confirmed: Customer-specific bookable-only.** Show only offers the API evaluated as bookable for the authenticated Customer at `meta.evaluatedAt`: current Offered Slot, not occupied by an Active `Booked` row, at least 90 minutes before start, and not overlapping that Customer's own Active Booking even if the existing Booking belongs to another Tutor. Exact adjacency is allowed. Do not render unavailable offers or disclose why another Slot was excluded.
 
 The maximum advance horizon remains open under SRS OD-002. The UI must not invent a date cap or imply that an unlimited horizon has been approved; update the visible range only after the team records that decision.
 

@@ -335,22 +335,22 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
 
   it('BDF-21 enforces exact Q05 arithmetic and real trigger cutoff', async () => {
     const exact = await owner.query<{ allowed: boolean; tooLate: boolean }>(
-      `SELECT ($1::timestamptz - $2::timestamptz >= interval '60 minutes') AS allowed,
-              ($3::timestamptz - $2::timestamptz >= interval '60 minutes') AS "tooLate"`,
-      [new Date('2030-01-01T01:00:00Z'),new Date('2030-01-01T00:00:00Z'),new Date('2030-01-01T00:59:59Z')],
+      `SELECT ($1::timestamptz - $2::timestamptz >= interval '90 minutes') AS allowed,
+              ($3::timestamptz - $2::timestamptz >= interval '90 minutes') AS "tooLate"`,
+      ['2030-01-01T01:30:00Z',new Date('2030-01-01T00:00:00Z'),'2030-01-01T01:29:59.999999Z'],
     );
     expect(exact.rows[0].allowed).toBe(true);
     expect(exact.rows[0].tooLate).toBe(false);
-    const pass = await fixture(future(61));
+    const pass = await fixture(future(91));
     await insertBooking(pass);
-    const fail = await fixture(future(59));
+    const fail = await fixture(future(89));
     await expect(insertBooking(fail)).rejects.toMatchObject({
       code:'P0B02', constraint:'booking_q05_min_notice',
     });
   });
 
   it('BDF-22 proves DB clock crosses Q05 while waiting and records trigger T_elig', async () => {
-    const start = future(60.04);
+    const start = future(90.04);
     const f = await fixture(start);
     const holder = await owner.connect();
     try {
@@ -358,7 +358,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       await holder.query('SELECT "id" FROM "Slot" WHERE "id"=$1 FOR UPDATE',[f.slotId]);
       const holderPid = await pid(holder);
       const cutoffResult = await owner.query<{ dbNow: Date; cutoff: Date }>(
-        "SELECT clock_timestamp() AS \"dbNow\", $1::timestamptz - interval '60 minutes' AS cutoff",[f.startsAt],
+        "SELECT clock_timestamp() AS \"dbNow\", $1::timestamptz - interval '90 minutes' AS cutoff",[f.startsAt],
       );
       const cutoff = cutoffResult.rows[0].cutoff;
       expect(cutoffResult.rows[0].dbNow.getTime()).toBeLessThan(cutoff.getTime());
@@ -639,8 +639,8 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     // Consequently:
     // 1. Rogue is serialized at User lock BEFORE entering GiST.
     // 2. Adapter's INSERT executes with ZERO reverse wait (pg_blocking_pids is empty).
-    // 3. Pre/post Q05 separation: Adapter samples T_elig at > 60m, delays across the 60m cutoff without
-    //    any index wait, and commits cleanly ("a valid 60:00 guard may still commit later").
+    // 3. Pre/post Q05 separation: Adapter samples T_elig at > 90m, delays across the 90m cutoff without
+    //    any index wait, and commits cleanly ("a valid 90:00 guard may still commit later").
     // 4. Rogue unblocks after Adapter commits and fails with 23P01 (CUSTOMER_OVERLAP), NEVER 40P01 (deadlock).
     // 5. Exactly 1 Booked row commits.
     // -------------------------------------------------------------------------------------------------
@@ -649,11 +649,11 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
     const tutorBId = await user('Tutor');
 
     const now = Date.now();
-    // slotA starts at +60m + 700ms to test pre/post Q05 commit separation
-    const slotAStartsAt = new Date(now + 60 * 60_000 + 700);
+    // slotA starts at +90m + 700ms to test pre/post Q05 commit separation
+    const slotAStartsAt = new Date(now + 90 * 60_000 + 700);
     const slotAEndsAt = new Date(slotAStartsAt.getTime() + 60 * 60_000);
 
-    // slotB overlaps slotA by +30m, well above 60m so Q05 passes on Rogue unblock
+    // slotB overlaps slotA by +30m, well above 90m so Q05 passes on Rogue unblock
     const slotBStartsAt = new Date(slotAStartsAt.getTime() + 30 * 60_000);
     const slotBEndsAt = new Date(slotBStartsAt.getTime() + 60 * 60_000);
 
@@ -707,7 +707,7 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       rogueBlockers = obsRogue.rows[0].blockers;
       expect(rogueBlockers).toContain(adapterPid);
 
-      // 4. Adapter executes INSERT into Booking: trigger runs, samples T_elig (> 60m), and inserts into GiST
+      // 4. Adapter executes INSERT into Booking: trigger runs, samples T_elig (> 90m), and inserts into GiST
       const insertStartMs = Date.now();
       await adapterClient.query(
         'INSERT INTO "Booking"("customerId","currentSlotId","startsAt","endsAt","status") VALUES($1,$2,$3,$4,\'Booked\')',
@@ -726,13 +726,13 @@ describe('D1-08A / BDF-01..BDF-26 — real PostgreSQL foundation', () => {
       expect(adapterReverseBlockers.length).toBe(0);
 
       // 6. Demonstrate pre/post Q05 separation:
-      // T_elig was sampled during INSERT at > 60m remaining.
-      // Now delay 800ms across the 60m boundary so remaining notice is < 60m.
+      // T_elig was sampled during INSERT at > 90m remaining.
+      // Now delay 800ms across the 90m boundary so remaining notice is < 90m.
       await new Promise(resolve => setTimeout(resolve, 800));
       remainingNoticeAtCommitMs = slotAStartsAt.getTime() - Date.now();
-      expect(remainingNoticeAtCommitMs).toBeLessThan(60 * 60_000);
+      expect(remainingNoticeAtCommitMs).toBeLessThan(90 * 60_000);
 
-      // Adapter issues COMMIT: valid 60:00 guard may still commit later
+      // Adapter issues COMMIT: valid 90:00 guard may still commit later
       await adapterClient.query('COMMIT');
 
       // 7. Rogue now unblocks from User lock, evaluates SlotB and T_elig, attempts GiST insert,
