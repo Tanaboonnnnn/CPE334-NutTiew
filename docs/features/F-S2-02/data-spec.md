@@ -92,4 +92,4 @@ Every other UPDATE, every `Cancelled → *`, every DELETE and every TRUNCATE is 
 - **OD-013:** duplicate/uncertain reschedule protocol is open.
 - **OD-015:** previous-Tutor visibility is open; history exists but is not exposed.
 - **OD-008:** history retention is open.
-- **Migration risk:** replacing the append-only S1 guard is a shared change for F-S2-01/02/03. It must be one reviewed migration with tests proving the S1 INSERT/Q05 behaviour is unchanged. A second, conflicting trigger is not acceptable.
+- **Migration risk:** replacing the append-only S1 guard is a shared change for F-S2-01/02/03. It must be one reviewed migration with tests proving the accepted Lab 7 90-minute Q05 INSERT behaviour is preserved by the active S2 guard. Q10/Q11 remain separate 60-minute reschedule cutoffs. A second, conflicting trigger is not acceptable.

@@ -1,5 +1,7 @@
 # F-S1-03 — Customer Availability HTTP/API Contract (Part E)
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](../../labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](../../labs/lab-07/cr-l7-01.md).
+
 > **Part E docs-only contract; not implemented/runtime-tested.** Peer-review decisions are recorded in [Feature SDS §5](specification.md#5-peer-review-decision-record). See [UI](ui-spec.md), [Data](data-spec.md), [STS](tests.md), [Auth API](../F-S1-01/api-spec.md), [Tutor Slot API](../F-S1-02/api-spec.md).
 
 ## 1. Transport and authorization
@@ -74,7 +76,7 @@ OD-AV-01 is confirmed as Customer-specific bookable-only. Any later change to sh
 
 Confirmed Sprint 1 order: `startsAt ASC`, `tutorRef ASC`, `slotId ASC`. No client-selected order, filters or pagination. OD-AV-03 is a technical list constraint only; OD-002 (maximum advance horizon) remains OPEN. The absence of filters/pagination is not an approved unlimited-horizon policy or a guarantee for unlimited data volume.
 
-Confirmed OD-AV-01/04: sample one PostgreSQL `T_view` for the read. Under Customer-specific bookable-only, a row must be lifecycle Offered, have no active Booked row for its Slot ID, satisfy startsAt - T_view >= 60 minutes, and have no overlapping Active Booking owned by `principal.userId`. The owner is derived from the live Session; it is never accepted from a query parameter, header or body. For the Customer-overlap check, only `status = Booked` rows with `customerId = principal.userId` participate, using persisted Booking interval fields and the half-open predicate `booking.startsAt < slot.endsAt AND slot.startsAt < booking.endsAt`. Cancelled rows do not conflict and adjacent intervals are allowed. This predicate checks existence only and never returns Booking details. Exactly 60:00 is included; 59:59 is excluded. Never use browser time or HTTP arrival time. T_view is not #16 T_elig; #16 repeats the authoritative checks after contention waits.
+Confirmed OD-AV-01/04: sample one PostgreSQL `T_view` for the read. Under Customer-specific bookable-only, a row must be lifecycle Offered, have no active Booked row for its Slot ID, satisfy startsAt - T_view >= 90 minutes, and have no overlapping Active Booking owned by `principal.userId`. The owner is derived from the live Session; it is never accepted from a query parameter, header or body. For the Customer-overlap check, only `status = Booked` rows with `customerId = principal.userId` participate, using persisted Booking interval fields and the half-open predicate `booking.startsAt < slot.endsAt AND slot.startsAt < booking.endsAt`. Cancelled rows do not conflict and adjacent intervals are allowed. This predicate checks existence only and never returns Booking details. Exactly 90:00 is included; 89:59 is excluded. Never use browser time or HTTP arrival time. T_view is not #16 T_elig; #16 repeats the authoritative checks after contention waits.
 
 ## 4. Safe errors
 

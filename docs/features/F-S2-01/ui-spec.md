@@ -16,7 +16,7 @@ The entry point is a **Cancel** action on an own Booking whose `status='Booked'`
 2. A confirmation dialog shows: Tutor reference (`TUTOR-xxxxxxxx`), start/end in Asia/Bangkok, the 30-minute rule in plain language, and an explicit statement that cancellation cannot be undone.
 3. The dialog does **not** ask for a reason and does not send one.
 4. Customer confirms; the request is `POST /api/v1/customer/bookings/{id}/cancel` with an empty JSON body.
-5. On success, the dialog closes and the Booking list/detail re-renders from the returned DTO with `status='Cancelled'`. The original Slot becomes unoccupied and stays `Offered`; it **reappears in Customer availability only if** the current server-side availability filters and independent 60-minute new-Booking cutoff permit it. Otherwise it remains absent from eligible offers despite being unoccupied.
+5. On success, the dialog closes and the Booking list/detail re-renders from the returned DTO with `status='Cancelled'`. The original Slot becomes unoccupied and stays `Offered`; it **reappears in Customer availability only if** the current server-side availability filters and independent 90-minute new-Booking cutoff permit it. Otherwise it remains absent from eligible offers despite being unoccupied.
 6. On a cutoff/conflict/authorization error, the dialog stays open with a safe message and the Booking remains unchanged.
 
 ## 3. UI states
