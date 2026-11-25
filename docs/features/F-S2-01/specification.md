@@ -12,7 +12,7 @@ Sources: [SRS](../../srs.md) (Q07/Q08/Q05, FR-020/021, BR-007/008, NFR-005/006/0
 
 ## 2. Outcome and journey
 
-An authenticated Customer cancels their own current `Booked` Booking when its start is at least 30 minutes after the server's authoritative decision. The Booking becomes `Cancelled`; the original Slot remains `Offered` and becomes unoccupied atomically. A later new Booking on that Slot is still independently gated by the 60-minute new-Booking rule.
+An authenticated Customer cancels their own current `Booked` Booking when its start is at least 30 minutes after the server's authoritative decision. The Booking becomes `Cancelled`; the original Slot remains `Offered` and becomes unoccupied atomically. A later new Booking on that Slot is still independently gated by the accepted Lab 7 Q05 90-minute new-Booking rule.
 
 1. Customer opens an own Booking detail/list entry with `status='Booked'`.
 2. Customer confirms cancellation; the request carries only the Booking identifier and no owner, status, time or reason fields.
@@ -26,9 +26,9 @@ An authenticated Customer cancels their own current `Booked` Booking when its st
 
 **In scope:** Customer-only cancellation of an own `Booked` Booking; 30-minute authoritative cutoff; atomic `Booked → Cancelled`; original Slot left `Offered` and immediately unoccupied; response/error contract; lock order, Session revalidation, rollback and retry; the Booking-guard migration requirement; UI cancellation states; planned STS and DoD.
 
-**Out of scope:** Tutor cancellation (F-S2-03), reschedule (F-S2-02), notices (F-S2-04), Slot withdrawal (F-S2-05), refunds/payments, `Completed`/attendance, user deletion, retention policy (OD-008), new idempotency-key protocol (OD-013), any Slot lifecycle mutation, any production deployment, and any change to Sprint 1 new-Booking eligibility.
+**Out of scope:** Tutor cancellation (F-S2-03), reschedule (F-S2-02), notices (F-S2-04), Slot withdrawal (F-S2-05), refunds/payments, `Completed`/attendance, user deletion, retention policy (OD-008), new idempotency-key protocol (OD-013), any Slot lifecycle mutation, any production deployment, and any new policy or redefinition of new-Booking eligibility. This feature inherits the accepted Lab 7 Q05 90-minute rule unchanged.
 
-**No-change layers:** `Slot` rows and `slot_guard_s1()`; new-Booking Q05 guard `booking_guard_s1()` INSERT path; availability projection; auth/CSRF middleware; Tutor schedule read path.
+**No-change layers:** `Slot` rows and the Slot guard; the shared new-Booking Q05 policy (90 minutes, enforced by `booking_guard_s2()` after Sprint 2 reconciliation); availability projection; auth/CSRF middleware; Tutor schedule read path.
 
 ## 4. Invariants
 
@@ -39,7 +39,7 @@ An authenticated Customer cancels their own current `Booked` Booking when its st
 | Cutoff | Eligible iff `Booking.startsAt - T_elig >= 30 minutes`; equality passes, just-below fails. `T_elig` is DB `clock_timestamp()` sampled after required locks. |
 | Atomicity | The `Booked → Cancelled` update, `cancellationActor`, `cancelledAt` and `updatedAt` commit together. No Slot write and no notice. |
 | Slot outcome | Original Slot remains `Offered`, `withdrawnAt IS NULL`; occupancy is derived, so it becomes unoccupied only when the Cancelled commit is visible. |
-| New-Booking gate | Reopening never bypasses Q05: a new Booking with `Slot.startsAt - T_elig < 60 minutes` is rejected by the existing Sprint 1 guard. |
+| New-Booking gate | Reopening never bypasses Q05: a new Booking with `Slot.startsAt - T_elig < 90 minutes` is rejected by the shared Booking guard. |
 | Concurrency | At most one active `Booked` row per Slot; cancel-versus-new-Booking serializes on the shared Slot lock. |
 | Privacy | Response exposes only owner-scoped Booking data already defined by F-S1-05; no Customer/Tutor identity, reason or raw DB diagnostics. |
 
@@ -101,7 +101,7 @@ There is **no** `Cancelled → Booked` transition and no same-ID Slot reactivati
 | AC-S2-01-01 | Owner cancels a `Booked` Booking at `>= 30:00`; response is 200 with `status='Cancelled'`, `cancellationActor='Customer'`, `cancelledAt` set; exactly one committed update; Slot stays `Offered` and becomes unoccupied. |
 | AC-S2-01-02 | At exactly `30:00` the cancel succeeds; at `29:59.999` it fails 422 `CANCELLATION_WINDOW_CLOSED` with no change. |
 | AC-S2-01-03 | Foreign/unknown Booking → 404; already `Cancelled` → 409 `BOOKING_NOT_CANCELLABLE`; anonymous → 401; wrong role → 403; all with no mutation. |
-| AC-S2-01-04 | A reopened Slot is unoccupied but a new Booking with `< 60:00` notice is still rejected by the independent Sprint 1 guard. |
+| AC-S2-01-04 | A reopened Slot is unoccupied but a new Booking with `< 90:00` notice is still rejected by the independent Q05 guard. |
 | AC-S2-01-05 | Cancel-versus-new-Booking race in both orders: a contender arriving while the original remains `Booked` fails; after cancellation commits, a new Booking succeeds only if Q05 and all other rules pass. Valid final outcomes include `(original Cancelled + new Booked)`, `(original Cancelled + no new Booked)`, or `(original Booked + no new Booked)` if cancellation fails; never two active `Booked` rows. |
 | AC-S2-01-06 | Injected DB failure or Session revocation mid-transaction leaves the prior Booking/Slot state and returns a safe non-success. |
 | AC-S2-01-07 | The cutoff is evaluated at `T_elig` after a forced lock wait crossing the 30-minute boundary; a stale pre-wait decision is not used. |

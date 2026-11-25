@@ -15,7 +15,8 @@ suffix=$(node -p "require('crypto').randomBytes(5).toString('hex')")
 baseline=nuttiew_s2_pair_a_$suffix
 candidate=nuttiew_s2_pair_final_$suffix
 instance=s2_$suffix
-draft=apps/api/prisma/migrations/20261110000000_s2_shared_transition_foundation/migration.sql
+s2_shared=apps/api/prisma/migrations/20261110000000_s2_shared_transition_foundation/migration.sql
+s2_q05=apps/api/prisma/migrations/20261125120000_s2_q05_min_notice_reconciliation/migration.sql
 psql_review() {
   docker exec -i "$S2_REVIEW_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres "$@"
 }
@@ -30,7 +31,7 @@ for d in "$baseline" "$candidate"; do
   # The candidate is in Prisma migrations for PR CI. Keep the paired runner's
   # baseline at S1, then apply this exact candidate only to the S2 side.
   for f in apps/api/prisma/migrations/*/migration.sql; do
-    if [[ "$f" == "$draft" ]]; then continue; fi
+    if [[ "$f" == "$s2_shared" || "$f" == "$s2_q05" ]]; then continue; fi
     apply "$d" "$f"
   done
   psql_review -q -d "$d" <<'SQL'
@@ -43,13 +44,25 @@ SQL
 done
 # Insert deliberate failure immediately before COMMIT in a streamed test copy.
 fault_log=$(mktemp)
-if (printf 'SET ROLE s2_review_owner;\n'; tr -d '\r' < "$draft" | awk '/^COMMIT;$/ { print "SELECT 1/0;" } { print }') | psql_review -q -d "$candidate" > "$fault_log" 2>&1; then
+if (printf 'SET ROLE s2_review_owner;\n'; tr -d '\r' < "$s2_shared" | awk '/^COMMIT;$/ { print "SELECT 1/0;" } { print }') | psql_review -q -d "$candidate" > "$fault_log" 2>&1; then
   echo 'Expected late DDL failure' >&2; exit 1
 fi
 [[ "$(awk '/division by zero/ { found=1 } END { print found+0 }' "$fault_log")" == 1 ]]
 check_s1 "$candidate"
 echo "Late DDL rollback PASS: $fault_log"
-apply "$candidate" "$draft"
+apply "$candidate" "$s2_shared"
+# A late failure in the Lab 7/S2 Q05 forward migration must roll back the
+# CREATE OR REPLACE, leaving the accepted S2 60-minute guard intact until the
+# forward migration is committed successfully.
+q05_fault_log=$(mktemp)
+if (printf 'SET ROLE s2_review_owner;\n'; tr -d '\r' < "$s2_q05" | awk '/^COMMIT;$/ { print "SELECT 1/0;" } { print }') | psql_review -q -d "$candidate" > "$q05_fault_log" 2>&1; then
+  echo 'Expected late Q05 migration DDL failure' >&2; exit 1
+fi
+[[ "$(awk '/division by zero/ { found=1 } END { print found+0 }' "$q05_fault_log")" == 1 ]]
+[[ "$(psql_review -At -d "$candidate" -c "SELECT position('60 minutes' in pg_get_functiondef('public.booking_guard_s2()'::regprocedure)) > 0 AND position('90 minutes' in pg_get_functiondef('public.booking_guard_s2()'::regprocedure)) = 0")" == t ]]
+echo "Q05 migration rollback PASS: $q05_fault_log"
+apply "$candidate" "$s2_q05"
+[[ "$(psql_review -At -d "$candidate" -c "SELECT position('90 minutes' in pg_get_functiondef('public.booking_guard_s2()'::regprocedure)) > 0")" == t ]]
 psql_review -q -d "$candidate" -c "ALTER DATABASE $candidate SET nuttiew.review_instance TO $instance"
 psql_review -q -d "$candidate" <<'SQL'
 GRANT SELECT,INSERT ON "Booking" TO nuttiew_s2_fixture;
@@ -87,7 +100,7 @@ if [[ "$runner" == 0 ]]; then
   before=$(psql_review -At -d "$baseline" -c "$count_sql")
   [[ "$before" -gt 0 ]]
   refusal_log=$(mktemp)
-  if apply "$baseline" "$draft" > "$refusal_log" 2>&1; then echo 'Expected legacy refusal' >&2; exit 1; fi
+  if apply "$baseline" "$s2_shared" > "$refusal_log" 2>&1; then echo 'Expected legacy refusal' >&2; exit 1; fi
   [[ "$(awk '/S2 migration refused/ { found=1 } END { print found+0 }' "$refusal_log")" == 1 ]]
   check_s1 "$baseline"
   [[ "$(psql_review -At -d "$baseline" -c "$count_sql")" == "$before" ]]
