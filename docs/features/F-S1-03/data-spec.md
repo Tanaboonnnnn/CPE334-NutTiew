@@ -1,5 +1,7 @@
 # F-S1-03 — Customer Availability Data Contract (Part E)
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](../../labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](../../labs/lab-07/cr-l7-01.md).
+
 > **Logical read contract only.** No Prisma model, SQL migration, Booking table, index, Tutor-name column or runtime query is created here. Peer-review decision states and the selected shared-data route are recorded in [Feature SDS](specification.md#5-peer-review-decision-record). See [API](api-spec.md), [UI](ui-spec.md) and [STS](tests.md).
 
 ## 1. Existing records at the Part E base
@@ -44,7 +46,7 @@ eligible_slots AS MATERIALIZED (
   FROM "Slot" AS s
   CROSS JOIN view_clock
   WHERE s."lifecycle" = 'Offered'
-    AND s."startsAt" >= view_clock.evaluated_at + INTERVAL '60 minutes'
+    AND s."startsAt" >= view_clock.evaluated_at + INTERVAL '90 minutes'
     AND NOT EXISTS (
       SELECT 1
       FROM "Booking" AS occupied
@@ -98,7 +100,7 @@ Intent: sample DB clock once as T_view; use persisted Slot lifecycle/interval; e
 - The SQL response projection converts `startsAt`, `endsAt` and `T_view` to UTC before JSON construction: `to_char(value AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`. The wire values have exactly three fractional-second digits and end in `Z` (for example `2026-11-08T06:00:00.000Z`). Never put a raw `timestamptz` directly into `jsonb_build_object` or rely on the connection `TimeZone` to serialize it.
 - API returns these already-normalized UTC RFC 3339 strings unchanged; it does not reinterpret a timezone-dependent database timestamp string.
 - UI always formats Asia/Bangkok (UTC+07:00), independent of browser timezone.
-- T_view is the single PostgreSQL time for this read; startsAt - T_view >= 60 minutes is the confirmed Customer-availability read rule and equality passes.
+- T_view is the single PostgreSQL time for this read; startsAt - T_view >= 90 minutes is the confirmed Customer-availability read rule and equality passes.
 - A Customer's own `Booked` rows are checked by persisted `[startsAt, endsAt)` intervals; only strict overlap is excluded, so adjacency passes. The principal comes from the Session.
 - #16 Booking write uses its own authoritative T_elig after contention waits; it must not trust T_view, evaluatedAt, browser time or prior availability.
 - OD-002 (maximum advance horizon) remains OPEN. This contract does not choose an upper bound and does not imply an approved unlimited horizon. Resolve OD-002 before Part F; do not invent work-hour/day, holiday or start-minute rules either.
@@ -138,7 +140,7 @@ F-S1-03 is read-only: no record writes, tables, columns, migrations, indexes, tr
 2. Create real future Offered Slots for multiple Tutors, including same-time offers from different Tutors.
 3. With no active Booking, verify expected offers.
 4. With a committed Booked row for one Slot, verify it is excluded while other offers remain; inspect full JSON for no Customer/Booking leakage.
-5. Verify T_view equality (60:00 included) and below-boundary (59:59 excluded) with controlled DB time.
+5. Verify T_view equality (90:00 included) and below-boundary (89:59 excluded) with controlled DB time.
 6. Verify deterministic order, UTC serialization and identical Bangkok display from UTC/other-timezone browsers.
 7. Inject read failure; verify no false empty list; retry successfully.
 8. Verify role/session isolation, session binding and no stale data after logout/account switch.

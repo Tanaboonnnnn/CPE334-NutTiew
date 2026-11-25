@@ -274,18 +274,38 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     expect(slotIds).not.toContain(slot.id);
   });
 
-  it('BOOK-02 / BOOK-03 / BOOK-25 enforces Q05 60:00 pass, 59:59 fail (P0B02 / booking_q05_min_notice -> 422), and non-Offered Slot (P0B01 / booking_slot_not_offered -> 409)', async () => {
-    // 1. Exact 60:00 boundary arithmetic check & live >60m pass on Tutor Low (BOOK-02)
+  it('CR-L7-01 rejects a stale selected Slot inside 90 minutes, without creating a Booking', async () => {
+    const clock = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
+    const staleTutor = await createUser(`book-l7-stale-${marker}@example.test`, 'Tutor');
+    const slot = await createSlot(staleTutor, new Date(clock.rows[0].now.getTime() + 75 * 60_000));
+
+    const staleEmail = `book-l7-stale-c-${marker}@example.test`;
+    const staleCustomer = await createUser(staleEmail, 'Customer');
+    const staleAuth = await loginBundle(staleEmail, staleCustomer);
+
+    // A previously seen offer is not proof of eligibility at the guarded write.
+    const res = await postBooking(app, staleAuth, { slotId: slot.id });
+    expect(res.status).toBe(422);
+    expect(res.body.error?.code).toBe('BOOKING_NOT_ELIGIBLE');
+    const persisted = await ownerPool.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM "Booking" WHERE "currentSlotId"=$1',
+      [slot.id],
+    );
+    expect(persisted.rows[0].n).toBe(0);
+  });
+
+  it('BOOK-02 / BOOK-03 / BOOK-25 enforces Q05 90:00 pass, 89:59 fail (P0B02 / booking_q05_min_notice -> 422), and non-Offered Slot (P0B01 / booking_slot_not_offered -> 409)', async () => {
+    // 1. Exact 90:00 boundary arithmetic check & live >90m pass on Tutor Low (BOOK-02)
     const exactArithmetic = await ownerPool.query<{ allowed: boolean; tooLate: boolean }>(
-      `SELECT ($1::timestamptz - $2::timestamptz >= interval '60 minutes') AS allowed,
-              ($3::timestamptz - $2::timestamptz >= interval '60 minutes') AS "tooLate"`,
-      [new Date('2030-01-01T01:00:00.000Z'), new Date('2030-01-01T00:00:00.000Z'), new Date('2030-01-01T00:59:59.999Z')],
+      `SELECT ($1::timestamptz - $2::timestamptz >= interval '90 minutes') AS allowed,
+              ($3::timestamptz - $2::timestamptz >= interval '90 minutes') AS "tooLate"`,
+      ['2030-01-01T01:30:00Z', new Date('2030-01-01T00:00:00.000Z'), '2030-01-01T01:29:59.999999Z'],
     );
     expect(exactArithmetic.rows[0].allowed).toBe(true);
     expect(exactArithmetic.rows[0].tooLate).toBe(false);
 
     // Controlled near-boundary proof through the application adapter (BOOK-02):
-    // Prove that when a Slot's startsAt is near the 60:00 boundary such that T_elig passes the trigger,
+    // Prove that when a Slot's startsAt is near the 90:00 boundary such that T_elig passes the trigger,
     // normal statement execution without abnormal index contention (statementDuration < 150ms) commits
     // with 201 Created and does NOT get aborted by a blanket post-insert cutoff (per transaction-spec.md §3 step 11 & §5).
     const tempCustomerNearId = await createUser(`book-c-near-${marker}@example.test`, 'Customer');
@@ -294,7 +314,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     const nowNear = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
     const slotNearBoundary = await createSlot(
       tempTutorNear,
-      new Date(nowNear.rows[0].now.getTime() + 60 * 60_000 + 400),
+      new Date(nowNear.rows[0].now.getTime() + 90 * 60_000 + 400),
     );
     const nearRes = await postBooking(app, tempCustomerNearAuth, { slotId: slotNearBoundary.id });
     expect(nearRes.status).toBe(201);
@@ -303,25 +323,25 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     const nowRes = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
     const slotPass = await createSlot(
       tutorLowId,
-      new Date(nowRes.rows[0].now.getTime() + 60 * 60_000 + 2_500),
+      new Date(nowRes.rows[0].now.getTime() + 90 * 60_000 + 2_500),
     );
     const passRes = await postBooking(app, authCustomerLow, { slotId: slotPass.id });
     expect(passRes.status).toBe(201);
 
-    // 2. 59:59 cutoff rejection on Tutor High via #33 trigger P0B02 / booking_q05_min_notice -> 422 BOOKING_NOT_ELIGIBLE (BOOK-03, BOOK-25)
+    // 2. 89:59 cutoff rejection on Tutor High via #33 trigger P0B02 / booking_q05_min_notice -> 422 BOOKING_NOT_ELIGIBLE (BOOK-03, BOOK-25)
     const nowRes2 = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-    const slot5959 = await createSlot(
+    const slot8959 = await createSlot(
       tutorHighId,
-      new Date(nowRes2.rows[0].now.getTime() + 59 * 60_000 + 58_000),
+      new Date(nowRes2.rows[0].now.getTime() + 89 * 60_000 + 59_000),
     );
-    const failRes = await postBooking(app, authCustomerHigh, { slotId: slot5959.id });
+    const failRes = await postBooking(app, authCustomerHigh, { slotId: slot8959.id });
     expect(failRes.status).toBe(422);
     expect(failRes.body.error?.code).toBe('BOOKING_NOT_ELIGIBLE');
-    const count5959 = await ownerPool.query(
+    const count8959 = await ownerPool.query(
       'SELECT count(*)::int AS n FROM "Booking" WHERE "currentSlotId"=$1',
-      [slot5959.id],
+      [slot8959.id],
     );
-    expect(count5959.rows[0].n).toBe(0);
+    expect(count8959.rows[0].n).toBe(0);
 
     // 3. Non-Offered Slot rejection via #33 trigger P0B01 / booking_slot_not_offered -> 409 SLOT_UNAVAILABLE (BOOK-25)
     // Verify that `booking_guard_s1()` produces `P0B01 / booking_slot_not_offered` for a Withdrawn Slot on an isolated
@@ -858,12 +878,12 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     const tempCustomerAuth = await loginBundle(tempCustomerEmail, tempCustomerId);
     const tempTutor = await createUser(`book-t17-${marker}@example.test`, 'Tutor');
     const nowRes = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-    // Slot starts in 60m + 1.8s (eligible at arrival, ineligible after 2.1s lock wait)
+    // Slot starts in 90m + 1.8s (eligible at arrival, ineligible after 2.1s lock wait)
     const slot = await createSlot(
       tempTutor,
-      new Date(nowRes.rows[0].now.getTime() + 60 * 60_000 + 1_800),
+      new Date(nowRes.rows[0].now.getTime() + 90 * 60_000 + 1_800),
     );
-    const cutoff = new Date(slot.startsAt.getTime() - 60 * 60_000);
+    const cutoff = new Date(slot.startsAt.getTime() - 90 * 60_000);
 
     const holder = await ownerPool.connect();
     try {
@@ -1474,9 +1494,9 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
     const nowRes1A = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
     const slot1A = await createSlot(
       tempTutorA,
-      new Date(nowRes1A.rows[0].now.getTime() + 60 * 60_000 + 2_000),
+      new Date(nowRes1A.rows[0].now.getTime() + 90 * 60_000 + 2_000),
     );
-    const cutoff1A = new Date(slot1A.startsAt.getTime() - 60 * 60_000);
+    const cutoff1A = new Date(slot1A.startsAt.getTime() - 90 * 60_000);
     const rogueSlot1A = await createSlot(
       tempTutorB,
       new Date(slot1A.startsAt.getTime() + 30 * 60_000),
@@ -1512,7 +1532,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const userBlockers = await waitForBlockedBy(adapterUserPid, roguePid);
       expect(userBlockers).toContain(roguePid);
 
-      // Hold the FK-induced User lock wait until DB clock crosses the 60-minute Q05 cutoff, then ROLLBACK rogueClient
+      // Hold the FK-induced User lock wait until DB clock crosses the 90-minute Q05 cutoff, then ROLLBACK rogueClient
       while (true) {
         const c = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
         if (c.rows[0].now.getTime() >= cutoff1A.getTime() + 150) break;
@@ -1536,9 +1556,9 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const nowRes1B = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
       const slot1B = await createSlot(
         tempTutor1B,
-        new Date(nowRes1B.rows[0].now.getTime() + 60 * 60_000 + 2_000),
+        new Date(nowRes1B.rows[0].now.getTime() + 90 * 60_000 + 2_000),
       );
-      const cutoff1B = new Date(slot1B.startsAt.getTime() - 60 * 60_000);
+      const cutoff1B = new Date(slot1B.startsAt.getTime() - 90 * 60_000);
 
       await rogueClient.query('BEGIN');
       await rogueClient.query(
@@ -1567,7 +1587,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const slotBlockers = await waitForBlockedBy(adapterSlotPid, roguePid);
       expect(slotBlockers).toContain(roguePid);
 
-      // Hold the trigger/FK-induced Slot lock wait until DB clock crosses the 60-minute Q05 cutoff, then ROLLBACK rogueClient
+      // Hold the trigger/FK-induced Slot lock wait until DB clock crosses the 90-minute Q05 cutoff, then ROLLBACK rogueClient
       while (true) {
         const c = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
         if (c.rows[0].now.getTime() >= cutoff1B.getTime() + 150) break;
@@ -1592,7 +1612,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const rogueTutor1C = await createUser(`book-t19-r1c-${marker}@example.test`, 'Tutor');
       const slot1C = await createSlot(
         tempTutor1C,
-        new Date(nowRes1C.rows[0].now.getTime() + 60 * 60_000 + 5_000),
+        new Date(nowRes1C.rows[0].now.getTime() + 90 * 60_000 + 5_000),
       );
       const rogueSlot1C = await createSlot(
         rogueTutor1C,
@@ -1674,7 +1694,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       // Part 1C2 (Remediated Canonical Schema — Reviewer specific Stop Gate check: Rogue canceled/rolled back while held):
       // On the remediated schema, Rogue direct-SQL is blocked on the User row in `booking_guard_s1()` in BEFORE ROW.
       // Rogue NEVER enters the GiST index, so Adapter completes INSERT immediately with zero index wait.
-      // Adapter commits cleanly with fresh notice (> 60m remaining).
+      // Adapter commits cleanly with fresh notice (> 90m remaining).
       // Even if Rogue is held until after Q05 cutoff and canceled, Rogue never blocked Adapter in GiST,
       // proving stale-T_elig commit is structurally eliminated.
       const tempCustomerEmail1C2 = `book-c19-1c2-${marker}@example.test`;
@@ -1685,7 +1705,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const nowRes1C2 = await ownerPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
       const slot1C2 = await createSlot(
         tempTutor1C2,
-        new Date(nowRes1C2.rows[0].now.getTime() + 60 * 60_000 + 700),
+        new Date(nowRes1C2.rows[0].now.getTime() + 90 * 60_000 + 700),
       );
       const rogueSlot1C2 = await createSlot(
         rogueTutor1C2,
@@ -1753,7 +1773,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
       const adapterRes1C2 = await pendingAdapter1C2;
       expect(adapterRes1C2.httpStatus).toBe(201);
       commitNotice1C2Ms = slot1C2.startsAt.getTime() - Date.now();
-      expect(commitNotice1C2Ms).toBeGreaterThan(60 * 60_000 - 5_000);
+      expect(commitNotice1C2Ms).toBeGreaterThan(90 * 60_000 - 5_000);
 
       // Cancel Rogue query while it is blocked on User
       await ownerPool.query('SELECT pg_cancel_backend($1)', [roguePid]);
@@ -1888,7 +1908,7 @@ describe('F-S1-04 Customer Exclusive Booking & BDF-23 real PostgreSQL integratio
         );
 
         const nowStress = await stressPool.query<{ now: Date }>('SELECT clock_timestamp() AS now');
-        const slot2Start = new Date(nowStress.rows[0].now.getTime() + 60 * 60_000 + 2_000);
+        const slot2Start = new Date(nowStress.rows[0].now.getTime() + 90 * 60_000 + 2_000);
         const slot2End = new Date(slot2Start.getTime() + 3_600_000);
         const rogue2Start = new Date(slot2Start.getTime() + 30 * 60_000);
         const rogue2End = new Date(rogue2Start.getTime() + 3_600_000);

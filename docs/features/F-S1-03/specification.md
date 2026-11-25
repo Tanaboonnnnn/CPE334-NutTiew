@@ -1,5 +1,7 @@
 # F-S1-03 — Customer Availability Discovery Feature SDS (Part E)
 
+> **Lab 7 contract revision CR-L7-01 (2026-11-25):** Accepted maintenance rule for new Customer Bookings only (Q05 cutoff changed from 60 to 90 minutes). Implemented and CI-verified on `sprint1` (PR `#163` / `02672d4`, PR `#165` / `8b92459`); separate `sprint1 -> main` release and GCP deployment status are tracked in [the Lab 7 Part D readiness ledger](../../labs/lab-07/readiness-and-retrospective-125.md) and [the CR-L7-01 change record](../../labs/lab-07/cr-l7-01.md).
+
 > **2026-11-10 UX-only Option A amendment proposed (Issue #44, pending peer acceptance):** Replace only the Customer Availability page's simultaneous full-list presentation (`dateGroups.map(...)`) with **Option A — Date-First Monthly Calendar (Progressive Disclosure)** as requested in [Issue #15 comment #6763909620](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/15#issuecomment-6763909620). See [dated UX decision](ui-decision-2026-11-10.md), [amended UI contract](ui-spec.md), and [`UX-CAL-01..10` STS](tests.md#2-ux-calendar-planned-sts). This follow-up is separate from Deliverable 1 ([#18](https://github.com/Tanaboonnnnn/CPE334-NutTiew/issues/18) / PR [#43](https://github.com/Tanaboonnnnn/CPE334-NutTiew/pull/43)).
 >
 > **Unchanged domain/security contract:** `GET /api/v1/customer/availability` remains unfiltered with zero query parameters (`BR-S1-20`, `OD-AV-03`), returning exact DTO allowlist (`slotId`, `tutorRef`, `startsAt`, `endsAt`, `meta.evaluatedAt`, `Cache-Control: no-store`), single PostgreSQL `T_view`, `OD-AV-01..08`, `OD-AV-02` display-name gate, `F-S1-04` CSRF/Session Binding/`T_elig`/SERIALIZABLE Booking safety, and `F-S1-05` `การจองของฉัน` tab.
@@ -54,7 +56,7 @@ For one read, `T_view` is one database-authoritative instant sampled for the ava
 
 1. lifecycle is Offered;
 2. no active Booking with status Booked references that Slot;
-3. startsAt - T_view is at least 60 minutes (60:00 included; 59:59 excluded);
+3. startsAt - T_view is at least 90 minutes (90:00 included; 89:59 excluded);
 4. no Active Booking owned by the authenticated Customer overlaps this Slot, even when the existing Booking belongs to a different Tutor; and
 5. the persisted Slot interval and Tutor ownership remain valid under the accepted Slot contract.
 
