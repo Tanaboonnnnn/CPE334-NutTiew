@@ -34,6 +34,9 @@ GRANT SELECT, INSERT ON "Slot", "Booking" TO nuttiew_ci_runtime;
 -- Slot trigger still rejects every UPDATE; this column grant exists only to acquire row locks.
 GRANT UPDATE ("id") ON "Slot" TO nuttiew_ci_runtime;
 GRANT SELECT ON "Slot" TO nuttiew_ci_booking_probe;
+-- The probe may attempt the lifecycle transition so the S2 trigger itself,
+-- rather than a missing column privilege, proves the one-way guard.
+GRANT UPDATE ("lifecycle", "withdrawnAt") ON "Slot" TO nuttiew_ci_booking_probe;
 
 -- Probe role can issue forbidden DML so BDF tests prove the DB trigger itself.
 -- It is not an owner and has no DDL, trigger-disable or replication bypass.
@@ -73,6 +76,11 @@ candidate=$(psql "$DATABASE_URL" --set ON_ERROR_STOP=1 -Atc "SELECT pg_catalog.t
 if [[ "$candidate" == t ]]; then
   echo 'S2_REGRESSION_SCHEMA=candidate' >> "$GITHUB_ENV"
   echo 'S2_FIXTURE_DATABASE_URL=postgresql://nuttiew_s2_fixture@127.0.0.1:5432/nuttiew_ci' >> "$GITHUB_ENV"
+  psql "$DATABASE_URL" --set ON_ERROR_STOP=1 -c "ALTER DATABASE nuttiew_ci SET nuttiew.review_instance = 'github-actions'"
+  echo 'S2_REVIEW_DATABASE_URL=postgresql://nuttiew_ci_runtime@127.0.0.1:5432/nuttiew_ci' >> "$GITHUB_ENV"
+  echo 'S2_PROBE_DATABASE_URL=postgresql://nuttiew_ci_booking_probe@127.0.0.1:5432/nuttiew_ci' >> "$GITHUB_ENV"
+  echo 'S2_REVIEW_DB_NAME=nuttiew_ci' >> "$GITHUB_ENV"
+  echo 'S2_REVIEW_INSTANCE=github-actions' >> "$GITHUB_ENV"
 fi
 
 # Real API and all normal HTTP tests now run as non-owner, so disabling Slot

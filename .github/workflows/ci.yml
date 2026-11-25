@@ -129,10 +129,16 @@ jobs:
         run: npm run db:migrate
       - name: Exact sprint1 baseline upgrade with pre-existing rows (BDF-02)
         run: bash .github/scripts/test-booking-baseline-upgrade.sh
+      - name: Sprint 2 upgrade from accepted Lab 7 database (Issue #120)
+        if: ${{ hashFiles('apps/api/prisma/migrations/20261110000000_s2_shared_transition_foundation/migration.sql') != '' }}
+        run: bash .github/scripts/test-s2-lab7-upgrade.sh
       - name: Configure non-owner runtime DB role
         run: bash .github/scripts/prepare-test-db.sh
       - name: PostgreSQL integration, ownership, barrier race and restart
         run: npm run test:db
+      - name: Sprint 2 shared migration, Q05 and cross-operation race regressions
+        if: ${{ hashFiles('apps/api/prisma/migrations/20261110000000_s2_shared_transition_foundation/migration.sql') != '' }}
+        run: node node_modules/vitest/vitest.mjs run apps/api/test/s2.shared-migration.db.test.ts
 
   edge:
     name: Microsoft Edge / Auth / Tutor UI E2E

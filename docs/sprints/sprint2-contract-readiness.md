@@ -91,7 +91,7 @@ Derived rules:
 Shared requirements:
 
 - `T_elig` is `clock_timestamp()` sampled **after** all required lock waits and immediately before the guarded write; never `now()` or a client time.
-- Cutoffs: `>= 30m` (Customer cancel), `>= 60m` (original and destination reschedule), `>= 60m` (Tutor cancel), strict `> T_elig` (Slot withdrawal). Equality passes where the SRS says "at least".
+- New-Booking Q05: `>= 90m` at the active Booking guard, inherited from accepted Lab 7. Mutation cutoffs remain `>= 30m` (Customer cancel), `>= 60m` (original and destination reschedule), `>= 60m` (Tutor cancel), and strict `> T_elig` (Slot withdrawal). Equality passes where the SRS says "at least".
 - Global lock order is User UUID ascending → Slot UUID ascending → Session auth sub-lock → Booking. A changed discovered lock set aborts and restarts discovery; no out-of-order late lock.
 - The runtime service holds the locks; DB triggers are the final backstop for direct SQL. Triggers must raise non-success errors and must not be disablable by the runtime role.
 - A genuine `23505`/`23P01` is a business conflict or invariant breach, never a retry-until-success signal.
@@ -156,7 +156,7 @@ Regression evidence must record the source SHA, reviewed schema SHA, commands an
 
 ### 7.3 Q coverage
 
-Q07/Q08 → F-S2-01; Q09–Q16 → F-S2-02; Q17–Q20 → F-S2-03; Q21–Q25 → F-S2-04; Q26/Q27/Q32 → F-S2-05. Q05/Q28/Q30 remain shared constraints and are not redefined.
+Q07/Q08 → F-S2-01; Q09–Q16 → F-S2-02; Q17–Q20 → F-S2-03; Q21–Q25 → F-S2-04; Q26/Q27/Q32 → F-S2-05. Q05/Q28/Q30 remain shared constraints and are not redefined by Sprint 2: Q05 inherits the accepted Lab 7 90-minute new-Booking cutoff; Q28/Q30 retain their accepted semantics.
 
 ### 7.4 Change-layer inventory (S2 edits to accepted S1 output)
 
