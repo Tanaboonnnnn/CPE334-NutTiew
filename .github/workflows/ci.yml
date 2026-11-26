@@ -3,12 +3,12 @@ name: NutTiew CI
 # CI only: no deployment, release, merge, repository mutation or real database.
 on:
   pull_request:
-    branches: [sprint1, sprint2, main]
+    branches: [sprint1, sprint2, sprint3, main]
   push:
-    # Include both integration branches; main is included so a merged release
+    # Include the three sprint integration branches; main is included so a merged release
     # commit gets recorded GitHub Actions Check Runs that the CD workflow
     # (deploy.yml) verifies against the exact new main SHA (GH-05 #68).
-    branches: [sprint1, sprint2, main]
+    branches: [sprint1, sprint2, sprint3, main]
   workflow_dispatch:
 
 permissions:
